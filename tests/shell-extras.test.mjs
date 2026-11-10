@@ -35,3 +35,11 @@ test('a dead Studio is answered inside the page, not with an app-restart hint', 
   // Two consecutive misses before covering the page: one blip is not an outage.
   assert.match(shellUiInjection, /misses>=2/);
 });
+
+test('a foreign plugin probing this page cannot throw in the console', () => {
+  // dsh-element-source-plus runs `window.__dshEsSetShortcut(config)` in every
+  // webview before its own bundle is injected there; accepting the call is the
+  // difference between a silent no-op and an uncaught TypeError on every load.
+  assert.match(shellUiInjection, /typeof window\.__dshEsSetShortcut!=='function'/);
+  assert.match(shellUiInjection, /window\.__dshEsSetShortcut=function\(\)\{ return false; \}/);
+});

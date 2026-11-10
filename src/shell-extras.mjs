@@ -8,6 +8,13 @@
 // both behaviours degrade to "nothing is shown" rather than breaking the page.
 export const shellUiInjection = `<script>(function(){
   if(globalThis.__no996ShellUi)return;globalThis.__no996ShellUi=1;
+  // dsh-element-source-plus calls window.__dshEsSetShortcut(...) in every webview
+  // it finds, including this page, before its own source is injected here — so the
+  // console showed "is not a function". Accept the call; their real definition
+  // overwrites this stub when it does load.
+  if(typeof window.__dshEsSetShortcut!=='function'){
+    window.__dshEsSetShortcut=function(){ return false; };
+  }
   function rpc(channel,payload){
     return fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:channel,payload:payload})})
       .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();});
