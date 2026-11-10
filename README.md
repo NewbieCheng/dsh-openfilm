@@ -7,14 +7,14 @@ OpenFilm 视频创作作为 DSH 插件：整页官方 Studio 0.3.1 + 官方对�
 **方式一（推荐）：直接拿打包好的插件包**
 
 ```
-dist/dsh-openfilm-0.1.0.tgz
+dist/dsh-openfilm-0.1.1.tgz
 ```
 
 下载后在你的 DSH 工作区安装：
 
 ```sh
-pnpm add /path/to/dsh-openfilm-0.1.0.tgz
-# 或 npm i /path/to/dsh-openfilm-0.1.0.tgz
+pnpm add /path/to/dsh-openfilm-0.1.1.tgz
+# 或 npm i /path/to/dsh-openfilm-0.1.1.tgz
 ```
 
 **方式二：克隆源码**

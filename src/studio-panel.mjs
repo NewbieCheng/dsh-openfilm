@@ -14,8 +14,6 @@ export function createStudioPanel(React) {
     const [silent, setSilent] = React.useState(false);
     const [diag, setDiag] = React.useState(null);
     const [boot, setBoot] = React.useState(null);
-    const [debugError, setDebugError] = React.useState(null);
-    const [menu, setMenu] = React.useState(false);
     const containerRef = React.useRef(null);
     const iframeRef = React.useRef(null);
     const heardRef = React.useRef(false);
@@ -83,29 +81,6 @@ export function createStudioPanel(React) {
     }, [silent, state.status, attempt]);
 
     const retry = () => { setSilent(false); setAttempt(value => value + 1); };
-    // Ask the Host for a browser URL. In desktop mode that URL carries a
-    // one-time ticket, because a real browser has no DSH cookie; the ticket is
-    // the same credential the embedded frame already uses.
-    const openDebug = async (copyOnly) => {
-      void (async () => {
-        try {
-          const response = await fetch('/api/no996-openfilm/debug-url', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'x-no996-surface': `${window.location.protocol}//${window.location.host}` },
-          });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const data = await response.json();
-          if (typeof data?.url !== 'string' || !/^http:\/\/127\.0\.0\.\d:\d+\//.test(data.url)) throw new Error('Invalid debug URL');
-          if (copyOnly) {
-            try { await navigator.clipboard.writeText(data.url); setDebugError('调试地址已复制，粘贴到右侧浏览器的地址栏即可'); } catch { setDebugError(data.url); }
-            return;
-          }
-          window.open(data.url, 'no996-openfilm-browser', 'popup,width=1440,height=900');
-        } catch (error) {
-          setDebugError(`打开调试窗口失败：${String((error && error.message) || error)}`);
-        }
-      })();
-    };
     let studio;
     if (state.status === 'loading') {
       studio = h('div', { role: 'status', style: { padding: 24, color: 'var(--dsw-alias-label-secondary)' } }, t('studioLoading'));
@@ -128,23 +103,8 @@ export function createStudioPanel(React) {
         style: { display: 'block', width: '100%', height: '100%', border: 0, background: 'var(--dsw-alias-bg-base)' },
       });
     }
-    return h('div', { ref: containerRef, style: { position: 'relative', display: 'flex', width: '100%', height: '100%', minWidth: 0, minHeight: 0 } }, studio,
-      debugError ? h('pre', { role: 'alert', style: { position: 'absolute', right: 12, bottom: 50, zIndex: 6, maxWidth: 520, margin: 0, padding: '8px 10px', fontSize: 12, color: '#fff', background: '#7a1d1d', borderRadius: 6, whiteSpace: 'pre-wrap' } }, debugError) : null,
-      h('div', { style: { position: 'absolute', left: 8, bottom: 8, zIndex: 6 }, onMouseEnter: () => setMenu(true), onMouseLeave: () => setMenu(false) },
-        h('button', {
-          type: 'button', title: '在独立窗口打开',
-          style: { padding: '4px 8px', borderRadius: 5, cursor: 'pointer', border: '1px solid var(--dsw-alias-border-default, #555)', background: 'var(--dsw-alias-bg-layer-1, #000000aa)', color: 'var(--dsw-alias-label-secondary)', fontSize: 11, opacity: menu ? 1 : 0.45, transition: 'opacity .15s', whiteSpace: 'nowrap' },
-        }, '↗ 独立窗口'),
-        menu ? h('div', { role: 'menu', style: { position: 'absolute', left: 0, bottom: 26, minWidth: 176, padding: 4, borderRadius: 6, border: '1px solid var(--dsw-alias-border-default, #444)', background: 'var(--dsw-alias-bg-layer-1, #1e1e1e)', color: 'var(--dsw-alias-label-primary)', boxShadow: '0 6px 20px #0008' } },
-          h('button', {
-            type: 'button', role: 'menuitem',
-            onClick: () => { setMenu(false); void openDebug(false); },
-            style: { display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', fontSize: 12, border: 'none', borderRadius: 4, background: 'transparent', color: 'inherit', cursor: 'pointer' },
-          }, '在独立窗口打开'),
-          h('button', {
-            type: 'button', role: 'menuitem',
-            onClick: () => { setMenu(false); void openDebug(true); },
-            style: { display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', fontSize: 12, border: 'none', borderRadius: 4, background: 'transparent', color: 'inherit', cursor: 'pointer' },
-          }, '复制调试地址（粘贴到右侧浏览器）')) : null));
+    // No floating controls: the Studio shell owns the whole panel. The debug
+    // window is still reachable at /no996-openfilm/standalone for development.
+    return h('div', { ref: containerRef, style: { position: 'relative', display: 'flex', width: '100%', height: '100%', minWidth: 0, minHeight: 0 } }, studio);
   };
 }

@@ -9,8 +9,6 @@
       const [silent, setSilent] = React.useState(false);
       const [diag, setDiag] = React.useState(null);
       const [boot, setBoot] = React.useState(null);
-      const [debugError, setDebugError] = React.useState(null);
-      const [menu, setMenu] = React.useState(false);
       const containerRef = React.useRef(null);
       const iframeRef = React.useRef(null);
       const heardRef = React.useRef(false);
@@ -83,32 +81,6 @@
         setSilent(false);
         setAttempt((value) => value + 1);
       };
-      const openDebug = async (copyOnly) => {
-        void (async () => {
-          try {
-            const response = await fetch("/api/no996-openfilm/debug-url", {
-              method: "POST",
-              credentials: "same-origin",
-              headers: { "x-no996-surface": `${window.location.protocol}//${window.location.host}` }
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
-            if (typeof data?.url !== "string" || !/^http:\/\/127\.0\.0\.\d:\d+\//.test(data.url)) throw new Error("Invalid debug URL");
-            if (copyOnly) {
-              try {
-                await navigator.clipboard.writeText(data.url);
-                setDebugError("\u8C03\u8BD5\u5730\u5740\u5DF2\u590D\u5236\uFF0C\u7C98\u8D34\u5230\u53F3\u4FA7\u6D4F\u89C8\u5668\u7684\u5730\u5740\u680F\u5373\u53EF");
-              } catch {
-                setDebugError(data.url);
-              }
-              return;
-            }
-            window.open(data.url, "no996-openfilm-browser", "popup,width=1440,height=900");
-          } catch (error) {
-            setDebugError(`\u6253\u5F00\u8C03\u8BD5\u7A97\u53E3\u5931\u8D25\uFF1A${String(error && error.message || error)}`);
-          }
-        })();
-      };
       let studio;
       if (state.status === "loading") {
         studio = h("div", { role: "status", style: { padding: 24, color: "var(--dsw-alias-label-secondary)" } }, t("studioLoading"));
@@ -142,43 +114,7 @@
           style: { display: "block", width: "100%", height: "100%", border: 0, background: "var(--dsw-alias-bg-base)" }
         });
       }
-      return h(
-        "div",
-        { ref: containerRef, style: { position: "relative", display: "flex", width: "100%", height: "100%", minWidth: 0, minHeight: 0 } },
-        studio,
-        debugError ? h("pre", { role: "alert", style: { position: "absolute", right: 12, bottom: 50, zIndex: 6, maxWidth: 520, margin: 0, padding: "8px 10px", fontSize: 12, color: "#fff", background: "#7a1d1d", borderRadius: 6, whiteSpace: "pre-wrap" } }, debugError) : null,
-        h(
-          "div",
-          { style: { position: "absolute", left: 8, bottom: 8, zIndex: 6 }, onMouseEnter: () => setMenu(true), onMouseLeave: () => setMenu(false) },
-          h("button", {
-            type: "button",
-            title: "\u5728\u72EC\u7ACB\u7A97\u53E3\u6253\u5F00",
-            style: { padding: "4px 8px", borderRadius: 5, cursor: "pointer", border: "1px solid var(--dsw-alias-border-default, #555)", background: "var(--dsw-alias-bg-layer-1, #000000aa)", color: "var(--dsw-alias-label-secondary)", fontSize: 11, opacity: menu ? 1 : 0.45, transition: "opacity .15s", whiteSpace: "nowrap" }
-          }, "\u2197 \u72EC\u7ACB\u7A97\u53E3"),
-          menu ? h(
-            "div",
-            { role: "menu", style: { position: "absolute", left: 0, bottom: 26, minWidth: 176, padding: 4, borderRadius: 6, border: "1px solid var(--dsw-alias-border-default, #444)", background: "var(--dsw-alias-bg-layer-1, #1e1e1e)", color: "var(--dsw-alias-label-primary)", boxShadow: "0 6px 20px #0008" } },
-            h("button", {
-              type: "button",
-              role: "menuitem",
-              onClick: () => {
-                setMenu(false);
-                void openDebug(false);
-              },
-              style: { display: "block", width: "100%", textAlign: "left", padding: "6px 8px", fontSize: 12, border: "none", borderRadius: 4, background: "transparent", color: "inherit", cursor: "pointer" }
-            }, "\u5728\u72EC\u7ACB\u7A97\u53E3\u6253\u5F00"),
-            h("button", {
-              type: "button",
-              role: "menuitem",
-              onClick: () => {
-                setMenu(false);
-                void openDebug(true);
-              },
-              style: { display: "block", width: "100%", textAlign: "left", padding: "6px 8px", fontSize: 12, border: "none", borderRadius: 4, background: "transparent", color: "inherit", cursor: "pointer" }
-            }, "\u590D\u5236\u8C03\u8BD5\u5730\u5740\uFF08\u7C98\u8D34\u5230\u53F3\u4FA7\u6D4F\u89C8\u5668\uFF09")
-          ) : null
-        )
-      );
+      return h("div", { ref: containerRef, style: { position: "relative", display: "flex", width: "100%", height: "100%", minWidth: 0, minHeight: 0 } }, studio);
     };
   }
 
