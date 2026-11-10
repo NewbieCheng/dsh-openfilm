@@ -129,3 +129,24 @@ test('a stopped Studio gets a centered restart control instead of a dead frame',
     assert.match(labels, /studioRestart/);
   } finally { panel.close(); globalThis.fetch = realFetch; cleanup(); }
 });
+
+test('a 404 during a plugin reload is retried before it is shown', async () => {
+  browser();
+  let calls = 0;
+  const panel = mount(createStudioPanel, {
+    t: key => key,
+    startStudio: async () => {
+      calls += 1;
+      if (calls <= 2) throw new Error('HTTP 404');
+      return { editorOrigin: 'http://127.0.0.1:47822' };
+    },
+  });
+  try {
+    panel.render();
+    await new Promise(resolve => setTimeout(resolve, 3200));
+    panel.render();
+    const tree = panel.render();
+    assert.equal(calls, 3, 'two quiet retries, then the real attempt');
+    assert.equal(find(tree, 'iframe').length, 1, 'the panel recovers instead of showing an error');
+  } finally { panel.close(); cleanup(); }
+});

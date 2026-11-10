@@ -32,7 +32,16 @@
         setState({ status: "loading" });
         setBoot(null);
         heardRef.current = false;
-        Promise.resolve().then(() => startStudio(controller.signal)).then((result) => {
+        const attemptOnce = (retries) => Promise.resolve().then(() => startStudio(controller.signal)).catch(async (error) => {
+          const transient = /HTTP (404|503)\b/.test(String(error?.message || error));
+          if (transient && retries > 0 && !controller.signal.aborted) {
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+            if (controller.signal.aborted) throw error;
+            return attemptOnce(retries - 1);
+          }
+          throw error;
+        });
+        attemptOnce(2).then((result) => {
           if (controller.signal.aborted) return;
           const target = new URL(result.editorOrigin);
           const desktop = window.location.hostname === "app" && ["dsh-app:", "app:"].includes(window.location.protocol);
