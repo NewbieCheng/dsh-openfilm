@@ -211,7 +211,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
       tickets.delete(value.ticket);
       const session = randomBytes(32).toString('base64url');
       sessions.set(session, Date.now() + sessionLifetime);
-      say.info('ticket-redeemed', { desktop, sessions: sessions.size });
+      say.info('ticket-redeemed', { desktop, active: sessions.size });
       res.writeHead(204, { 'cache-control': 'no-store', 'set-cookie': `${cookieName}=${session}; HttpOnly; Secure; SameSite=None; Partitioned; Path=/; Max-Age=${sessionLifetime / 1000}` });
       res.end();
     });
