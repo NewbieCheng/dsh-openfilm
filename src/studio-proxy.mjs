@@ -424,25 +424,32 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
   }
   function show(message){ try{ window.__no996ShowError&&window.__no996ShowError('[模板] '+message) }catch(e){} }
   function render(list){
-    var chat=document.getElementById('of-chat');
-    if(!chat||location.pathname!=='/')return remove();
-    if(strip&&strip.parentNode===chat)return;
+    if(location.pathname!=='/')return remove();
+    if(strip&&strip.isConnected)return;
     remove();
     strip=document.createElement('div');
     strip.id='no996-templates';
-    strip.style.cssText='position:absolute;left:24px;right:24px;top:72px;display:flex;gap:8px;flex-wrap:wrap;z-index:5';
+    // Fixed, not absolute: the chat column's own positioning is not ours to rely
+    // on, and a strip that lands under the composer looks like nothing happened.
+    strip.style.cssText='position:fixed;left:0;right:0;top:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;z-index:2147483000;padding:10px 16px;background:#1b1b1bee;border-bottom:1px solid #ffffff1a;font:13px system-ui,sans-serif;color:#e8e8e8';
     var label=document.createElement('span');
     label.textContent='从模板开始：';
-    label.style.cssText='align-self:center;font-size:12px;opacity:.6';
+    label.style.cssText='font-size:12px;opacity:.65';
     strip.appendChild(label);
     list.forEach(function(t){ strip.appendChild(card(t)) });
-    chat.appendChild(strip);
+    var close=document.createElement('button');
+    close.type='button'; close.textContent='×'; close.title='隐藏模板条';
+    close.style.cssText='margin-left:auto;background:transparent;border:0;color:#999;font-size:16px;cursor:pointer;padding:0 4px';
+    close.onclick=function(){ try{ localStorage.setItem('no996.openfilm.templatesHidden','1') }catch(e){} remove() };
+    strip.appendChild(close);
+    document.body.appendChild(strip);
   }
   function load(){
+    try{ if(localStorage.getItem('no996.openfilm.templatesHidden')==='1')return }catch(e){}
     fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'template:list',payload:{}})})
       .then(function(r){return r.json()})
       .then(function(d){ if(d&&Array.isArray(d.templates)&&d.templates.length) render(d.templates) })
-      .catch(function(){})
+      .catch(function())
   }
   setTimeout(load,2500);
   setInterval(function(){ if(location.pathname!=='/'){ remove(); return } load() },8000);
