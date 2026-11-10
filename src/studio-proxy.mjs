@@ -101,6 +101,16 @@ function shutdown(server) {
     server.close(() => resolve());
   });
 }
+/**
+ * Who may frame the editor. The desktop window is `dsh-app://app`, a scheme no
+ * `frame-ancestors` entry of ours named until now — Chrome blocked the frame and
+ * the panel showed a blank rectangle. Loopback ports plus the desktop scheme are
+ * the only frames this localhost integration is built for; remote sites stay out.
+ */
+function ancestorsFor(origin) {
+  return `${origin} 'self' http://127.0.0.1:* http://localhost:* dsh-app: app:`;
+}
+
 function fail(res, status = 403) {
   if (res.headersSent) return res.destroy();
   res.writeHead(status, { 'cache-control': 'no-store', 'content-length': '0' });
@@ -180,7 +190,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
       if (!['iframe', 'document'].includes(req.headers['sec-fetch-dest']) || !['cross-site', 'none'].includes(site) ||
           (req.headers.origin && req.headers.origin !== webOrigin && req.headers.origin !== 'null')) { fail(res); return true; }
       const body = `<!doctype html><meta charset="utf-8"><body><script>(async()=>{const ticket=location.hash.slice(1);history.replaceState(null,'',location.pathname);try{const r=await fetch('/__dsh/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ticket})});if(!r.ok){document.body.textContent='Unable to open OpenFilm Studio (OF_TICKET_REJECTED).';return}const check=await fetch('/__dsh/session',{cache:'no-store'});if(!check.ok){document.body.textContent='Unable to open OpenFilm Studio (OF_SESSION_COOKIE_UNAVAILABLE). Partitioned secure cookies may be unavailable.';return}location.replace('/');return}catch{}document.body.textContent='Unable to open OpenFilm Studio (OF_BRIDGE_FAILED).'})()</script></body>`;
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', 'content-security-policy': `default-src 'none'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors ${webOrigin} 'self'`, 'content-length': Buffer.byteLength(body) });
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', 'content-security-policy': `default-src 'none'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors ${ancestorsFor(webOrigin)}`, 'content-length': Buffer.byteLength(body) });
       res.end(body);
       return true;
     }
@@ -244,7 +254,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
     // for, and did it still carry the session" without recording every asset.
     const dest = req.headers['sec-fetch-dest'];
     if (!film && req.method === 'GET' && (dest === 'document' || dest === 'iframe')) {
-      say.info('nav', { path: req.url.split('?')[0].slice(0, 60), dest, cookie: Boolean(req.headers.cookie && req.headers.cookie.includes(cookieName)) });
+      say.info('nav', { route: req.url.split('?')[0].slice(0, 60), dest, session: Boolean(req.headers.cookie && req.headers.cookie.includes(cookieName)) });
     }
     const rejection = rejectionReason(req, film);
     if (rejection) return refuse(rejection);
@@ -294,7 +304,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
         // User-provided SVG/HTML must not acquire the editor's API origin.
         out['content-security-policy'] = "sandbox; default-src 'none'; style-src 'unsafe-inline'";
       } else if (!film && (type.startsWith('text/html') || type.startsWith('application/xhtml+xml'))) {
-        out['content-security-policy'] = `frame-ancestors ${desktop ? webOrigin : web.origin}`;
+        out['content-security-policy'] = `frame-ancestors ${ancestorsFor(desktop ? webOrigin : web.origin)}`;
       }
       const text = /^(text\/|application\/(json|javascript|xml|x-javascript))/.test(type);
       const stream = !text && (status === 206 || /^(audio\/|video\/|image\/|application\/(?:octet-stream|zip|x-zip-compressed)(?:\s*;|$))/.test(type));
