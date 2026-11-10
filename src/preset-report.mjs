@@ -25,8 +25,10 @@ export function reportPresetStatus(ctx, { file = join(tmpdir(), 'dsh-openfilm-pr
           // can carry an activation problem is kept: reporting success just
           // because two guessed key names were absent is how a failed preset
           // looked healthy.
-          ok: !found.error && !found.failure && !found.problems?.length && !['failed', 'error'].includes(String(found.status)),
-          detail: String(found.error ?? found.failure ?? found.problems?.join?.('; ') ?? found.status ?? 'ok').slice(0, 300),
+          // `broken` is the roster's own failure text; `problems`/`status` are
+          // the other shapes seen. Any of them means the preset cannot run.
+          ok: !found.broken && !found.error && !found.failure && !found.problems?.length && !['failed', 'error'].includes(String(found.status)),
+          detail: String(found.broken ?? found.error ?? found.failure ?? found.problems?.join?.('; ') ?? found.status ?? 'ok').slice(0, 300),
           raw: JSON.stringify(found, (key, value) => (typeof value === 'function' ? '[fn]' : value)).slice(0, 4000),
         }
         : { registered: false, ok: false, detail: 'preset row not registered' };

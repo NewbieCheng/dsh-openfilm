@@ -22,6 +22,12 @@ test('reports an activated preset, an activation failure and a missing row', asy
   assert.equal(failed.ok, false);
   assert.match(failed.detail, /MODULE_NOT_FOUND/);
 
+  // The shape 0.2.2 actually uses: a successful list() item carrying `broken`.
+  const broken = await reportPresetStatus(ctxWith([{ id: 'openfilm-video-editing', broken: 'tool-fs-search: invalid config' }]), { file }).done;
+  assert.equal(broken.ok, false, 'a broken child must not be reported as ok');
+  assert.match(broken.detail, /invalid config/);
+  assert.match(broken.raw, /invalid config/);
+
   const missing = await reportPresetStatus(ctxWith([{ id: 'standard' }]), { file }).done;
   assert.equal(missing.registered, false);
   assert.equal(JSON.parse(readFileSync(file, 'utf8')).registered, false);

@@ -39,3 +39,6 @@
             name: '@deepseek-ai/dsh-tool-fs'
           - id: tool-fs-search
             name: '@deepseek-ai/dsh-tool-fs-search'
+            # Required by 0.2.2; omitting it breaks the whole preset.
+            config:
+              sampleOverCapGlobResults: false
