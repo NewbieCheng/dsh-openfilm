@@ -336,7 +336,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
               // never on arbitrary user HTML or API content. Its fixed-channel
               // transport is bound to the authenticated editor origin below.
               const officialPage = url.pathname === '/' || /^\/projects\/[A-Za-z0-9_-]{6,40}\/?$/.test(url.pathname);
-              const transport = `async (channel,payload)=>{const r=await fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel,payload})});if(!r.ok)throw new Error('OpenFilm capability unavailable');return r.json()}`;
+              const transport = `async (channel,payload)=>{const r=await fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel,payload})});if(!r.ok){let detail='';try{detail=(await r.text()).slice(0,300)}catch(e){}throw new Error('OpenFilm capability unavailable: '+channel+' ['+r.status+'] '+(detail||''));}return r.json()}`;
               const upload = `async (projectId,name,bytes)=>{const q=new URLSearchParams({projectId,name});const r=await fetch('/__dsh/official-upload?'+q,{method:'PUT',credentials:'same-origin',headers:{'content-type':'application/octet-stream'},body:bytes});if(r.status===422)throw new Error('文件已导入但无法读取，请检查素材，避免重复上传。 / The file was imported but cannot be read.');if(!r.ok)throw new Error('OpenFilm file upload unavailable');return r.json()}`;
               const nativePrelude = officialShell && officialPage ? `<script>globalThis.openfilmNative=${officialFacadeSource}({invoke:${transport},upload:${upload}});</script>` : '';
               // Visible, copyable failure reporting for a page we only partly control:
@@ -400,83 +400,7 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
   });
   report(true);
 })();
-// Starter templates on the chat home: read-only metadata from the Host, one click
-// to copy the template into a new project and open it. Nothing here touches the
-// official React tree except an absolutely positioned strip inside the chat
-// column, removed on project pages.
-(function(){
-  var strip=null, busy=false;
-  function remove(){ if(strip&&strip.parentNode)strip.parentNode.removeChild(strip); strip=null; }
-  function card(t){
-    var el=document.createElement('button');
-    el.type='button';
-    el.textContent=t.title;
-    el.title=t.description||t.title;
-    el.style.cssText='flex:0 0 auto;padding:8px 12px;border-radius:10px;border:1px solid #ffffff26;background:#ffffff0f;color:inherit;font-size:13px;cursor:pointer';
-    el.onclick=function(){
-      if(busy)return; busy=true; el.textContent='创建中…';
-      fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'template:create',payload:{templateId:t.id}})})
-        .then(function(r){return r.json()})
-        .then(function(d){ if(d&&d.projectId){ try{ if(d.prompt) localStorage.setItem('no996.openfilm.templatePrompt', d.prompt) }catch(e){} location.href='/projects/'+d.projectId; return } throw new Error('无法创建项目') })
-        .catch(function(e){ busy=false; el.textContent=t.title; show((e&&e.message)||String(e)) });
-    };
-    return el;
-  }
-  function show(message){ try{ window.__no996ShowError&&window.__no996ShowError('[模板] '+message) }catch(e){} }
-  function render(list){
-    if(location.pathname!=='/')return remove();
-    if(strip&&strip.isConnected)return;
-    remove();
-    strip=document.createElement('div');
-    strip.id='no996-templates';
-    // Fixed, not absolute: the chat column's own positioning is not ours to rely
-    // on, and a strip that lands under the composer looks like nothing happened.
-    strip.style.cssText='position:fixed;left:0;right:0;top:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;z-index:2147483000;padding:10px 16px;background:#1b1b1bee;border-bottom:1px solid #ffffff1a;font:13px system-ui,sans-serif;color:#e8e8e8';
-    var label=document.createElement('span');
-    label.textContent='从模板开始：';
-    label.style.cssText='font-size:12px;opacity:.65';
-    strip.appendChild(label);
-    list.forEach(function(t){ strip.appendChild(card(t)) });
-    var close=document.createElement('button');
-    close.type='button'; close.textContent='×'; close.title='隐藏模板条';
-    close.style.cssText='margin-left:auto;background:transparent;border:0;color:#999;font-size:16px;cursor:pointer;padding:0 4px';
-    close.onclick=function(){ try{ localStorage.setItem('no996.openfilm.templatesHidden','1') }catch(e){} remove() };
-    strip.appendChild(close);
-    document.body.appendChild(strip);
-  }
-  function load(){
-    try{ if(localStorage.getItem('no996.openfilm.templatesHidden')==='1')return }catch(e){}
-    fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'template:list',payload:{}})})
-      .then(function(r){return r.json()})
-      .then(function(d){ if(d&&Array.isArray(d.templates)&&d.templates.length) render(d.templates) })
-      .catch(function())
-  }
-  setTimeout(load,2500);
-  setInterval(function(){ if(location.pathname!=='/'){ remove(); return } load() },8000);
-  // The template's prompt waits in localStorage until the new project page can
-  // take it: React owns the composer, so set the value through the native setter
-  // and fire input, then clear the flag.
-  var tries=0;
-  function prefill(){
-    if(!/^\/projects\//.test(location.pathname))return;
-    var text=null; try{ text=localStorage.getItem('no996.openfilm.templatePrompt') }catch(e){}
-    if(!text)return;
-    var box=document.querySelector('#of-chat textarea')||document.querySelector('#of-chat [contenteditable="true"]');
-    if(!box){ if(++tries<40)setTimeout(prefill,500); return }
-    try{
-      if(box.tagName==='TEXTAREA'){
-        var setter=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set;
-        setter.call(box,text);
-        box.dispatchEvent(new Event('input',{bubbles:true}));
-      } else {
-        box.focus();
-        document.execCommand('insertText',false,text);
-      }
-      localStorage.removeItem('no996.openfilm.templatePrompt');
-    }catch(e){ if(++tries<40)setTimeout(prefill,500) }
-  }
-  setTimeout(prefill,3000);
-})();</script><style>[data-app-menu]>[role="menuitem"]:not(:first-child),[data-community-menu]{display:none!important}</style>`;
+</script><style>[data-app-menu]>[role="menuitem"]:not(:first-child),[data-community-menu]{display:none!important}</style>`;
               value = value.replace(/<head(?:\s[^>]*)?>/i, match => match + host);
               if (value.includes('__no996Diag')) diag.injected += 1;
               else diag.refusals += 1;
