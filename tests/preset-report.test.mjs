@@ -28,14 +28,25 @@ test('reports an activated preset, an activation failure and a missing row', asy
   assert.match(broken.detail, /invalid config/);
   assert.match(broken.raw, /invalid config/);
 
-  const missing = await reportPresetStatus(ctxWith([{ id: 'standard' }]), { file }).done;
+  const missing = await reportPresetStatus(ctxWith([{ id: 'standard' }]), { file, attempts: 1 }).done;
   assert.equal(missing.registered, false);
   assert.equal(JSON.parse(readFileSync(file, 'utf8')).registered, false);
 });
 
+test('a preset that mounts late is observed instead of reported missing', async () => {
+  // The preset row mounts after this plugin, so an early single read says
+  // "not registered" for a preset that is merely not mounted yet.
+  let calls = 0;
+  const ctx = { get: name => (name === 'agentPresets' ? { list: async () => (++calls < 3 ? [{ id: 'standard' }] : [{ id: 'openfilm-video-editing' }]) } : undefined) };
+  const report = await reportPresetStatus(ctx, { file: join(tmpdir(), 'openfilm-report-late.json'), attempts: 5, delayMs: 1 }).done;
+  assert.equal(report.registered, true);
+  assert.equal(report.ok, true);
+  assert.equal(report.attempt, 3);
+});
+
 test('a registry that throws is reported instead of breaking startup', async () => {
   const throwing = { get: () => ({ list: async () => { throw new Error('registry unavailable'); } }) };
-  const report = await reportPresetStatus(throwing, { file: join(tmpdir(), 'openfilm-report-unused.json') }).done;
+  const report = await reportPresetStatus(throwing, { file: join(tmpdir(), 'openfilm-report-unused.json'), attempts: 1 }).done;
   assert.equal(report.ok, false);
   assert.match(report.detail, /registry unavailable/);
 });

@@ -33,7 +33,7 @@ function officialFacadeFactory(bridge) {
 
   // Only these fixed RPC and event channels may reach the supplied bridge.
   // The Host must independently authorize project IDs and validate all payloads.
-  const rpcAllow = new Set(['chat:load', 'chat:save-sessions', 'chat:save-turn', 'agent:prompt', 'agent:cancel', 'agent:models', 'agent:select-model']);
+  const rpcAllow = new Set(['chat:load', 'chat:save-sessions', 'chat:save-turn', 'chat:archive', 'chat:unarchive', 'chat:archive-state', 'agent:prompt', 'agent:cancel', 'agent:models', 'agent:select-model']);
   const eventAllow = new Set(['desktop:full-screen', 'desktop:toggle-chat', 'desktop:open-settings']);
   const rpc = async (channel, payload) => {
     if (!rpcAllow.has(channel) || typeof bridge.invoke !== 'function') throw unavailable(channel);
@@ -306,6 +306,15 @@ function officialFacadeFactory(bridge) {
     try { return await pending; }
     finally { if (writes.get(id) === pending) writes.delete(id); }
   };
+  // Archive mutations change which writes are legal, so the local revision hint
+  // is dropped: the next save re-reads the Host instead of failing on a stale one.
+  const archiveChat = async (project, channel) => {
+    const id = await projectId(project);
+    await (writes.get(id) || Promise.resolve()).catch(() => {});
+    const result = await rpc(channel, { projectId: id });
+    revisions.delete(id);
+    return result;
+  };
   const chat = {
     ...methods('chat', ['log', 'reveal', 'saveRefImage', 'describePaths', 'unsaved', 'snapshot', 'changes', 'undo']),
     load: async (project) => {
@@ -325,6 +334,12 @@ function officialFacadeFactory(bridge) {
     },
     saveSessions: (project, sessions, last) => saveChat(project, 'chat:save-sessions', { sessions, last }),
     saveTurn: (project, turn, items) => saveChat(project, 'chat:save-turn', { turn, items }),
+    // Archive is the same durable set the DSH sidebar edits. The Host resolves
+    // the Session; the page only names a project. History is withheld while
+    // archived and returns untouched after restoring.
+    archiveState: async project => rpc('chat:archive-state', { projectId: await projectId(project) }),
+    archive: async project => archiveChat(project, 'chat:archive'),
+    unarchive: async project => archiveChat(project, 'chat:unarchive'),
   };
   const skills = methods('skills', ['list', 'texts', 'allow', 'changed', 'preview', 'previewFolder', 'commit', 'discard', 'reveal']);
   return {

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createOfficialAgentEventState, translateOfficialAgentEvent } from './official-agent-events.mjs';
+import { createOfficialAgentEventState, translateOfficialAgentEvent, translateSessionEvent } from './official-agent-events.mjs';
 
 // Host-only adapter. verifier must authorize the caller and return the upstream
 // canonical project path on every invocation. openProjectSessions is a single,
@@ -12,12 +12,19 @@ import { createOfficialAgentEventState, translateOfficialAgentEvent } from './of
 // cannot be retracted. Permissions, questions, attachments, history, replay and
 // reconnection are not implemented. Do not expose this as a complete chat API.
 const fail = (code, message) => Object.assign(new Error(message), { code });
-const nonempty = value => typeof value === 'string' && value.trim().length > 0 && !value.includes('\0');
+const nonempty = value => typeof value === 'string' && value.trim().length > 0 && !value.includes('\\0');
 const ordinal = value => Number.isSafeInteger(value) && value >= 0;
 
 // Only fixed categories are sent to the page. Raw provider messages, codes and
 // request IDs can contain private data and must remain in the owning DSH session.
-function turnFailureMessage(reason) {
+function turnFailureMessage(reason, { archived = false } = {}) {
+  if (reason?.kind === 'blocked') {
+    // DSH's pre-step gate reads the durable archive set, so a blocked turn on an
+    // archived Session is the expected shape rather than a defect. Say which.
+    return archived
+      ? 'Turn ended without completion (blocked): this conversation is archived. Restore it in DSH or the video panel before sending again.'
+      : 'Turn ended without completion (blocked): the session was stopped before inference (policy or archive gate)';
+  }
   if (reason?.kind === 'error') {
     const status = reason.error?.status;
     const category = status === 401 ? '模型认证失败，请检查登录或凭据' :
@@ -27,17 +34,20 @@ function turnFailureMessage(reason) {
       Number.isInteger(status) && status >= 400 && status <= 499 ? '模型服务拒绝了请求' : '模型调用失败，请检查 DSH 会话详情';
     return `Turn ended without completion (error): ${category}`;
   }
-  const kind = ['aborted', 'blocked', 'max-tokens', 'interrupted', 'forked'].includes(reason?.kind) ? reason.kind : 'unknown';
+  const kind = ['aborted', 'max-tokens', 'interrupted', 'forked'].includes(reason?.kind) ? reason.kind : 'unknown';
   return `Turn ended without completion (${kind})`;
 }
 
-export function createOfficialAgentService(ctx, { verifier, openProjectSessions, emit } = {}) {
+export function createOfficialAgentService(ctx, { verifier, openProjectSessions, emit, isArchived } = {}) {
   const controller = ctx?.sessionController;
   if (typeof verifier !== 'function' || typeof emit !== 'function' ||
       typeof openProjectSessions?.ensure !== 'function' ||
       ['modelCatalog', 'selectModel', 'prompt', 'follow', 'cancel'].some(name => typeof controller?.[name] !== 'function')) {
     throw fail('OFFICIAL_AGENT_DEPENDENCY', 'Trusted verifier, registry, emitter and session controller are required');
   }
+  // Archive state is optional: without it the bridge still works and DSH's own
+  // gate decides; it must never be faked into "not archived".
+  const archived = typeof isArchived === 'function' ? isArchived : () => false;
   const active = new Map();
   // Following admission failure or conflict, the prompt may still be queued or
   // running. Never silently retry or attach a later call to that unknown turn.
@@ -59,6 +69,11 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
     // The registry owns pending/recovery; never replace or delete its records.
     const sessionId = await openProjectSessions.ensure(project);
     if (!nonempty(sessionId)) throw fail('OFFICIAL_AGENT_OWNERSHIP', 'Ownership registry returned no session ID');
+    // Sending into an archived Session is guaranteed to end `blocked`; refuse it
+    // with an actionable reason instead of letting the turn collapse.
+    if (archived(sessionId) === true) {
+      throw fail('OFFICIAL_AGENT_CONVERSATION_ARCHIVED', 'This conversation is archived; restore it before sending');
+    }
     return sessionId;
   }
   function idleSnapshot(frame, sessionId) {
@@ -119,7 +134,7 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
         }
       }
       if (active.has(projectId) || uncertain.has(projectId)) throw fail('OFFICIAL_AGENT_BUSY', 'Project turn is active or requires recovery');
-      const operation = { admitted: false, rejected: false, matched: false, conflict: false, finished: false, sessionId: undefined, cancelRequested: false };
+      const operation = { admitted: false, rejected: false, matched: false, sawPrompt: false, conflict: false, finished: false, blocked: false, sessionId: undefined, cancelRequested: false };
       const trace = [];
       active.set(projectId, operation); // before the first await
       const abort = new AbortController();
@@ -143,6 +158,21 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
         const end = new Promise((resolve, reject) => { resolveEnd = resolve; rejectEnd = reject; });
         // Attach a rejection handler immediately, including while prompt awaits.
         end.catch(() => {});
+        // Attribution may arrive from either recorded shape: `user/message`
+        // carries the prompt source directly, while a live prompt first appears
+        // in `agent/inbox/spliced`. Requiring only `user/message` is what turned
+        // a gated (blocked) turn into a bogus protocol conflict.
+        const attribute = () => {
+          if (operation.matched || candidate === undefined) return;
+          operation.matched = true;
+          if (!state) state = createOfficialAgentEventState({ sessionId, turnId, turn: candidate, key });
+        };
+        const finish = async result => {
+          operation.finished = true;
+          finished = true;
+          if (await emit(projectId, { key, kind: 'done', turnId, ...result }) === false) throw fail('OFFICIAL_AGENT_STREAM_LOST', 'No live event stream accepted the terminal event');
+          resolveEnd(result);
+        };
         pump = (async () => {
           try {
             while (!finished) {
@@ -160,25 +190,52 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
                 if (event?.type === 'turn/start') {
                   if (!operation.admitted || candidate !== undefined || !ordinal(event.data?.turn)) throw fail('OFFICIAL_AGENT_CONFLICT', 'Unexpected concurrent turn');
                   candidate = event.data.turn;
+                  if (operation.sawPrompt) attribute();
                 } else if (event?.type === 'user/message') {
                   const source = event.data?.source;
                   if (source?.kind === 'runtime-context') continue;
-                  if (candidate === undefined || source?.kind !== 'user' || source.rpcId !== requestId || operation.matched) {
+                  // Our own prompt can be recorded twice (queued splice, then the
+                  // durable message): attributing it again is correct, not a
+                  // conflict. Any other input during this turn is.
+                  if (source?.kind === 'user' && source.rpcId === requestId) {
+                    operation.sawPrompt = true;
+                    attribute();
+                  } else {
                     throw fail('OFFICIAL_AGENT_CONFLICT', 'Concurrent or unidentifiable session input');
                   }
-                  operation.matched = true;
-                  state = createOfficialAgentEventState({ sessionId, turnId, turn: candidate, key });
+                } else if (event?.type === 'agent/inbox/spliced') {
+                  // Admission-only notice: the prompt is queued for the next turn
+                  // before turn/start exists. Identify it by our own request ID.
+                  const inserted = Array.isArray(event.data?.inserted) ? event.data.inserted : [];
+                  if (inserted.some(item => item?.source?.kind === 'user' && item.source.rpcId === requestId)) {
+                    operation.sawPrompt = true;
+                    attribute();
+                  }
                 } else if (event?.type === 'turn/end') {
-                  if (!operation.matched || event.data?.turn !== candidate) throw fail('OFFICIAL_AGENT_CONFLICT', 'Unexpected turn end');
-                  finished = true;
-                  operation.finished = true;
-                  const reason = event.data?.reason?.kind;
-                  const result = reason === 'completed' ? { ok: true, stopReason: 'end_turn' }
-                    : reason === 'aborted' && operation.cancelRequested && event.data?.reason?.reason?.kind === 'user'
+                  const reason = event.data?.reason;
+                  if (candidate === undefined || event.data?.turn !== candidate) throw fail('OFFICIAL_AGENT_CONFLICT', 'Unexpected turn end');
+                  const kind = reason?.kind;
+                  // A gated turn never reaches this bridge's attribution; that is a
+                  // terminal outcome, not a conflict. Only an unattributed turn with
+                  // any other reason is genuinely foreign.
+                  if (!operation.matched && kind !== 'blocked') throw fail('OFFICIAL_AGENT_CONFLICT', 'Unattributed turn ended');
+                  const result = kind === 'completed' ? { ok: true, stopReason: 'end_turn' }
+                    : kind === 'aborted' && operation.cancelRequested && reason?.reason?.kind === 'user'
                       ? { ok: true, stopReason: 'cancelled' }
-                    : { ok: false, error: turnFailureMessage(event.data?.reason) };
-                  if (await emit(projectId, { key, kind: 'done', turnId, ...result }) === false) throw fail('OFFICIAL_AGENT_STREAM_LOST', 'No live event stream accepted the terminal event');
-                  resolveEnd(result);
+                      : { ok: false, error: turnFailureMessage(reason, { archived: archived(sessionId) === true }) };
+                  operation.blocked = kind === 'blocked';
+                  await finish(result);
+                } else if (event?.type === 'tool/call' || event?.type === 'tool/result' || event?.type === 'assistant/message') {
+                  // Durable lifecycle of the same turn. Ignore anything belonging
+                  // to another turn; adoption of a late state is not allowed.
+                  if (candidate === undefined || event.data?.turn !== candidate) continue;
+                  if (!state && operation.sawPrompt) attribute();
+                  if (!state) continue;
+                  const result = translateSessionEvent(state, { sessionId, turnId, event });
+                  state = result.state;
+                  for (const eventUpdate of result.events) {
+                    if (await emit(projectId, eventUpdate) === false) throw fail('OFFICIAL_AGENT_STREAM_LOST', 'No live event stream accepted the update');
+                  }
                 }
               } else if (frame?.type === 'assistant-stream') {
                 if (!state) throw fail('OFFICIAL_AGENT_CONFLICT', 'Assistant stream arrived before prompt attribution');
@@ -215,6 +272,8 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
         // An invoked prompt can have been accepted even if its receipt was lost.
         // Only an explicit rejection or a verified terminal settles that doubt.
         if (operation.admitted && (!operation.rejected || operation.matched) && !operation.finished) {
+          // A gated turn is terminal and left no output: it is not uncertain.
+          if (operation.blocked) throw fail('OFFICIAL_AGENT_BLOCKED', `${error?.message || String(error)} (the session was blocked before inference)`);
           // Only a turn that actually entered the session is uncertain: `matched`
           // is set when this exact prompt's user message is observed. Without it
           // nothing ran, so a permanent lock would just break the project — this

@@ -1,5 +1,32 @@
 # 更新记录
 
+## 0.4.0
+
+**修 503：归档会话不再以 `blocked` 伪造成协议冲突**
+
+- 发送前读 DSH 自己的归档集合（`workspaceController.follow` / `archiveSession`），归档会话直接给出可操作提示，不再先发一轮、等 `turn/end blocked` 再把失败误报成 `OFFICIAL_AGENT_NOT_STARTED`。
+- 准入归因同时接受真实事件 `agent/inbox/spliced`（`source.rpcId`）与 `user/message`；`turn/end` 的任何原因都按终态处理（`blocked` 单独分类），未归因的非 blocked 回合才判冲突。
+- 归档的项目仍保留原会话绑定，不静默换绑；恢复后原样继续。
+
+**思考与工具调用显示**
+
+- 新增 `tool/call` → `tool_call`、`tool/result` → `tool_call_update`、`assistant/message` → 思考/正文的翻译：工具卡片（运行中 / 完成 / 失败）、参数与结果摘要、按 callId 去重、按 turn 归属（错 turn 直接丢弃）。
+- 已经流式输出过的步骤不再重复输出持久化文本；单条内容截断 8 KiB、参数 4 KiB。
+
+**归档与 DSH 侧边栏同一份真相**
+
+- 归档即在 DSH 侧边栏归档：视频面板的对话历史隐藏、写入拒绝，恢复后历史原样返回；项目、会话、素材都不删除。
+- 面板顶部出现归档横幅，提供「恢复会话」与「新建会话」（换绑新会话，旧的归档会话保留）。
+- 新路由 `/api/no996-openfilm/archive`：浏览器 peer + 本机 Host/Origin + JSON + 1 KiB，只接受项目 ID，不接受 Session ID 或路径。
+
+**预设自报**
+
+- 启动报告改为有界重试：预设行比插件晚挂载时不再误报 "preset row not registered"；报告里带 `attempt`。
+
+**测试**
+
+`node --test tests/*.test.mjs` → 113 通过 / 1 跳过（新增 17 项：真实帧夹具、工具映射、归档订阅、chat RPC、迟到挂载）。
+
 ## 0.2.0
 
 **视频剪辑模式（DSH Agent 预设）**

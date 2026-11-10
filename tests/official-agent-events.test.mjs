@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createOfficialAgentEventState, translateOfficialAgentEvent } from '../src/official-agent-events.mjs';
+import { createOfficialAgentEventState, translateOfficialAgentEvent, translateSessionEvent } from '../src/official-agent-events.mjs';
 
 const base = { sessionId: 's1', turnId: 't1', turn: 1, key: 'k' };
 const feed = (state, frame) => translateOfficialAgentEvent(state, { sessionId: 's1', turnId: 't1', frame: { type: 'assistant-stream', frame } });
@@ -46,4 +46,57 @@ test('a foreign session or turn is ignored entirely', () => {
   const frame = { type: 'assistant-stream', frame: { type: 'chunk', turn: 1, attemptId: 'a', revision: 1, index: 0, chunk: { type: 'text-delta', text: 'x' } } };
   assert.equal(translateOfficialAgentEvent(state, { sessionId: 'other', turnId: 't1', frame }).events.length, 0);
   assert.equal(translateOfficialAgentEvent(state, { sessionId: 's1', turnId: 'other', frame }).events.length, 0);
+});
+
+// Durable events are the only complete tool lifecycle DSH publishes, and the
+// committed thinking/text blocks are the fallback when nothing streamed.
+const durable = (state, event) => translateSessionEvent(state, { sessionId: 's1', turnId: 't1', event });
+const callEvent = (callId = 'c1', turn = 1) => ({ type: 'tool/call', data: { turn, step: 1, callId, name: 'ops_glob', arguments: '{"pattern":["*"]}' } });
+const resultEvent = (callId = 'c1', turn = 1) => ({ type: 'tool/result', data: { turn, step: 1, toolCallId: callId, message: { role: 'tool', toolCallId: callId, content: [{ type: 'text', text: 'a.md' }] } } });
+
+test('a tool call and its result become one act pair, never a duplicate', () => {
+  let state = createOfficialAgentEventState(base);
+  const called = durable(state, callEvent());
+  state = called.state;
+  assert.equal(called.events.length, 1);
+  assert.equal(called.events[0].update.sessionUpdate, 'tool_call');
+  assert.equal(called.events[0].update.toolCallId, 'c1');
+  assert.equal(called.events[0].update.title, 'ops_glob');
+  assert.match(called.events[0].update.rawInput, /pattern/);
+  // A repeated call (streamed and durable, or two frames) must not open a second card.
+  assert.equal(durable(state, callEvent()).events.length, 0);
+
+  const done = durable(state, resultEvent());
+  state = done.state;
+  assert.equal(done.events.length, 1);
+  assert.equal(done.events[0].update.sessionUpdate, 'tool_call_update');
+  assert.equal(done.events[0].update.status, 'completed');
+  assert.equal(done.events[0].update.content[0].text, 'a.md');
+  assert.equal(durable(state, resultEvent()).events.length, 0);
+});
+
+test('committed thinking and text fill in only when that step never streamed', () => {
+  let state = createOfficialAgentEventState(base);
+  const committed = { type: 'assistant/message', data: { turn: 1, step: 1, message: { role: 'assistant', content: [
+    { type: 'reasoning', text: '先看目录' },
+    { type: 'tool-call', id: 'c2', name: 'ops_read_files', arguments: '{"files":["a.md"]}' },
+    { type: 'text', text: '读到了' },
+  ] } } };
+  const result = durable(state, committed);
+  state = result.state;
+  assert.deepEqual(result.events.map(event => event.update.sessionUpdate), ['agent_thought_chunk', 'agent_message_chunk', 'tool_call']);
+  assert.equal(result.events[0].update.content.text, '先看目录');
+
+  // Streaming already delivered step 2, so its durable copy stays silent.
+  state = { ...state, textSteps: [2], thoughtSteps: [2] };
+  const same = durable(state, { type: 'assistant/message', data: { turn: 1, step: 2, message: { role: 'assistant', content: [
+    { type: 'reasoning', text: 'x' }, { type: 'text', text: 'y' },
+  ] } } });
+  assert.equal(same.events.length, 0);
+});
+
+test('durable events from another turn are ignored', () => {
+  const state = createOfficialAgentEventState(base);
+  assert.equal(durable(state, callEvent('c9', 2)).events.length, 0);
+  assert.equal(durable(state, resultEvent('c9', 2)).events.length, 0);
 });

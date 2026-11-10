@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createOfficialAgentService } from '../src/official-agent-service.mjs';
 
-function fixture({ emit } = {}) {
+function fixture({ emit, archived } = {}) {
   let feed;
   let promptReady;
   let nextReason = 'completed';
@@ -38,6 +38,7 @@ function fixture({ emit } = {}) {
   const service = createOfficialAgentService({ sessionController: controller }, {
     verifier: async projectId => ({ projectId, path: 'project' }),
     openProjectSessions: { ensure: async () => 'session' }, emit: emit || (async (_project, event) => { events.push(event); }),
+    isArchived: archived,
   });
   return { service, controller, events, selections, cancellations,
     setReason: reason => { nextReason = reason; },
@@ -136,4 +137,54 @@ test('an unattributed prompt failure is retryable, an attributed one stays locke
   rejected.controller.prompt = async () => ({ accepted: false });
   await assert.rejects(send(rejected.service), { code: 'OFFICIAL_AGENT_ADMISSION' });
   await assert.rejects(send(rejected.service), { code: 'OFFICIAL_AGENT_ADMISSION' });
+});
+
+// Recorded shape: the prompt is announced through `agent/inbox/spliced` before
+// turn/start exists, and a gated (archived) Session ends the turn as `blocked`
+// without ever emitting `user/message`. That used to read as a protocol
+// conflict and surface as 503 OFFICIAL_AGENT_NOT_STARTED.
+test('a gated turn attributed through the inbox splice reports blocked, not a 503 conflict', async () => {
+  const f = fixture();
+  f.controller.prompt = async ({ requestId }) => {
+    f.push({ type: 'event', event: { type: 'agent/inbox/spliced', data: { target: 'next-turn', inserted: [{ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user', rpcId: requestId } }] } } });
+    f.push({ type: 'event', event: { type: 'turn/start', data: { turn: 1 } } });
+    f.push({ type: 'event', event: { type: 'turn/end', data: { turn: 1, reason: { kind: 'blocked' } } } });
+    return { accepted: true };
+  };
+  const result = await send(f.service);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /blocked/);
+  assert.equal(f.events.at(-1).kind, 'done');
+  // The project stays usable: a gated turn is terminal, not uncertain.
+  f.controller.prompt = async ({ requestId }) => {
+    f.push({ type: 'event', event: { type: 'turn/start', data: { turn: 2 } } });
+    f.push({ type: 'event', event: { type: 'user/message', data: { source: { kind: 'user', rpcId: requestId } } } });
+    f.push({ type: 'event', event: { type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } } });
+    return { accepted: true };
+  };
+  assert.deepEqual(await send(f.service), { ok: true, stopReason: 'end_turn' });
+});
+
+test('an archived conversation is refused before any prompt is admitted', async () => {
+  const f = fixture({ archived: () => true });
+  await assert.rejects(send(f.service), { code: 'OFFICIAL_AGENT_CONVERSATION_ARCHIVED' });
+  // Nothing ran, so nothing is locked: restoring the conversation is enough.
+  assert.equal(f.events.length, 0);
+});
+
+test('tool calls and results reach the panel as an ordered act pair', async () => {
+  const f = fixture();
+  f.hold();
+  const ready = f.ready();
+  const pending = send(f.service);
+  await ready;
+  f.push({ type: 'assistant-stream', frame: { type: 'start', turn: 1, step: 1, attemptId: 'a', revision: 0 } });
+  f.push({ type: 'event', event: { type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'ops_glob', arguments: '{"pattern":["*"]}' } } });
+  f.push({ type: 'event', event: { type: 'assistant/message', data: { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'reasoning', text: '先看目录' }] } } } });
+  f.push({ type: 'event', event: { type: 'tool/result', data: { turn: 1, step: 1, toolCallId: 'c1', message: { role: 'tool', toolCallId: 'c1', content: [{ type: 'text', text: 'a.md' }] } } } });
+  f.end('completed');
+  assert.deepEqual(await pending, { ok: true, stopReason: 'end_turn' });
+  assert.deepEqual(f.events.filter(event => event.kind === 'update').map(event => event.update.sessionUpdate),
+    ['tool_call', 'agent_thought_chunk', 'tool_call_update']);
+  assert.equal(f.events.at(-1).kind, 'done');
 });

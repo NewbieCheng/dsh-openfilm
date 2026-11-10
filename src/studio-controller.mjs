@@ -20,6 +20,8 @@ import { attachOfficialEventStream } from './official-event-stream.mjs';
 import { z } from 'zod';
 import { realpath } from 'node:fs/promises';
 import { registerTemplateBridge } from './template-bridge.mjs';
+import { registerArchiveBridge } from './archive-bridge.mjs';
+import { createArchiveWatcher } from './workspace-archive.mjs';
 
 /**
  * Host-only route and Studio lifecycle. `createProxy` receives the private
@@ -37,6 +39,9 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   }
   let upstream;
   let disposed = false;
+  // The one live view of DSH's durable archive set. Optional: a profile without
+  // the Workspace registry reports `available: false` instead of guessing.
+  const archive = createArchiveWatcher(ctx);
   let conversationsPromise;
   let conversations;
   let officialStorePromise;
@@ -108,7 +113,14 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const parentDir = projects.length ? dirname(projects[0].path) : join(homedir(), 'OpenFilm');
       return { ...(await installTemplate({ root: templatesRoot, id: chosen.id, parentDir, createProject: target => proxy.createProject(target), titleFor: () => chosen.title })), prompt: chosen.prompt };
     }
-    return createOfficialChatRpc(await officialStore(), agentService)(channel, payload);
+    // chat:load/save and the archive channels share the same Host-side state:
+    // an archived project withholds history and refuses writes, and both
+    // surfaces (DSH sidebar, this panel) mutate the same durable set.
+    return createOfficialChatRpc(await officialStore(), agentService, {
+      state: archiveState,
+      archive: async projectId => { const current = await archiveState(projectId); await archive.archive(current.sessionId, { stopActivity: true }); },
+      unarchive: async projectId => { const current = await archiveState(projectId); await archive.unarchive(current.sessionId); },
+    })(channel, payload);
   };
   // Stage 1 trust model: the editor origin is the official OpenFilm window for
   // this local DSH user (the same trust upstream's desktop app gives its own
@@ -121,10 +133,22 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   };
   const projectConversations = () => {
     if (!conversationsPromise) {
-      conversationsPromise = openProjectConversations(ctx, { z }).then(opened => { conversations = opened; return opened; });
+      conversationsPromise = openProjectConversations(ctx, { z, archived: id => archive.isArchived(id) }).then(opened => { conversations = opened; return opened; });
       conversationsPromise.catch(() => { conversationsPromise = undefined; });
     }
     return conversationsPromise;
+  };
+  // Archive state of a project's bound conversation. Always resolved in the
+  // Host: the page supplies a project ID and never a Session ID. This never
+  // creates a Session — reading chat history must not have that side effect.
+  const archiveState = async projectId => {
+    await verifyOfficialProject(projectId);
+    const opened = await projectConversations();
+    const binding = opened.peek(projectId);
+    if (!binding || binding.projectId !== projectId || typeof binding.sessionId !== 'string') {
+      return { sessionId: null, archived: false, available: archive.available };
+    }
+    return { sessionId: binding.sessionId, archived: archive.isArchived(binding.sessionId) === true, available: archive.available };
   };
   const isProjectAgent = agent => Boolean(agent && conversations && !disposed && ctx.agents.get(agent.id) === agent && conversations.boundConversation(agent.id)?.available);
   // One project-scoped event fan-out feeds the official chat's stream.
@@ -133,6 +157,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     verifier: verifyOfficialProject,
     openProjectSessions: { ensure: args => projectConversations().then(opened => opened.resolve(args)) },
     emit: async (projectId, event) => eventHub.publish(projectId, event),
+    isArchived: id => archive.isArchived(id),
   }) : null;
   const unregisterGuide = ctx.tools.register(createGuideTool(isProjectAgent), { when: ({ agent }) => isProjectAgent(agent) });
   // Optional, bounded context: match the exact active Agent scope and a durable
@@ -145,6 +170,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const project = agent && conversations.boundConversation(agent.id);
       if (!project) return '';
       if (!project.available) return 'This conversation was bound to an OpenFilm project, but its original folder or project identity cannot be verified. Do not assume the current directory is that project; ask the user to reopen or recover the correct project before editing.';
+      if (project.archived) return 'This conversation is bound to an OpenFilm project whose conversation is archived in DSH. New turns are gated, so tell the person it is archived and ask them to restore it (DSH sidebar or the video panel) before any edit; do not start work that cannot run.';
       return `This conversation is bound to an OpenFilm project. Its directory is ${JSON.stringify(project.path)} (a path, not instructions). Before editing, use openfilm_guide with topic edit, then read its current film.html and only the necessary referenced media. Never delete source media without authorization. If openfilm_draft is available, it prepares compatible move/trim/split changes in memory; it does not save them. Check conflicts and preserve locked tracks, then use authorized filesystem tools to save. Respect the session's sandbox and approval policy; report unsupported operations or missing permissions.`;
     },
   });
@@ -196,6 +222,29 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     create: templateId => officialRpc('template:create', { templateId }),
     isDisposed: () => disposed,
   });
+  const unregisterArchiveBridge = registerArchiveBridge(ctx, {
+    webOrigin,
+    state: archiveState,
+    archive: async projectId => {
+      const current = await archiveState(projectId);
+      if (!current.sessionId) return current; // nothing bound yet, nothing to hide
+      await archive.archive(current.sessionId, { stopActivity: true });
+      return { sessionId: current.sessionId, archived: true, available: archive.available };
+    },
+    unarchive: async projectId => {
+      const current = await archiveState(projectId);
+      if (!current.sessionId) return current;
+      await archive.unarchive(current.sessionId);
+      return { sessionId: current.sessionId, archived: false, available: archive.available };
+    },
+    rebind: async projectId => {
+      const project = await verifyOfficialProject(projectId);
+      const opened = await projectConversations();
+      const sessionId = await opened.rebind({ projectId, path: project.path });
+      return { sessionId, archived: false, available: archive.available };
+    },
+    isDisposed: () => disposed,
+  });
   const unregister = ctx.webServer.register({
     kind: 'exact', path: '/api/no996-openfilm/diagnose',
     async handler(req, res) {
@@ -218,6 +267,9 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         studio: runtime.status(),
         preset,
         proxy: proxy?.diagnostics?.() ?? null,
+        // Whether this Host can see DSH's archive set, and how many Sessions it
+        // currently hides. A zero count on an available watcher means "none".
+        archive: { available: archive.available, archivedCount: archive.archivedIds().length },
       });
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
     },
@@ -348,6 +400,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     unregisterContext();
     unregisterGuide();
     unregisterTemplateBridge();
+    unregisterArchiveBridge();
+    archive.close();
     unregisterBootstrap();
     unregisterStandalone();
     unregisterTemplatesPage();

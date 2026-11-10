@@ -45,3 +45,20 @@ test('unreadable session catalog does not replace the saved old conversation', a
   assert.deepEqual(creates, []);
   await conversations.close();
 });
+
+test('an archived binding is kept, reported, and never silently replaced', async () => {
+  const { ctx, table, creates } = fixture();
+  ctx.sessionController.list = async () => ({ items: [{ sessionId: 'old-session', cwd: project.path, agentAvailable: true }] });
+  table.set(project.projectId, { ...project, sessionId: 'old-session' });
+  const conversations = await openProjectConversations(ctx, { z, archived: id => id === 'old-session' });
+  // The Session still exists; only its visibility changed, so it must not be
+  // swapped for a fresh conversation behind the person's back.
+  assert.equal(await conversations.resolve(project), 'old-session');
+  assert.deepEqual(creates, []);
+  assert.equal(conversations.boundConversation('old-session').archived, true);
+  assert.equal(conversations.peek(project.projectId).sessionId, 'old-session');
+  // Peeking is a read: it creates nothing and does not need the catalog.
+  ctx.sessionController.create = async () => { throw new Error('should not create'); };
+  assert.equal(conversations.peek(project.projectId).sessionId, 'old-session');
+  await conversations.close();
+});

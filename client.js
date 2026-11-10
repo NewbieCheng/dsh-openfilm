@@ -19,6 +19,9 @@
       const [creationUncertain, setCreationUncertain] = React.useState(false);
       const [preset, setPreset] = React.useState(null);
       const [creating, setCreating] = React.useState(false);
+      const [projectId, setProjectId] = React.useState(null);
+      const [archive, setArchive] = React.useState(null);
+      const [archiveBusy, setArchiveBusy] = React.useState(false);
       const containerRef = React.useRef(null);
       const iframeRef = React.useRef(null);
       const heardRef = React.useRef(false);
@@ -79,8 +82,10 @@
           }
           if (viewRef.current === "editor" && data && typeof data === "object" && data.type === "no996-openfilm:project" && data.version === 1 && typeof data.projectId === "string") {
             try {
-              if (/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId)) localStorage.setItem("no996.openfilm.lastProject", data.projectId);
-              else localStorage.removeItem("no996.openfilm.lastProject");
+              if (/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId)) {
+                localStorage.setItem("no996.openfilm.lastProject", data.projectId);
+                setProjectId(data.projectId);
+              } else localStorage.removeItem("no996.openfilm.lastProject");
             } catch {
             }
           }
@@ -109,6 +114,49 @@
       const retry = () => {
         setSilent(false);
         setAttempt((value) => value + 1);
+      };
+      React.useEffect(() => {
+        if (!projectId || state.status !== "ready") {
+          setArchive(null);
+          return void 0;
+        }
+        let live = true;
+        const read = async () => {
+          try {
+            const response = await fetch("/api/no996-openfilm/archive", {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ action: "state", projectId })
+            });
+            const data = await response.json().catch(() => null);
+            if (live && response.ok && data) setArchive({ available: data.available !== false, archived: data.archived === true });
+          } catch {
+          }
+        };
+        read();
+        const timer = setInterval(read, 5e3);
+        return () => {
+          live = false;
+          clearInterval(timer);
+        };
+      }, [projectId, state.status]);
+      const changeArchive = async (action) => {
+        if (!projectId || archiveBusy) return;
+        setArchiveBusy(true);
+        try {
+          const response = await fetch("/api/no996-openfilm/archive", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action, projectId })
+          });
+          const data = await response.json().catch(() => null);
+          if (response.ok && data) setArchive({ available: data.available !== false, archived: data.archived === true });
+        } catch {
+        } finally {
+          setArchiveBusy(false);
+        }
       };
       const createTemplate = async (id) => {
         if (creatingRef.current || creationUncertain || !iframeRef.current || state.status !== "ready") return;
@@ -209,11 +257,38 @@
           !ready ? h("div", { style: { marginTop: 16 } }, state.status === "ready" && !silent ? t("studioLoading") : studio) : null
         )
       );
+      const archived = archive?.available !== false && archive?.archived === true;
+      const banner = archived ? h(
+        "div",
+        {
+          role: "status",
+          style: {
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 40,
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            alignItems: "center",
+            padding: "8px 12px",
+            fontSize: 12,
+            background: "var(--dsw-alias-bg-layer-2, #2a2a2a)",
+            color: "var(--dsw-alias-label-primary)",
+            borderBottom: "1px solid var(--dsw-alias-separator, #8886)"
+          }
+        },
+        h("span", { style: { flex: "1 1 240px" } }, t("archiveBanner")),
+        h("button", { type: "button", disabled: archiveBusy, onClick: () => changeArchive("unarchive") }, t("archiveRestore")),
+        h("button", { type: "button", disabled: archiveBusy, onClick: () => changeArchive("rebind") }, t("archiveRebind"))
+      ) : null;
       return h(
         "div",
         { ref: containerRef, style: { position: "relative", width: "100%", height: "100%", minWidth: 0, minHeight: 0 } },
         state.status === "ready" && !silent ? studio : view === "editor" ? studio : null,
-        view === "home" ? home : null
+        view === "home" ? home : null,
+        banner
       );
     };
   }
@@ -280,7 +355,10 @@
         presetMissing: "Video editing mode: not loaded \u2014",
         templateHomeTitle: "Start a video",
         templateHomeDescription: "Choose a template to create a project, or open an existing project.",
-        openExisting: "Open existing projects"
+        openExisting: "Open existing projects",
+        archiveBanner: "This project conversation is archived; its messages stay hidden until restored.",
+        archiveRestore: "Restore conversation",
+        archiveRebind: "Start a new conversation"
       };
       const zh = {
         panel: "\u89C6\u9891\u521B\u4F5C",
@@ -297,7 +375,10 @@
         presetMissing: "\u89C6\u9891\u526A\u8F91\u6A21\u5F0F\uFF1A\u672A\u52A0\u8F7D \u2014",
         templateHomeTitle: "\u5F00\u59CB\u89C6\u9891\u521B\u4F5C",
         templateHomeDescription: "\u9009\u62E9\u6A21\u677F\u521B\u5EFA\u9879\u76EE\uFF0C\u6216\u6253\u5F00\u5DF2\u6709\u9879\u76EE\u3002",
-        openExisting: "\u6253\u5F00\u5DF2\u6709\u9879\u76EE"
+        openExisting: "\u6253\u5F00\u5DF2\u6709\u9879\u76EE",
+        archiveBanner: "\u8FD9\u4E2A\u9879\u76EE\u7684\u4F1A\u8BDD\u5DF2\u5F52\u6863\uFF0C\u6062\u590D\u524D\u4E0D\u663E\u793A\u5386\u53F2\u6D88\u606F\u3002",
+        archiveRestore: "\u6062\u590D\u4F1A\u8BDD",
+        archiveRebind: "\u65B0\u5EFA\u4F1A\u8BDD"
       };
       const Panel = createStudioPanel(React);
       const activation = createActivationStore();

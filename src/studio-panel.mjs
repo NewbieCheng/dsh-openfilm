@@ -25,6 +25,11 @@ export function createStudioPanel(React) {
     const [creationUncertain, setCreationUncertain] = React.useState(false);
     const [preset, setPreset] = React.useState(null);
     const [creating, setCreating] = React.useState(false);
+    // Archive state of the project whose editor is open. It is read from the
+    // Host, which owns DSH's durable archive set; this panel keeps no copy.
+    const [projectId, setProjectId] = React.useState(null);
+    const [archive, setArchive] = React.useState(null);
+    const [archiveBusy, setArchiveBusy] = React.useState(false);
     const containerRef = React.useRef(null);
     const iframeRef = React.useRef(null);
     const heardRef = React.useRef(false);
@@ -85,8 +90,10 @@ export function createStudioPanel(React) {
         }
         if (viewRef.current === 'editor' && data && typeof data === 'object' && data.type === 'no996-openfilm:project' && data.version === 1 && typeof data.projectId === 'string') {
           try {
-            if (/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId)) localStorage.setItem('no996.openfilm.lastProject', data.projectId);
-            else localStorage.removeItem('no996.openfilm.lastProject');
+            if (/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId)) {
+              localStorage.setItem('no996.openfilm.lastProject', data.projectId);
+              setProjectId(data.projectId);
+            } else localStorage.removeItem('no996.openfilm.lastProject');
           } catch { /* private mode */ }
         }
       };
@@ -107,6 +114,40 @@ export function createStudioPanel(React) {
     }, [silent, state.status, attempt]);
 
     const retry = () => { setSilent(false); setAttempt(value => value + 1); };
+    // Poll while the editor is open: archiving in the DSH sidebar has no channel
+    // into this frame, and a stalled send is the symptom we are removing.
+    React.useEffect(() => {
+      if (!projectId || state.status !== 'ready') { setArchive(null); return undefined; }
+      let live = true;
+      const read = async () => {
+        try {
+          const response = await fetch('/api/no996-openfilm/archive', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ action: 'state', projectId }),
+          });
+          const data = await response.json().catch(() => null);
+          if (live && response.ok && data) setArchive({ available: data.available !== false, archived: data.archived === true });
+        } catch { /* keep the last known state; the banner is not a source of truth */ }
+      };
+      read();
+      const timer = setInterval(read, 5000);
+      return () => { live = false; clearInterval(timer); };
+    }, [projectId, state.status]);
+    const changeArchive = async action => {
+      if (!projectId || archiveBusy) return;
+      setArchiveBusy(true);
+      try {
+        const response = await fetch('/api/no996-openfilm/archive', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action, projectId }),
+        });
+        const data = await response.json().catch(() => null);
+        if (response.ok && data) setArchive({ available: data.available !== false, archived: data.archived === true });
+      } catch { /* the next poll reconciles */ }
+      finally { setArchiveBusy(false); }
+    };
     const createTemplate = async id => {
       if (creatingRef.current || creationUncertain || !iframeRef.current || state.status !== 'ready') return;
       const frame = iframeRef.current;
@@ -181,8 +222,24 @@ export function createStudioPanel(React) {
         preset ? h('p', { role: 'status', style: { marginTop: 12, fontSize: 12, opacity: 0.75 } },
           preset.ok ? t('presetReady') : `${t('presetMissing')} ${String(preset.detail || '').slice(0, 120)}`) : null,
         !ready ? h('div', { style: { marginTop: 16 } }, state.status === 'ready' && !silent ? t('studioLoading') : studio) : null));
+    const archived = archive?.available !== false && archive?.archived === true;
+    const banner = archived
+      ? h('div', {
+        role: 'status',
+        style: {
+          position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40, display: 'flex', flexWrap: 'wrap',
+          gap: 8, alignItems: 'center', padding: '8px 12px', fontSize: 12,
+          background: 'var(--dsw-alias-bg-layer-2, #2a2a2a)', color: 'var(--dsw-alias-label-primary)',
+          borderBottom: '1px solid var(--dsw-alias-separator, #8886)',
+        },
+      },
+      h('span', { style: { flex: '1 1 240px' } }, t('archiveBanner')),
+      h('button', { type: 'button', disabled: archiveBusy, onClick: () => changeArchive('unarchive') }, t('archiveRestore')),
+      h('button', { type: 'button', disabled: archiveBusy, onClick: () => changeArchive('rebind') }, t('archiveRebind')))
+      : null;
     return h('div', { ref: containerRef, style: { position: 'relative', width: '100%', height: '100%', minWidth: 0, minHeight: 0 } },
       state.status === 'ready' && !silent ? studio : view === 'editor' ? studio : null,
-      view === 'home' ? home : null);
+      view === 'home' ? home : null,
+      banner);
   };
 }
