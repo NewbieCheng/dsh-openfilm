@@ -157,12 +157,14 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
   }
   function authenticated(req) {
     if (closed) return false;
-    if (desktop) {
-      prune(sessions);
-      const matches = String(req.headers.cookie || '').split(';').map((part) => part.trim()).filter((part) => part.startsWith(`${cookieName}=`));
-      if (matches.length !== 1) return false;
-      return sessions.has(matches[0].slice(cookieName.length + 1));
-    }
+    // A ticket session is as strong as the cookie it was exchanged for: it is
+    // minted only from a Host-issued one-use ticket, HttpOnly and short-lived.
+    // Accepting it on both surfaces is what lets a browser without DSH's cookie
+    // (the built-in one, another browser) keep using the page it just opened.
+    prune(sessions);
+    const matches = String(req.headers.cookie || '').split(';').map((part) => part.trim()).filter((part) => part.startsWith(`${cookieName}=`));
+    if (matches.length === 1 && sessions.has(matches[0].slice(cookieName.length + 1))) return true;
+    if (desktop) return false;
     try { return authenticateBrowser(req) === true; } catch { return false; }
   }
   function desktopBridge(req, res) {
@@ -229,7 +231,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
   function permitted(req, film) { return rejectionReason(req, film) === null; }
   function forward(req, res, film) {
     const refuse = (code) => {
-      if (!film && req.method === 'GET' && req.headers['sec-fetch-dest'] === 'iframe') {
+      if (!film && req.method === 'GET' && ['iframe', 'document'].includes(req.headers['sec-fetch-dest'])) {
         res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
         return res.end(`无法打开 OpenFilm 工作台 (${code})。请刷新 DSH 后重试。\nUnable to open OpenFilm Studio (${code}). Refresh DSH and retry.`);
       }
