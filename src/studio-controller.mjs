@@ -1,8 +1,15 @@
 import { createStudioRuntime } from './studio-runtime.mjs';
 import { installTemplate, listTemplates } from './official-templates.mjs';
+import { createRequire } from 'node:module';
+import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
+
+const require = createRequire(import.meta.url);
+// The running Host's own build identity. A plugin reload that re-imports this
+// module rewrites the marker; a stale marker proves the process kept old code.
+const HOST_VERSION = (() => { try { return String(require('../package.json').version); } catch { return 'unknown'; } })();
 
 const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.url));
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
@@ -50,6 +57,14 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // Write the preset activation result once per Host start so it can be checked
   // without a browser session (see preset-report.mjs).
   const presetReport = reportPresetStatus(ctx);
+  // Prove which Host build is actually running, without a browser session.
+  // Written on every controller construction, so a plugin reload overwrites it.
+  void writeFile(join(tmpdir(), 'dsh-openfilm-host.json'), JSON.stringify({
+    version: HOST_VERSION,
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+    injected: true,
+  }, null, 1), 'utf8').catch(() => { /* diagnostics only */ });
   presetReport.done.catch(() => {});
   // A stable address the person can type into the right-side browser without
   // opening the panel first. That browser does not share DSH's cookie, so DSH

@@ -67,9 +67,23 @@ node --test tests/*.test.mjs       # 期望 116 tests / 115 pass / 1 skip
 
 ### 4.1 结论
 
-- **本插件不是热加载的。** 仓库里没有任何 watcher 或 dev server，唯一的 npm 脚本是 `build`（esbuild 一次性打包，无 `--watch`）。
-- **但不用重新安装。** profile 里 `~/.dsh/profiles/desktop/node_modules/dsh-openfilm` 是指向本工作目录的**链接**（实测 `readlink` → `F:\Dev\Desktop-Projects\dsh-openfilm`）。磁盘上的文件就是"已安装"的文件，改完不需要 `install_bundle` 才能看到。
-- **"文件变了" ≠ "进程用了新代码"。** Node 的 ESM 模块在一个进程里只求值一次；浏览器里的 bundle 在页面加载时取一次。所以真正决定生效时机的是**哪一层**。
+- **本插件不是热加载的**（仓库里没有 watcher，`npm run build` 是一次性打包），但**插件可以热插拔**：
+  `plugin_manager set_plugin enabled=false` → `enabled=true`（target `include:dsh-openfilm`）会让加载器**重新求值 Host 模块**，新代码立即生效，不需要退出 DSH 应用。
+  > 实测（2026-11-10）：进程 21:34 启动，22:16 热插拔后，新加的启动标记代码立即写出了 `%TEMP%\dsh-openfilm-host.json`。这条推翻了我此前“必须重启应用”的说法。
+- **但浏览器里还是旧页面**：Host 重载只换服务端；iframe 里的 HTML、以及 `client.js`，都要**刷新页面**才换。注入到官方页面的 UI（`shell-extras.mjs`）尤其如此。
+- **不用重新安装。** profile 里 `~/.dsh/profiles/desktop/node_modules/dsh-openfilm` 是指向本工作目录的**链接**（实测 `readlink` → `F:\Dev\Desktop-Projects\dsh-openfilm`）。磁盘上的文件就是"已安装"的文件。
+- **只有 DSH 自身升级、加载器异常、或端口被占死时**才需要退出应用重开。
+
+### 4.1.1 三件套，按顺序做
+
+```sh
+npm run build F:/Dev/Desktop-Projects/dsh-openfilm      # 只有改了客户端源码才需要
+plugin_manager set_plugin enabled=false target=include:dsh-openfilm
+plugin_manager set_plugin enabled=true  target=include:dsh-openfilm
+# 然后浏览器 Ctrl+Shift+R 刷新页面
+```
+
+改完 Host 代码后先看 `%TEMP%\dsh-openfilm-host.json` 的 `startedAt`/`version`：没变说明重载没生效（那时才考虑重启应用）。
 
 ### 4.2 重载矩阵
 
@@ -77,11 +91,11 @@ node --test tests/*.test.mjs       # 期望 116 tests / 115 pass / 1 skip
 |---|---|---|---|
 | 客户端源码 `src/studio-entry.js`、`studio-panel.mjs`、`panel-keepalive.mjs`（及其依赖） | **是** | **刷新页面**（F5） | iframe 重载，面板内未保存的编辑丢失 |
 | 仅改 `client.js` 之外的客户端无关文件 | 不建议 | — | — |
-| Host 源码 `index.js`、`src/*.mjs` | 否 | **重启 DSH Host**（关掉桌面端重开最稳） | 会话保留（已持久化）；Studio 子进程与代理重建，模板项目不动 |
+| Host 源码 `index.js`、`src/*.mjs`（含代理注入、SSE、会话桥） | 否 | **重载插件**（disable→enable）+ **刷新页面** | 刷新会重载 iframe，未保存编辑丢失；会话/项目保留，Studio 子进程重建 |
 | `vendor/templates/**`（`manifest.json`、`film.html`、页面） | 否 | **下一次请求即生效**（`listTemplates` 每次都读盘）；面板首页的列表要刷新页面重新 mount 才重列 | 无 |
 | `vendor/official-shell/ui/**` | **是**，且必须用 `scripts/build-official-shell.mjs` 重生成 `manifest.json` | 重启 Studio（= 重载插件/重启 Host） | 未保存编辑丢失。**手改 ui 而不更新 manifest 会直接 `OFFICIAL_SHELL_UNAVAILABLE`**（启动时逐个文件校验 sha256） |
 | `cordis.patch.yml` | 否 | 重新 `install_bundle` 或重启 Host | 已存在的会话不会被迁移或改写 |
-| `src/shell-extras.mjs`（注入到官方页面的 UI/隐藏规则） | 否，但**必须重启 Host**（代理启动时读取） | 重启 Host → 刷新页面 | 页面会重载，未保存编辑丢失 |
+| `src/shell-extras.mjs`（注入到官方页面的 UI/隐藏规则） | 否 | **重载插件** + 刷新页面（代理在插件装配时读取它） | 刷新会重载 iframe |
 | `locale/*.json` | 否 | 刷新页面（Host 读取） | 无 |
 
 ### 4.3 关于 DSH 的 HMR
@@ -125,6 +139,7 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 | 预设激活 | `%TEMP%\dsh-openfilm-preset.json` | `registered/ok/detail/raw/presets/attempt`；预设行比插件晚挂载，报告有界重试（10 秒）后才写 |
 | 真实帧 | `%TEMP%\dsh-openfilm-frames.jsonl` | 0.3.4 起每轮写，文本截断 200 字符，用于对齐真实分片/事件名 |
 | 调试地址 | `POST /api/no996-openfilm/debug-url` | 可粘进右侧浏览器的稳定入口 |
+| Host 构建标记 | `%TEMP%\dsh-openfilm-host.json` | `{version,pid,startedAt}`；重载插件后 `startedAt` 必须更新，否则说明你看到的还是旧代码 |
 | 归档通道 | `POST /api/no996-openfilm/archive` | `{action:'state'\|'archive'\|'unarchive'\|'rebind', projectId}`，只认项目 ID |
 
 **不要靠猜分片形状。** `official-agent-events.mjs` 的 bug 必须用 `frames.jsonl` 里的真实 `type` 名反推。

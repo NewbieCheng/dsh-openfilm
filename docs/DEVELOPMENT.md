@@ -209,26 +209,31 @@ plugin_manager install_bundle target=F:/Dev/Desktop-Projects/dsh-openfilm
 
 ## 8. 热加载与重载
 
-**结论：本插件不是热加载的。** 仓库里没有 watcher、没有 dev server，`scripts/build.mjs` 是一次性 esbuild 打包（无 `--watch`）；
-插件被安装成指向工作目录的**链接**，所以"文件已经在位"，但运行中的 Host 进程与已加载的页面不会自动使用新代码。
+**结论：本插件不是热加载的，但可以热插拔。** 仓库里没有 watcher、没有 dev server，`scripts/build.mjs` 是一次性 esbuild 打包（无 `--watch`）；
+插件被安装成指向工作目录的**链接**，所以"文件已经在位"。
+
+Host 代码改完后执行 `plugin_manager set_plugin enabled=false` → `enabled=true`（target `include:dsh-openfilm`），加载器会**重新求值模块**，不必退出 DSH 应用。
+**实测（2026-11-10）**：进程 21:34 启动，22:16 热插拔后，一个几分钟前才加的启动标记代码立即写出了 `%TEMP%\dsh-openfilm-host.json`。
+（此前本节写的"必须重启 Host"是错的，已更正。）
 
 | 改动 | 构建 | 生效 | 代价 |
 |---|---|---|---|
 | 客户端源码（`studio-entry.js` / `studio-panel.mjs` / `panel-keepalive.mjs`） | `npm run build` | 刷新页面 | iframe 重载，面板内未保存编辑丢失 |
-| Host 源码（`index.js`、`src/*.mjs`） | 否 | 重启 DSH Host | 会话保留；Studio 子进程与代理重建 |
+| Host 源码（`index.js`、`src/*.mjs`，含代理注入） | 否 | **重载插件** + 刷新页面 | 刷新会重载 iframe；会话/项目保留 |
+| `src/shell-extras.mjs`（官方页面注入） | 否 | 重载插件 + 刷新页面 | 同上 |
 | `vendor/templates/**` | 否 | 下一次请求即时生效 | 无（面板列表需刷新页面重列） |
-| `vendor/official-shell/ui/**` | 是（`scripts/build-official-shell.mjs` 重生成 manifest） | 重启 Studio | 手改不更新 manifest → `OFFICIAL_SHELL_UNAVAILABLE` |
-| `cordis.patch.yml` | 否 | 重新安装或重启 Host | 既有会话不迁移 |
+| `vendor/official-shell/ui/**` | 是（`scripts/build-official-shell.mjs` 重生成 manifest） | 重载插件（Studio 重启） | 手改不更新 manifest → `OFFICIAL_SHELL_UNAVAILABLE` |
+| `cordis.patch.yml` | 否 | 重新安装或重载插件 | 既有会话不迁移 |
 | `locale/*.json` | 否 | 刷新页面 | 无 |
 
-为什么 Host 改完要重启：Node 的 ESM 模块在一个进程里只求值一次，`disable/enable` 通常仍命中模块缓存。
-**先按"需要重启"处理，再用行为验证是否真的需要**——反过来会导致"我明明改了却没生效"的排查浪费。
+**怎么确认真的是新代码**：看 `%TEMP%\dsh-openfilm-host.json` 的 `startedAt`/`version`。每次插件装配都会重写它；
+时间没变 = 看到的还是旧代码，那时再考虑退出应用。
 
 为什么不能靠 HMR：DSH 的客户端插件热替换只在使用 `pnpm run dev:web` 从同一 checkout 起服务时成立。本插件是已安装的第三方包，不在这条链路上。
 
 **验证清单（缺一项就不算生效）**
 
-1. `node --test tests/*.test.mjs` → 97 tests / 96 pass / 1 skip；
+1. `node --test tests/*.test.mjs` → 116 tests / 115 pass / 1 skip；
 2. `POST /api/no996-openfilm/bootstrap` 返回 200（不是 503 错误码）；
 3. 目标行为在真实界面可见；
 4. 若改的是错误路径，确认 503 只回固定码、无隐私串。
