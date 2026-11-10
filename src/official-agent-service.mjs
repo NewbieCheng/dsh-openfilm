@@ -173,7 +173,9 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
               } else if (frame?.type === 'assistant-stream') {
                 if (!state) throw fail('OFFICIAL_AGENT_CONFLICT', 'Assistant stream arrived before prompt attribution');
                 const result = translateOfficialAgentEvent(state, { sessionId, turnId, frame });
-                if (result.state === state) throw fail('OFFICIAL_AGENT_STREAM_INVALID', 'Assistant stream lost turn or attempt continuity');
+                // An unchanged state is normal: duplicate indexes, `start` for an
+                // attempt already running, and chunk kinds we do not translate all
+                // return it. Treating those as fatal failed every live turn.
                 state = result.state;
                 for (const event of result.events) {
                   // Refuse to report success if the transport cannot accept a frame.
