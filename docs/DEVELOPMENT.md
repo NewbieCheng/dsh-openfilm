@@ -264,6 +264,43 @@ grep '"level":"error"' "$LOCALAPPDATA/Temp/dsh-openfilm/plugin.log" | tail -5
 
 **每次改完 Host 代码、重载插件之后，先看这两行**：`host-start.version` 是不是新版本、`studio-warm` 有没有失败。比“界面看起来没变”可靠。
 
+### 8.3 桌面窗口是 `dsh-app://app`，不是 http（两条都必须记住）
+
+DSH 桌面端用自定义协议加载界面。这不是"换个地址"，是**换了一套 URL 语义**：
+
+**① 相对 `/api/...` 到不了 Host。** 页面在 `dsh-app://app` 时，`fetch('/api/no996-openfilm/bootstrap')` 被解析成 `dsh-app://app/api/...`，由协议处理器回答 **404**（它只认识自己的 `/api/file`、`/api/plugin`）。此时服务端一切正常——`curl` 打 `http://127.0.0.1:<port>/api/no996-openfilm/bootstrap` 会返回 401（路由在，只是缺登录态），这个 401 就是"路由没问题"的铁证。
+
+需要 Host 数据的桌面前端，走回环控制台：
+
+```
+GET http://127.0.0.1:47821/api/studio-url   →   { "origin": "http://127.0.0.1:47822", "ticket": "…" }
+```
+
+- 不需要凭据；只返回一次性票据（60 秒、单次使用），所以 `Access-Control-Allow-Origin: *` 是安全的（不读也不写 cookie）；
+- 拿到 `origin + ticket` 后，iframe 直接加载 `${origin}/__dsh/open#${ticket}`。
+
+**② `frame-ancestors` 不写桌面协议 → 静默白屏。** 代理给票据页和编辑器页发的 CSP 原来是 `frame-ancestors <DSH 的 http 源> 'self'`。`dsh-app://app` 不在名单里，Chrome **直接拦掉 iframe**：页面里一行脚本都不跑，所以既没有票据兑换、也没有 boot 消息，面板只显示"官方界面 20 秒内没有回应"+ 一块白。现在统一用 `ancestorsFor(origin)`：
+
+```
+frame-ancestors <DSH 源> 'self' http://127.0.0.1:* http://localhost:* dsh-app: app:
+```
+
+只放开回环端口与桌面协议，远程站点依旧框不进来。
+
+**排查这类问题的顺序**（三步定位，别猜）：
+
+1. `curl -X POST http://127.0.0.1:<dsh port>/api/no996-openfilm/bootstrap` → 401 = 路由在；404 = 插件没挂；
+2. 看页面自己的来源：错误信息已经带上了（`HTTP 404 @ dsh-app://app`，0.5.4 起）；
+3. 看 `%TEMP%\dsh-openfilm\plugin.log` 的 `nav` 行——代理会记录每次**文档级导航**的路由、`sec-fetch-dest` 和是否带会话。正常链条是三行：
+
+```json
+{"event":"nav","route":"/__dsh/open","dest":"iframe","authed":false}
+{"event":"ticket-redeemed","desktop":false,"active":1}
+{"event":"nav","route":"/","dest":"iframe","authed":true}
+```
+
+只有第一行就断了 = 被 CSP 或协议拦了；中间缺 `ticket-redeemed` = cookie 没落地；第三行 `authed:false` = 会话丢了。
+
 ## 9. 调试
 
 | 手段 | 用法 |

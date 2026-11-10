@@ -11,7 +11,7 @@
 
 把官方 **OpenFilm 0.3.1** 视频工作台封装成可分发的 **DSH 插件**：Host 侧拉起官方 Studio 并做反向代理，浏览器侧用 `shell.overlay` 常驻一个 iframe 面板显示官方界面，右侧官方对话经 Host RPC 桥到 DSH 会话（模型、审批、会话都是 DSH 的）。
 
-当前版本 `0.5.2`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
+当前版本 `0.5.8`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
 
 ---
 
@@ -55,7 +55,7 @@
 
 ```sh
 npm run build                      # 只在改了客户端源码时需要
-node --test tests/*.test.mjs       # 期望 126 tests / 125 pass / 1 skip
+node --test tests/*.test.mjs       # 期望 128 tests / 127 pass / 1 skip
 ```
 
 顺序：**先判断改的是哪一层 → 改 `src/` 源码 → build（如需）→ 跑测试 → 按 §4 让变更生效 → 在真实 GUI 里确认。**
@@ -133,6 +133,11 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 
 桌面端（`location.hostname === 'app'`）走 `127.0.0.2` + 一次性票据（`/__dsh/open#<ticket>`）：票据由代理发放、`bootstrap` 返回，**60 秒**内可兑换，最多 128 个并发凭据。
 
+**桌面窗口的页面来源是 `dsh-app://app`，不是 http。** 这改变了两件事，都得按桌面处理：
+
+1. 页面里的相对 `/api/...` 会被协议处理器回答 **404**，永远到不了 Host。需要 Host 数据时，从回环控制台取：`GET http://127.0.0.1:47821/api/studio-url` → `{origin, ticket}`（无凭据、只发一次性票据）。
+2. 任何写着 `frame-ancestors <http 源>` 的响应头，都必须把 `dsh-app:`/`app:` 与回环端口列进去，否则 iframe 被静默拦掉——页面里一行脚本都不会跑，表现为**纯白**而不是报错。
+
 ---
 
 ## 6. 诊断：先看证据，再改代码
@@ -154,7 +159,7 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 
 ## 7. 测试规则
 
-- `node --test tests/*.test.mjs`；当前 **126 tests / 125 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
+- `node --test tests/*.test.mjs`；当前 **128 tests / 127 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
 - 只允许模拟对象与 `mkdtemp` 临时目录；`OPENFILM_HOME` 指到临时目录，绝不碰用户库。
 - 真实项目注册验证可以跑官方 `openfilm` 服务端 `openProject`，但必须用临时 home。
 - 新增行为必须带测试；本仓的历史 bug 大多是"逻辑没问题但顺序/形状假设错"，测试是唯一便宜的判断手段。
@@ -195,6 +200,10 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 - 绑定表不校验归档状态 → 四个项目全部指向已归档会话，每次发送都 503。现在：发送前探针 + 归档横幅（0.4.0）。
 - 预设自报在预设行挂载前就读 roster → 永远报 "not registered"。现在：有界重试（0.4.0）。
 - 把注入的 AGENTS.md 块当并发输入 → 每轮 CONFLICT → `OFFICIAL_AGENT_OUTCOME_UNKNOWN`。注入的 `user/message` 带 `source.kind:'agent-instructions'`，不是人。现在：只有 `kind:'user'` 且 rpcId 不匹配才算冲突（0.4.1）。
+- **把「重启插件」当成万能药**：面板报 `HTTP 404` 时连着重载三次都没用，因为请求根本没到 Host。教训：先分清「服务端坏了」和「浏览器没发对地方」——`curl` 打同一个路由（401＝路由在）+ 看页面自己的 `location.origin`，两步就能分开。错误信息里带上来源（`HTTP 404 @ dsh-app://app`）比任何猜测都快（0.5.4）。
+- **只在 http 语境下设计前端**：相对路径 `/api/...`、`frame-ancestors <http 源>`，在 `dsh-app://app` 下分别是 404 和静默白屏。桌面端不是「浏览器换个地址」，是**换了一套 URL 语义**（0.5.5 / 0.5.7）。
+- **把 404 当终态**：插件重载有几百毫秒路由空窗，落在窗口里的请求会 404 并被面板记成错误。现在：`404/503` 先静默重试两次（0.5.3）。
+- **日志字段名撞脱敏规则**：`path`/`session`/`cookie` 这类键会被写成 `[redacted]` 或哈希，日志看着"有了"其实没用。写日志时换名字（`route`/`authed`），或先跑一次 `redact()` 看输出（0.5.1 / 0.5.8）。
 
 ---
 

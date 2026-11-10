@@ -1,5 +1,52 @@
 # 更新记录
 
+## 0.5.8
+
+- 导航日志里的 `session` 字段撞上脱敏规则（键名含 session），改成 `authed`，否则日志永远只剩 `[redacted]`。
+
+## 0.5.7
+
+**桌面窗口里工作台白屏（CSP 拦掉了 iframe）**
+
+- 现象：面板不再 404，但显示「官方界面 20 秒内没有回应」，右侧一块纯白。
+- 原因：票据页和编辑器页的 `content-security-policy: frame-ancestors <DSH 的 http 源> 'self'` 不允许 `dsh-app://app` 当祖先，Chrome 直接把 iframe 拦掉——里面的脚本一行都没跑，所以既没有票据兑换也没有 boot 消息。
+- 修复：`frame-ancestors` 改为「DSH 源 + 任意回环端口 + `dsh-app:` / `app:`」。远程站点仍然框不进来。
+- 证据：日志出现 `nav /__dsh/open` → `ticket-redeemed` → `nav / authed:true`。
+
+## 0.5.6
+
+- 代理记录**文档级导航**（`nav`：路由、`sec-fetch-dest`、是否带会话）。白屏这类问题第一步就是看浏览器到底请求了什么。
+
+## 0.5.5
+
+**桌面窗口是 `dsh-app://app`，相对 `/api/...` 根本到不了 Host**
+
+- 现象：面板一直 `HTTP 404`，重启插件无效。
+- 原因：桌面端用自定义协议加载界面，`fetch('/api/no996-openfilm/bootstrap')` 被解析成 `dsh-app://app/api/...`，由协议处理器回答 404（它只认自己的 `/api/file`、`/api/plugin`）。服务端路由其实一直是好的（`curl` 打 61088 返回 401＝路由在）。
+- 修复：自定义协议下不再走相对路径，改从回环控制台 `GET http://127.0.0.1:47821/api/studio-url` 取 `{origin, ticket}`（不需要凭据、只返回一次性票据，`Access-Control-Allow-Origin: *`）。
+- 同时：预设诊断 / 健康轮询 / 归档查询在自定义协议页面下不再发出（它们同样会 404）。
+
+## 0.5.4
+
+- 启动失败的错误信息带上**页面来源**：`HTTP 404 @ dsh-app://app`。正是这一行定位了上面那个 bug——没有它只能靠猜。
+
+## 0.5.3
+
+- 面板遇到 `404/503` 时先**静默重试两次**（1.2 秒间隔）再报错。插件重载有几百毫秒路由空窗，原来这段时间的请求会把面板卡在错误页上。
+
+## 0.5.2
+
+**注入 UI 拆成独立文件，热更新只要刷新**
+
+- `src/shell-extras.mjs` 只剩一个读取器，真正的脚本在 `assets/shell-ui.js`，**每次页面渲染读盘**（mtime 缓存）。
+- 结果：改注入 UI → 保存 → 刷新页面，不需要 build、不需要重载插件（实测同一装配下注入内容 44430 → 44450 字节）。
+- 新增 `npm run dev`：监听客户端源码自动 rebuild；监听 `src/*.mjs` 自动 **touch 整个 Host 模块图**（加载器只重新求值 mtime 变了的模块，未被 touch 的引入方会继续用旧 import）。
+- 教程：`docs/HOT-RELOAD.md`。
+
+## 0.5.1
+
+- `ticket-redeemed` 的会话计数改名为 `active`——原来的 `sessions` 被脱敏规则吞成 `[redacted]`。
+
 ## 0.5.0
 
 **统一运行日志：崩溃与异常都能事后查**

@@ -254,7 +254,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
     // for, and did it still carry the session" without recording every asset.
     const dest = req.headers['sec-fetch-dest'];
     if (!film && req.method === 'GET' && (dest === 'document' || dest === 'iframe')) {
-      say.info('nav', { route: req.url.split('?')[0].slice(0, 60), dest, session: Boolean(req.headers.cookie && req.headers.cookie.includes(cookieName)) });
+      say.info('nav', { route: req.url.split('?')[0].slice(0, 60), dest, authed: Boolean(req.headers.cookie && req.headers.cookie.includes(cookieName)) });
     }
     const rejection = rejectionReason(req, film);
     if (rejection) return refuse(rejection);
