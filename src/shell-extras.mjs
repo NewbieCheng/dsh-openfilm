@@ -253,4 +253,39 @@ export const shellUiInjection = `<script>(function(){
   setInterval(place,700);
   addEventListener('resize',place);
   hideReplica();
+
+  // The page is all a person can see when the Host's Studio goes away, and the
+  // upstream overlay tells them to restart an application that is not involved.
+  // Watch the service ourselves and offer the one action that works: the fixed
+  // loopback console, which re-mints a session and comes back on its own.
+  var stop=document.createElement('div');
+  stop.id='no996-stopped';
+  stop.style.cssText='position:fixed;inset:0;z-index:2147483001;display:none;align-items:center;justify-content:center;background:rgba(10,10,12,.88);font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;color:#e9e9ee';
+  stop.innerHTML='<div style="max-width:400px;padding:24px;border-radius:12px;background:#232326;border:1px solid rgba(255,255,255,.14);text-align:center;box-shadow:0 16px 48px rgba(0,0,0,.6)">'
+    +'<div style="font-weight:600;font-size:15px;margin-bottom:8px">工作台已停止运行</div>'
+    +'<div style="opacity:.75;font-size:12px;line-height:1.7;margin-bottom:18px">视频编辑服务已断开（会话过期或服务重启）。点下面的按钮即可恢复，项目和素材都不会丢。</div>'
+    +'<a id="no996-restart" href="http://127.0.0.1:47821/editor" style="display:inline-block;padding:9px 20px;border-radius:8px;background:#3b82f6;color:#fff;text-decoration:none;font-size:13px">重新启动工作台</a>'
+    +'<div style="opacity:.45;font-size:11px;margin-top:14px">换一台机器访问时，把地址换成该机器的 127.0.0.1:47821/editor</div>'
+    +'</div>';
+  try{ document.documentElement.appendChild(stop); }catch(e){}
+  var misses=0;
+  function probe(){
+    var done=false;
+    var finish=function(ok){
+      if(done)return;
+      done=true;
+      if(ok){ misses=0; stop.style.display='none'; return; }
+      misses+=1;
+      if(misses>=2) stop.style.display='flex';
+    };
+    try{
+      var controller=window.AbortController?new AbortController():null;
+      var timer=setTimeout(function(){ try{controller&&controller.abort();}catch(e){} finish(false); },4000);
+      fetch('/api/version',{cache:'no-store',credentials:'same-origin',signal:controller?controller.signal:undefined})
+        .then(function(r){ clearTimeout(timer); finish(r.ok); })
+        .catch(function(){ clearTimeout(timer); finish(false); });
+    }catch(e){ finish(false); }
+  }
+  setTimeout(probe,3000);
+  setInterval(probe,5000);
 })()</script>`;

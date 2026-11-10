@@ -24,3 +24,14 @@ test('the picker only talks over the fixed bridge channels', () => {
   // No project path or session identity may be constructed in the page.
   assert.doesNotMatch(shellUiInjection, /sessionId|projectPath|\/api\/no996-openfilm/);
 });
+
+test('a dead Studio is answered inside the page, not with an app-restart hint', () => {
+  // The upstream overlay says to restart an application the person cannot see.
+  // Our own control must be present, must poll, and must lead to the console.
+  assert.match(shellUiInjection, /no996-stopped/);
+  assert.match(shellUiInjection, /重新启动工作台/);
+  assert.match(shellUiInjection, /http:\/\/127\.0\.0\.1:47821\/editor/);
+  assert.match(shellUiInjection, /\/api\/version/);
+  // Two consecutive misses before covering the page: one blip is not an outage.
+  assert.match(shellUiInjection, /misses>=2/);
+});
