@@ -115,6 +115,13 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       if (!agentService) throw new Error('Agent bridge unavailable');
       return agentService.cancel(payload?.projectId);
     }
+    if (channel === 'editor:link') {
+      // One-use ticket for the local Studio page, minted only after the Host has
+      // authenticated this call. Never cached, never logged.
+      const proxy = await lastProxy;
+      if (!proxy || typeof proxy.issueTicket !== 'function') throw Object.assign(new Error('Studio is not ready'), { code: 'EDITOR_LINK_UNAVAILABLE' });
+      return proxy.issueTicket();
+    }
     if (channel === 'template:list') {
       return { templates: await listTemplates(templatesRoot) };
     }

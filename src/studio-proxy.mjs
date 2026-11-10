@@ -151,14 +151,17 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
     try { return authenticateBrowser(req) === true; } catch { return false; }
   }
   function desktopBridge(req, res) {
-    if (!desktop || !req.url?.startsWith('/__dsh/')) return false;
+    // A ticket is a one-use, 60 s grant minted only by an authenticated Host
+    // request. Serving it to a top-level tab is how the same local Studio can be
+    // opened in a separate browser that has no DSH cookie.
+    if (!req.url?.startsWith('/__dsh/')) return false;
     if (closed || req.headers.host !== new URL(editorOrigin).host) { fail(res); return true; }
     const site = req.headers['sec-fetch-site'];
     if (req.url === '/__dsh/open' && req.method === 'GET') {
-      if (req.headers['sec-fetch-dest'] !== 'iframe' || !['cross-site', 'none'].includes(site) ||
+      if (!['iframe', 'document'].includes(req.headers['sec-fetch-dest']) || !['cross-site', 'none'].includes(site) ||
           (req.headers.origin && req.headers.origin !== webOrigin && req.headers.origin !== 'null')) { fail(res); return true; }
       const body = `<!doctype html><meta charset="utf-8"><body><script>(async()=>{const ticket=location.hash.slice(1);history.replaceState(null,'',location.pathname);try{const r=await fetch('/__dsh/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ticket})});if(!r.ok){document.body.textContent='Unable to open OpenFilm Studio (OF_TICKET_REJECTED).';return}const check=await fetch('/__dsh/session',{cache:'no-store'});if(!check.ok){document.body.textContent='Unable to open OpenFilm Studio (OF_SESSION_COOKIE_UNAVAILABLE). Partitioned secure cookies may be unavailable.';return}location.replace('/');return}catch{}document.body.textContent='Unable to open OpenFilm Studio (OF_BRIDGE_FAILED).'})()</script></body>`;
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', 'content-security-policy': `default-src 'none'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors ${webOrigin}`, 'content-length': Buffer.byteLength(body) });
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', 'content-security-policy': `default-src 'none'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors ${webOrigin} 'self'`, 'content-length': Buffer.byteLength(body) });
       res.end(body);
       return true;
     }
@@ -672,6 +675,14 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
       const id = project?.id ?? project?.projectId;
       if (typeof id !== 'string' || !id) throw new Error('Studio returned no project id');
       return { id, path: typeof project.path === 'string' ? project.path : projectPath };
+    },
+    issueTicket() {
+      if (closed) return null;
+      prune(tickets);
+      if (tickets.size >= maxCredentials) return null;
+      const ticket = randomBytes(32).toString('base64url');
+      tickets.set(ticket, Date.now() + ticketLifetime);
+      return { url: `${editorOrigin}/__dsh/open#${ticket}`, expiresIn: Math.round(ticketLifetime / 1000) };
     },
     bootstrapData() {
       if (desktop) {

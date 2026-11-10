@@ -23,11 +23,16 @@ export const shellUiInjection = `<script>(function(){
   var select=document.createElement('select');
   select.setAttribute('aria-label','选择模板');
   select.style.cssText='flex:1 1 auto;min-width:0;background:#1f1f23;color:#e9e9ee;border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:3px 6px;font:12px system-ui,sans-serif;outline:none;cursor:pointer';
+  var open=document.createElement('button');
+  open.type='button';
+  open.textContent='↗';
+  open.title='在新窗口打开（一次性 token）';
+  open.style.cssText='flex:0 0 auto;background:transparent;color:#c9c9d1;border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:3px 8px;font:12px system-ui,sans-serif;cursor:pointer';
   var button=document.createElement('button');
   button.type='button';
   button.textContent='新建项目';
   button.style.cssText='flex:0 0 auto;background:#3b82f6;color:#fff;border:0;border-radius:6px;padding:4px 10px;font:12px system-ui,sans-serif;cursor:pointer;white-space:nowrap';
-  box.appendChild(label);box.appendChild(select);box.appendChild(button);
+  box.appendChild(label);box.appendChild(select);box.appendChild(button);box.appendChild(open);
   wrap.appendChild(box);
   try{document.documentElement.appendChild(wrap);}catch(e){return;}
 
@@ -55,6 +60,17 @@ export const shellUiInjection = `<script>(function(){
   function reset(){
     busy=false;button.disabled=false;button.textContent='新建项目';
   }
+  open.addEventListener('click',function(){
+    open.disabled=true;
+    rpc('editor:link',{}).then(function(value){
+      var url=value&&value.url;
+      // Prefix checks only. This snippet is produced from a template literal, so
+      // regex escapes would be collapsed before the page ever parses it.
+      var ok=typeof url==='string'&&(url.indexOf('http://127.0.0.1:')===0||url.indexOf('http://127.0.0.2:')===0||url.indexOf('http://localhost:')===0)&&url.indexOf('/__dsh/open#')>0;
+      if(!ok)throw new Error('bad link');
+      window.open(url,'_blank','noopener');
+    }).catch(function(){ open.title='链接不可用'; }).then(function(){ setTimeout(function(){ open.disabled=false; },800); });
+  });
   button.addEventListener('click',function(){
     if(busy)return;
     var id=select.value;
@@ -105,6 +121,19 @@ export const shellUiInjection = `<script>(function(){
     var rect=el.getBoundingClientRect();
     return rect.width>140?rect:null;
   }
+  function columnBox(){
+    var el=composer();
+    if(!el)return null;
+    var width=el.getBoundingClientRect().width;
+    var node=el, box=el.getBoundingClientRect();
+    for(var i=0;i<8&&node.parentElement;i++){
+      var parent=node.parentElement;
+      var rect=parent.getBoundingClientRect();
+      if(rect.width>width+32||rect.height>innerHeight*0.98)break;
+      node=parent;box=rect;
+    }
+    return box;
+  }
   function anchorMode(){
     try{
       var forced=localStorage.getItem('no996.picker.anchor');
@@ -129,17 +158,16 @@ export const shellUiInjection = `<script>(function(){
   }
   // Busy-chat anchor: on the header row, to the right of "新对话".
   function placeHeader(){
-    var head=textNode('新对话')||textNode('New chat');
-    var rect=head?head.getBoundingClientRect():null;
-    if(!rect)return false;
-    var column=columnRect();
-    var width=Math.min(320,column?column.width-24:320);
-    var left=rect.right+10;
-    if(column)left=Math.min(left,column.right-width-8);
+    // Conversation open: sit on the chat column's header row, flush right, so
+    // nothing covers the composer or the message list.
+    var box=columnBox();
+    if(!box)return false;
+    var width=Math.min(330,box.width-24);
+    var left=box.right-width-10;
     wrap.style.display='block';
     wrap.style.width=Math.round(width)+'px';
     wrap.style.left=Math.round(left)+'px';
-    wrap.style.top=Math.round(Math.max(6,rect.top+rect.height/2-18))+'px';
+    wrap.style.top=Math.round(box.top+6)+'px';
     wrap.style.right='auto';
     return true;
   }
