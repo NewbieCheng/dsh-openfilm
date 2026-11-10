@@ -11,7 +11,7 @@
 
 把官方 **OpenFilm 0.3.1** 视频工作台封装成可分发的 **DSH 插件**：Host 侧拉起官方 Studio 并做反向代理，浏览器侧用 `shell.overlay` 常驻一个 iframe 面板显示官方界面，右侧官方对话经 Host RPC 桥到 DSH 会话（模型、审批、会话都是 DSH 的）。
 
-当前版本 `0.5.1`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
+当前版本 `0.5.2`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
 
 ---
 
@@ -71,7 +71,9 @@ node --test tests/*.test.mjs       # 期望 126 tests / 125 pass / 1 skip
 - **本插件不是热加载的**（仓库里没有 watcher，`npm run build` 是一次性打包），但**插件可以热插拔**：
   `plugin_manager set_plugin enabled=false` → `enabled=true`（target `include:dsh-openfilm`）会让加载器**重新求值 Host 模块**，新代码立即生效，不需要退出 DSH 应用。
   > 实测（2026-11-10）：进程 21:34 启动，22:16 热插拔后，新加的启动标记代码立即写出了 `%TEMP%\dsh-openfilm-host.json`。这条推翻了我此前“必须重启应用”的说法。
-- **但浏览器里还是旧页面**：Host 重载只换服务端；iframe 里的 HTML、以及 `client.js`，都要**刷新页面**才换。注入到官方页面的 UI（`shell-extras.mjs`）尤其如此。
+- **但浏览器里还是旧页面**：Host 重载只换服务端；iframe 里的 HTML、以及 `client.js`，都要**刷新页面**才换。
+- **注入 UI 是例外，几乎不用重载**：`assets/shell-ui.js` 在每次页面渲染时读盘（mtime 缓存），**保存 + 刷新页面**即可，不需要 build、不需要重载插件。三档热更新的做法见 `docs/HOT-RELOAD.md`。
+- **重载前先 `touch index.js src/*.mjs`**（`npm run dev` 会自动做）：加载器只重新求值 mtime 变了的模块，未被 touch 的引入方会继续用旧 import——症状就是"改了没生效"。
 - **不用重新安装。** profile 里 `~/.dsh/profiles/desktop/node_modules/dsh-openfilm` 是指向本工作目录的**链接**（实测 `readlink` → `F:\Dev\Desktop-Projects\dsh-openfilm`）。磁盘上的文件就是"已安装"的文件。
 - **只有 DSH 自身升级、加载器异常、或端口被占死时**才需要退出应用重开。
 
