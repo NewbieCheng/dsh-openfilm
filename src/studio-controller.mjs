@@ -1,15 +1,16 @@
 import { createStudioRuntime } from './studio-runtime.mjs';
 import { installTemplate, listTemplates } from './official-templates.mjs';
-import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 
-const require = createRequire(import.meta.url);
 // The running Host's own build identity. A plugin reload that re-imports this
 // module rewrites the marker; a stale marker proves the process kept old code.
-const HOST_VERSION = (() => { try { return String(require('../package.json').version); } catch { return 'unknown'; } })();
+// Read fresh on every evaluation: require() caches JSON, which made this
+// report the version from the first load after a hot reload.
+const HOST_VERSION = (() => { try { return String(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version); } catch { return 'unknown'; } })();
 
 const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.url));
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
