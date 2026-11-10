@@ -1,4 +1,5 @@
 import { createStudioPanel } from './studio-panel.mjs';
+import { createActivationStore } from './panel-keepalive.mjs';
 
 window.__ModuleLoader__.load({
   id: 'dsh-openfilm',
@@ -24,6 +25,49 @@ window.__ModuleLoader__.load({
       presetReady: '视频剪辑模式：已加载', presetMissing: '视频剪辑模式：未加载 —', templateHomeTitle: '开始视频创作', templateHomeDescription: '选择模板创建项目，或打开已有项目。', openExisting: '打开已有项目',
     };
     const Panel = createStudioPanel(React);
+    // The real panel is rendered once and then only shown or hidden; `main`
+    // receives a placeholder that reports selection (see panel-keepalive.mjs).
+    const activation = createActivationStore();
+    function PanelSeat() {
+      const ref = React.useRef(null);
+      React.useEffect(() => {
+        activation.enter(ref.current);
+        return () => activation.leave();
+      }, []);
+      return h('div', { ref, style: { width: '100%', height: '100%', minWidth: 0, minHeight: 0 } });
+    }
+    function PanelKeepAlive(props) {
+      const [shown, setShown] = React.useState(activation.isActive());
+      const [mounted, setMounted] = React.useState(activation.isActive());
+      const box = React.useRef(null);
+      React.useEffect(() => activation.subscribe(active => { setShown(active); if (active) setMounted(true); }), []);
+      React.useEffect(() => {
+        if (!shown) return;
+        // Follow the placeholder's rectangle so the panel tracks the sidebar and
+        // zoom changes without knowing the shell's layout internals.
+        const place = () => {
+          const element = box.current;
+          if (!element) return;
+          const rect = activation.seat()?.getBoundingClientRect();
+          element.style.left = `${Math.max(0, rect?.left ?? 0)}px`;
+          element.style.top = `${Math.max(0, rect?.top ?? 0)}px`;
+          element.style.width = `${rect?.width || window.innerWidth}px`;
+          element.style.height = `${rect?.height || window.innerHeight}px`;
+        };
+        place();
+        window.addEventListener('resize', place);
+        const timer = setInterval(place, 500);
+        return () => { window.removeEventListener('resize', place); clearInterval(timer); };
+      }, [shown]);
+      if (!mounted) return null;
+      return h('div', {
+        ref: box,
+        style: {
+          position: 'fixed', zIndex: 30, display: shown ? 'block' : 'none', overflow: 'hidden',
+          background: 'var(--dsw-alias-bg-base, #fff)', borderLeft: '1px solid var(--dsw-alias-separator, #0000)',
+        },
+      }, h(Panel, props));
+    }
     const startStudio = async signal => {
       // The Host answers with the editor origin, a desktop ticket and the mode.
       // Project resolution belongs to the official shell itself; this panel no
@@ -55,8 +99,11 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'openfilm: dictionaries');
         const t = ctx.locale.bind(NS);
-        ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL, locale: NS, inject: () => ({ startStudio, templateRequest }) }, Panel));
+        ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL, locale: NS }, PanelSeat));
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PANEL, order: 21, locale: NS, label: () => t('panel') }, PanelIcon));
+        // `shell.overlay` is rendered for the whole frame lifetime, so the panel
+        // it hosts survives page switches instead of reloading Studio each time.
+        ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'no996-openfilm-panel', order: 0, locale: NS, inject: () => ({ startStudio, templateRequest }) }, PanelKeepAlive));
       },
     };
   },

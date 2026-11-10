@@ -218,6 +218,45 @@
     };
   }
 
+  // src/panel-keepalive.mjs
+  function createActivationStore() {
+    let active = false;
+    let seat;
+    const listeners = /* @__PURE__ */ new Set();
+    const emit = () => {
+      for (const listener of [...listeners]) {
+        try {
+          listener(active);
+        } catch {
+        }
+      }
+    };
+    return Object.freeze({
+      isActive: () => active,
+      seat: () => seat,
+      /** Called by the small occupant of `main` while it is on screen. */
+      enter(node) {
+        seat = node;
+        if (active) return;
+        active = true;
+        emit();
+      },
+      leave() {
+        seat = void 0;
+        if (!active) return;
+        active = false;
+        emit();
+      },
+      subscribe(listener) {
+        if (typeof listener !== "function") throw new TypeError("A listener is required");
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      }
+    });
+  }
+
   // src/studio-entry.js
   window.__ModuleLoader__.load({
     id: "dsh-openfilm",
@@ -261,6 +300,55 @@
         openExisting: "\u6253\u5F00\u5DF2\u6709\u9879\u76EE"
       };
       const Panel = createStudioPanel(React);
+      const activation = createActivationStore();
+      function PanelSeat() {
+        const ref = React.useRef(null);
+        React.useEffect(() => {
+          activation.enter(ref.current);
+          return () => activation.leave();
+        }, []);
+        return h("div", { ref, style: { width: "100%", height: "100%", minWidth: 0, minHeight: 0 } });
+      }
+      function PanelKeepAlive(props) {
+        const [shown, setShown] = React.useState(activation.isActive());
+        const [mounted, setMounted] = React.useState(activation.isActive());
+        const box = React.useRef(null);
+        React.useEffect(() => activation.subscribe((active) => {
+          setShown(active);
+          if (active) setMounted(true);
+        }), []);
+        React.useEffect(() => {
+          if (!shown) return;
+          const place = () => {
+            const element = box.current;
+            if (!element) return;
+            const rect = activation.seat()?.getBoundingClientRect();
+            element.style.left = `${Math.max(0, rect?.left ?? 0)}px`;
+            element.style.top = `${Math.max(0, rect?.top ?? 0)}px`;
+            element.style.width = `${rect?.width || window.innerWidth}px`;
+            element.style.height = `${rect?.height || window.innerHeight}px`;
+          };
+          place();
+          window.addEventListener("resize", place);
+          const timer = setInterval(place, 500);
+          return () => {
+            window.removeEventListener("resize", place);
+            clearInterval(timer);
+          };
+        }, [shown]);
+        if (!mounted) return null;
+        return h("div", {
+          ref: box,
+          style: {
+            position: "fixed",
+            zIndex: 30,
+            display: shown ? "block" : "none",
+            overflow: "hidden",
+            background: "var(--dsw-alias-bg-base, #fff)",
+            borderLeft: "1px solid var(--dsw-alias-separator, #0000)"
+          }
+        }, h(Panel, props));
+      }
       const startStudio = async (signal) => {
         const surface = `${window.location.protocol}//${window.location.host}`;
         const response = await fetch("/api/no996-openfilm/bootstrap", { method: "POST", credentials: "same-origin", headers: { "x-no996-surface": surface }, signal });
@@ -292,8 +380,9 @@
         apply(ctx) {
           ctx.effect(() => ctx.locale.register(NS, { en, zh }), "openfilm: dictionaries");
           const t = ctx.locale.bind(NS);
-          ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PANEL, locale: NS, inject: () => ({ startStudio, templateRequest }) }, Panel));
+          ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PANEL, locale: NS }, PanelSeat));
           ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: PANEL, order: 21, locale: NS, label: () => t("panel") }, PanelIcon));
+          ctx.slots.inject("shell.overlay", () => ctx.slots.register({ name: "shell.overlay", id: "no996-openfilm-panel", order: 0, locale: NS, inject: () => ({ startStudio, templateRequest }) }, PanelKeepAlive));
         }
       };
     }
