@@ -13,6 +13,8 @@ import { homedir, tmpdir } from 'node:os';
 const HOST_VERSION = (() => { try { return String(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version); } catch { return 'unknown'; } })();
 
 const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.url));
+/** Page events the Host will record; anything else is refused. */
+const CLIENT_EVENTS = new Set(['recovery-shown', 'restart-click', 'picker-placed', 'session-expired']);
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
 import { startLocalConsole } from './studio-debug-redirect.mjs';
 import { createDshAskAgent } from './dsh-ai.mjs';
@@ -30,6 +32,7 @@ import { realpath } from 'node:fs/promises';
 import { registerTemplateBridge } from './template-bridge.mjs';
 import { registerArchiveBridge } from './archive-bridge.mjs';
 import { createArchiveWatcher } from './workspace-archive.mjs';
+import { createPluginLog } from './plugin-log.mjs';
 
 /**
  * Host-only route and Studio lifecycle. `createProxy` receives the private
@@ -38,6 +41,8 @@ import { createArchiveWatcher } from './workspace-archive.mjs';
  * This is a localhost integration, not an OS or network sandbox.
  */
 export function createStudioController(ctx, createProxy, { officialShell = false } = {}) {
+  const log = createPluginLog();
+  const openedAt = Date.now();
   if (!ctx?.connection || !ctx?.webServer || typeof createProxy !== 'function') throw new TypeError('Connection, webServer and proxy are required');
   if (typeof officialShell !== 'boolean') throw new TypeError('officialShell must be a boolean');
   const webOrigin = ctx.webServer.getOrigin();
@@ -123,6 +128,14 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     if (channel === 'agent:cancel') {
       if (!agentService) throw new Error('Agent bridge unavailable');
       return agentService.cancel(payload?.projectId);
+    }
+    if (channel === 'client:log') {
+      // Same allowlist as the HTTP route: the page may say what happened to it,
+      // not write free text.
+      const event = typeof payload?.event === 'string' ? payload.event : '';
+      if (!CLIENT_EVENTS.has(event)) throw Object.assign(new Error('unknown client event'), { code: 'CLIENT_EVENT_UNKNOWN' });
+      log.info(`page-${event}`, { anchor: typeof payload?.anchor === 'string' ? payload.anchor.slice(0, 16) : undefined });
+      return { ok: true };
     }
     if (channel === 'editor:link') {
       // One-use ticket for the local Studio page, minted only after the Host has
@@ -236,7 +249,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const admission = ctx.connection.admit({ headers });
       return !('rejection' in admission) && admission.peer.id === ctx.connection.browserPeer.id;
     };
-    const pending = Promise.resolve().then(() => createProxy({ upstream, webOrigin: browserOrigin, authenticateBrowser, desktop, officialShell, ...(officialShell ? { officialRpc, authorizeOfficialProject, attachOfficialEvents } : {}) })).then(async next => {
+    const pending = Promise.resolve().then(() => createProxy({ upstream, webOrigin: browserOrigin, authenticateBrowser, desktop, officialShell, log, ...(officialShell ? { officialRpc, authorizeOfficialProject, attachOfficialEvents } : {}) })).then(async next => {
       if (!next || typeof next.bootstrap !== 'function' || typeof next.close !== 'function' || typeof next.editorOrigin !== 'string' || disposed) {
         await next?.close?.();
         throw new Error('Studio proxy is unavailable');
@@ -302,11 +315,42 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         // Whether this Host can see DSH's archive set, and how many Sessions it
         // currently hides. A zero count on an available watcher means "none".
         archive: { available: archive.available, archivedCount: archive.archivedIds().length },
+        // The last few events, so a support message can carry the history that
+        // explains the symptom without asking for a file path.
+        log: { file: log.file, tail: log.tail(12) },
       });
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
     },
   });
   const unregisterBootstrap = ctx.webServer.register({
+    // Page-side events worth keeping when a person reports "it broke": the
+    // recovery card appeared, the button was pressed. Enum-only, 512 bytes, and
+    // only from the authenticated DSH browser — this is not a general log sink.
+    kind: 'exact', path: '/api/no996-openfilm/client-log',
+    async handler(req, res) {
+      res.setHeader('cache-control', 'no-store');
+      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end(); return; }
+      const admission = ctx.connection.admit({ headers: req.headers });
+      if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end(); return; }
+      const chunks = [];
+      let size = 0;
+      const finish = (status) => { if (!res.writableEnded) res.writeHead(status).end(); };
+      req.on('data', (chunk) => {
+        size += chunk.length;
+        if (size > 512) { finish(413); req.destroy(); return; }
+        chunks.push(chunk);
+      });
+      req.on('end', () => {
+        if (res.writableEnded) return;
+        let value;
+        try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return finish(400); }
+        const event = typeof value?.event === 'string' ? value.event : '';
+        if (!CLIENT_EVENTS.has(event)) return finish(400);
+        log.info(`page-${event}`, { anchor: typeof value.anchor === 'string' ? value.anchor.slice(0, 16) : undefined });
+        finish(204);
+      });
+    },
+  }, {
     kind: 'exact', path: '/api/no996-openfilm/bootstrap',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -427,17 +471,23 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       }
     },
   });
+  log.info('host-start', { version: HOST_VERSION, officialShell, editorPort: Number(process.env.NO996_OPENFILM_EDITOR_PORT || 47822) });
   // Warm the editor port once at assembly. Otherwise the proxy only exists after
   // the first bootstrap, so opening http://<host>:47822 directly (or pasting the
   // address from the docs) reads as a dead port even though the plugin is fine.
   // Failures are ignored on purpose: the panel still bootstraps lazily.
   void (async () => {
     try {
+      const started = Date.now();
       await runtime.ensureStarted();
       if (!disposed && upstream) await proxyFor(webOrigin);
-    } catch { /* lazy bootstrap remains */ }
+      log.info('studio-warm', { ms: Date.now() - started });
+    } catch (error) {
+      log.warn('studio-warm-failed', { message: String(error?.message || error) });
+    }
   })();
   return async () => {
+    const closingAt = Date.now();
     disposed = true;
     unregisterContext();
     unregisterGuide();
@@ -460,5 +510,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       try { await chat?.close(); }
       finally { await runtime.close(); }
     }
+    log.info('host-stop', { uptimeMs: closingAt - openedAt, events: log.count });
+    await log.flush().catch(() => {});
   };
 }

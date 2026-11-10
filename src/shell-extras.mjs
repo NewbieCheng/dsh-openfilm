@@ -275,6 +275,12 @@ export const shellUiInjection = `<script>(function(){
     +'<div style="opacity:.45;font-size:11px;margin-top:14px">换一台机器访问时，把地址换成该机器的 127.0.0.1:47821/editor</div>'
     +'</div>';
   try{ document.documentElement.appendChild(stop); }catch(e){}
+  var reported=false;
+  function report(event){
+    try{ rpc('client:log',{event:event}).catch(function(){}); }catch(e){}
+  }
+  var restartLink=stop.querySelector('#no996-restart');
+  if(restartLink) restartLink.addEventListener('click',function(){ report('restart-click'); });
   var misses=0;
   function probe(){
     var done=false;
@@ -283,7 +289,10 @@ export const shellUiInjection = `<script>(function(){
       done=true;
       if(ok){ misses=0; stop.style.display='none'; return; }
       misses+=1;
-      if(misses>=2) stop.style.display='flex';
+      if(misses>=2){
+        stop.style.display='flex';
+        if(!reported){ reported=true; report('recovery-shown'); }
+      }
     };
     try{
       var controller=window.AbortController?new AbortController():null;

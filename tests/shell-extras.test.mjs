@@ -18,7 +18,7 @@ test('the injected shell UI is one balanced script that parses as JavaScript', (
 
 test('the picker only talks over the fixed bridge channels', () => {
   const channels = [...shellUiInjection.matchAll(/rpc\('([^']+)'/g)].map(match => match[1]);
-  assert.deepEqual([...new Set(channels)].sort(), ['editor:link', 'template:create', 'template:list']);
+  assert.deepEqual([...new Set(channels)].sort(), ['client:log', 'editor:link', 'template:create', 'template:list']);
   // The one-time link must be rejected unless it is the local ticket bridge.
   assert.match(shellUiInjection, /__dsh\/open#/);
   // No project path or session identity may be constructed in the page.

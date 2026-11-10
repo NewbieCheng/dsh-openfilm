@@ -33,7 +33,7 @@ function officialFacadeFactory(bridge) {
 
   // Only these fixed RPC and event channels may reach the supplied bridge.
   // The Host must independently authorize project IDs and validate all payloads.
-  const rpcAllow = new Set(['chat:load', 'chat:save-sessions', 'chat:save-turn', 'chat:archive', 'chat:unarchive', 'chat:archive-state', 'editor:link', 'agent:prompt', 'agent:cancel', 'agent:models', 'agent:select-model']);
+  const rpcAllow = new Set(['chat:load', 'chat:save-sessions', 'chat:save-turn', 'chat:archive', 'chat:unarchive', 'chat:archive-state', 'editor:link', 'client:log', 'agent:prompt', 'agent:cancel', 'agent:models', 'agent:select-model']);
   const eventAllow = new Set(['desktop:full-screen', 'desktop:toggle-chat', 'desktop:open-settings']);
   const rpc = async (channel, payload) => {
     if (!rpcAllow.has(channel) || typeof bridge.invoke !== 'function') throw unavailable(channel);

@@ -123,7 +123,9 @@ function fail(res, status = 403) {
  * retains its native file and process permissions; DSH workspace tool restrictions
  * do not constrain these APIs.
  */
-export async function startStudioProxy({ upstream, authenticateBrowser, webOrigin, desktop = false, officialShell = false, officialRpc, authorizeOfficialProject, attachOfficialEvents } = {}) {
+export async function startStudioProxy({ upstream, authenticateBrowser, webOrigin, desktop = false, officialShell = false, officialRpc, authorizeOfficialProject, attachOfficialEvents, log } = {}) {
+  // A proxy without a logger is valid (tests, embedders); the calls are no-ops.
+  const say = typeof log?.write === 'function' ? log : { write() {}, info() {}, warn() {}, error() {} };
   if (typeof officialShell !== 'boolean') throw new TypeError('officialShell must be a boolean');
   if (officialRpc !== undefined && typeof officialRpc !== 'function') throw new TypeError('officialRpc must be a function');
   if (authorizeOfficialProject !== undefined && typeof authorizeOfficialProject !== 'function') throw new TypeError('authorizeOfficialProject must be a function');
@@ -209,6 +211,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
       tickets.delete(value.ticket);
       const session = randomBytes(32).toString('base64url');
       sessions.set(session, Date.now() + sessionLifetime);
+      say.info('ticket-redeemed', { desktop, sessions: sessions.size });
       res.writeHead(204, { 'cache-control': 'no-store', 'set-cookie': `${cookieName}=${session}; HttpOnly; Secure; SameSite=None; Partitioned; Path=/; Max-Age=${sessionLifetime / 1000}` });
       res.end();
     });
@@ -257,7 +260,10 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
     for (const [name, value] of Object.entries(req.headers)) if (SAFE_HEADERS.has(name) && value !== undefined) headers[name] = value;
     if (req.headers.origin) headers.origin = film && req.headers.origin === filmOrigin ? filmUpstream.origin : editorUpstream.origin;
     const remote = request({ hostname: '127.0.0.1', port: target.port, method: req.method, path: req.url, headers }, (up) => {
-      up.on('error', () => { if (!res.destroyed && !res.writableEnded) fail(res, 502); });
+      up.on('error', (error) => {
+        say.error('upstream-error', { path: (() => { try { return new URL(req.url, 'http://x').pathname; } catch { return '?'; } })(), message: String(error?.code || error?.message || error) });
+        if (!res.destroyed && !res.writableEnded) fail(res, 502);
+      });
       const status = up.statusCode || 502;
       if ((status >= 300 && status < 400 && status !== 304) ||
           (status !== 304 && up.headers['content-encoding'] && up.headers['content-encoding'] !== 'identity')) {
@@ -344,7 +350,10 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
             let value = body.toString('utf8');
             if (!Buffer.from(value).equals(body)) return fail(res, 502);
             value = value.replaceAll(filmUpstream.origin, filmOrigin);
-            if (status >= 500 && !film) recordFailure(req.method, url.pathname, status, value);
+            if (status >= 500 && !film) {
+              recordFailure(req.method, url.pathname, status, value);
+              say.warn('upstream-5xx', { method: req.method, path: url.pathname, status });
+            }
             if (film && type.startsWith('text/html')) {
               value = value.replaceAll(`const EDITOR = ${JSON.stringify(editorUpstream.origin)};`, `const EDITOR = ${JSON.stringify(editorOrigin)};`);
             } else if (!film && type.startsWith('text/html') && !url.pathname.startsWith('/api/')) {
@@ -700,6 +709,7 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
       if (tickets.size >= maxCredentials) return null;
       const ticket = randomBytes(32).toString('base64url');
       tickets.set(ticket, Date.now() + ticketLifetime);
+      say.info('ticket-minted', { desktop, pending: tickets.size });
       return { url: `${editorOrigin}/__dsh/open#${ticket}`, expiresIn: Math.round(ticketLifetime / 1000) };
     },
     bootstrapData() {
