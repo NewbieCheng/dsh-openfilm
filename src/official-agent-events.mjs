@@ -6,9 +6,18 @@
 // credential protection remains the responsibility of the source and caller.
 // Snapshot/replay, durable messages, tool data and interaction events are not
 // translated here: emitting them without their full lifecycle would be unsafe.
+//
+// Ordering is tolerated on purpose. A strict "start frame first, then exactly
+// consecutive indexes" rule silently dropped every live chunk whenever the
+// subscription began mid-attempt — the person then sat in front of a running
+// model that appeared to be doing nothing. Chunks are de-duplicated by index
+// instead of matched against a required prefix.
 
 const nonempty = (value) => typeof value === 'string' && value.length > 0;
 const ordinal = (value) => Number.isSafeInteger(value) && value >= 0;
+
+// Thinking is shown as thought updates so a slow first token still looks alive.
+const THOUGHT = new Set(['reasoning-delta', 'thinking-delta', 'thought-delta', 'reasoning', 'thinking']);
 
 /** Create a per-turn value; no subscriptions, global state or side effects. */
 export function createOfficialAgentEventState({ sessionId, turnId, turn, key }) {
@@ -23,7 +32,6 @@ export function createOfficialAgentEventState({ sessionId, turnId, turn, key }) 
  * Returns a new state and zero or one OpenFilm localAgents.onEvent events.
  * `sessionId` and `turnId` are supplied by that subscription's owner; neither
  * is authenticated by the frame. A wrong binding must never call this function.
- * Only attempts whose start was observed are accepted; snapshots are ignored.
  */
 export function translateOfficialAgentEvent(state, { sessionId, turnId, frame } = {}) {
   const unchanged = { state, events: [] };
@@ -32,30 +40,42 @@ export function translateOfficialAgentEvent(state, { sessionId, turnId, frame } 
 
   const part = frame.frame;
   if (part.type === 'start') {
-    if (state.attempt || part.turn !== state.turn || !ordinal(part.step) ||
-        !nonempty(part.attemptId) || !ordinal(part.revision) || part.revision <= state.revision) return unchanged;
-    return { state: { ...state, revision: part.revision, attempt: { id: part.attemptId, nextIndex: 0, revision: part.revision } }, events: [] };
+    if (state.attempt && part.attemptId === state.attempt.id) return unchanged;
+    if (part.turn !== state.turn || typeof part.attemptId !== 'string') return unchanged;
+    return {
+      state: { ...state, revision: ordinal(part.revision) ? part.revision : state.revision,
+        attempt: { id: part.attemptId, nextIndex: ordinal(part.index) ? part.index : 0 } },
+      events: [],
+    };
   }
-
-  const attempt = state.attempt;
-  if (!attempt || part.attemptId !== attempt.id || !ordinal(part.revision) ||
-      part.revision <= attempt.revision || !ordinal(part.index) || part.index !== attempt.nextIndex) return unchanged;
 
   if (part.type === 'end') {
-    return { state: { ...state, revision: part.revision, attempt: null }, events: [] };
+    if (part.attemptId !== state.attempt?.id && state.attempt) return unchanged;
+    return { state: { ...state, attempt: null }, events: [] };
   }
-  if (part.type !== 'chunk') return unchanged;
+  if (part.type !== 'chunk' || typeof part.attemptId !== 'string') return unchanged;
 
-  const next = { ...state, revision: part.revision, attempt: { ...attempt, nextIndex: attempt.nextIndex + 1, revision: part.revision } };
   const chunk = part.chunk;
-  if (!chunk || typeof chunk !== 'object' || chunk.type !== 'text-delta' ||
-      !ordinal(chunk.index) || typeof chunk.text !== 'string' || chunk.text.length === 0) {
-    return { state: next, events: [] };
-  }
+  if (!chunk || typeof chunk !== 'object') return unchanged;
+
+  // Adopt an unobserved attempt rather than discarding its output.
+  const attempt = state.attempt?.id === part.attemptId ? state.attempt : { id: part.attemptId, nextIndex: 0 };
+  const index = ordinal(part.index) ? part.index : attempt.nextIndex;
+  if (index < attempt.nextIndex) return unchanged; // already delivered
+  const next = {
+    ...state,
+    revision: ordinal(part.revision) ? Math.max(state.revision, part.revision) : state.revision,
+    attempt: { id: part.attemptId, nextIndex: index + 1 },
+  };
+
+  const text = typeof chunk.text === 'string' ? chunk.text
+    : typeof chunk.delta === 'string' ? chunk.delta : '';
+  if (!text) return { state: next, events: [] };
+  const sessionUpdate = chunk.type === 'text-delta' ? 'agent_message_chunk'
+    : THOUGHT.has(chunk.type) ? 'agent_thought_chunk' : null;
+  if (!sessionUpdate) return { state: next, events: [] };
   return {
     state: next,
-    events: [{ key: state.key, kind: 'update', update: {
-      sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: chunk.text },
-    } }],
+    events: [{ key: state.key, kind: 'update', update: { sessionUpdate, content: { type: 'text', text } } }],
   };
 }
