@@ -1,0 +1,8 @@
+{
+  "entry": "film.html",
+  "prompt": "按 sketchnote 手绘笔记模板做一部影片：保留手绘笔迹与纸张质感，替换成我要的内容。",
+  "mode": "film",
+  "title": "手绘笔记",
+  "id": "sketchnote",
+  "description": "纸笔手绘笔记风格，含字体与绘图工具脚本"
+}

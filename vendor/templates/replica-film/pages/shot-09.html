@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>09 · 分层展陈</title>
+  <link rel="stylesheet" href="../assets/scene.css">
+
+</head>
+<body>
+<main id="stage" class="lilac">
+  <div class="content" id="content"></div>
+</main>
+<script src="../assets/scene.js"></script>
+<script>
+  // 本镜头的可替换内容。配色在上方 stage 类名和本页 CSS 中修改。
+  const COPY = {
+    "chapter": "分层展陈",
+    "note": "再把自己的作品铺成画廊",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "把素材铺成画廊",
+    "layers": [
+      "动画组件",
+      "内容结构",
+      "主题"
+    ],
+    "colors": [
+      "#6945ef",
+      "#3159e6",
+      "#8b898e"
+    ],
+    "tiles": [
+      {
+        "color": "#ec452f",
+        "label": "示例 01"
+      },
+      {
+        "color": "#2461ed",
+        "label": "示例 02"
+      },
+      {
+        "color": "#7950ef",
+        "label": "示例 03"
+      },
+      {
+        "color": "#ef8b31",
+        "label": "示例 04"
+      },
+      {
+        "color": "#397c72",
+        "label": "示例 05"
+      },
+      {
+        "color": "#4c57ac",
+        "label": "示例 06"
+      },
+      {
+        "color": "#d65d76",
+        "label": "示例 07"
+      },
+      {
+        "color": "#886ab8",
+        "label": "示例 08"
+      },
+      {
+        "color": "#2f7994",
+        "label": "示例 09"
+      }
+    ]
+  };
+  const DURATION = 5.334;
+  const START = 53.933;
+  const { $, $$, enter, escape, mount } = Scene;
+
+  $('#content').innerHTML = `
+<h2 class="at" id="title" style="left:82px;top:427px">${escape(COPY.title)}</h2>
+    <div class="at" style="left:82px;top:543px;display:grid;gap:16px">
+    ${COPY.layers.map((name,i) => `<div class="layer" style="width:620px;background:${COPY.colors[i]};color:white;border-radius:17px;padding:15px 28px;box-shadow:0 16px 25px #20204028">0${i+1}　${escape(name)}</div>`).join('')}
+    </div>
+    ${COPY.tiles.map((tile,i) => `<div class="at tile" style="left:${86+i%3*302}px;top:${986+Math.floor(i/3)*156}px;width:268px;height:137px;background:${tile.color};color:white;border-radius:13px;box-shadow:0 14px 25px #20204039;padding:13px 17px">
+        <div style="font-size:18px">${escape(tile.label)}</div><div style="display:flex;align-items:end;gap:12px;height:71px">${Array.from({length:7},(_,j) => `<i style="display:block;width:20px;height:${18+(i*13+j*19)%48}px;background:#fff;border-radius:3px"></i>`).join('')}</div>
+      </div>`).join('')}
+  `;
+
+  // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
+  function draw(t) {
+    enter('#title', t, .10);
+    $$('.layer').forEach((node,i) => enter(node, t, .48 + i * .25, { x: -84, y: 0, spring: true }));
+    $$('.tile').forEach((node,i) => enter(node, t, 1.02 + i * .24, {
+      x: (i % 3 - 1) * 420, y: 150 + i * 18, rotate: (i % 2 ? 1 : -1) * 28, scale: .5, spring: true, duration: .63
+    }));
+  }
+  mount(COPY, DURATION, START, draw);
+</script>
+</body>
+</html>

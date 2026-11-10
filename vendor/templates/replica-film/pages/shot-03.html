@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>03 · 开始回应</title>
+  <link rel="stylesheet" href="../assets/scene.css">
+
+</head>
+<body>
+<main id="stage" class="blue radial">
+  <div class="content" id="content"></div>
+</main>
+<script src="../assets/scene.js"></script>
+<script>
+  // 本镜头的可替换内容。配色在上方 stage 类名和本页 CSS 中修改。
+  const COPY = {
+    "chapter": "开始回应",
+    "note": "让回复卡飞向下一步",
+    "presenter": {
+      "shape": "portrait",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "让回应有动作",
+    "sub": "打开表达的开关",
+    "switchLabel": "语音模式",
+    "reply": "收到。现在可以开始回应。"
+  };
+  const DURATION = 4.333;
+  const START = 11.5;
+  const { $, range, ease, pose, enter, escape, mount } = Scene;
+
+  $('#content').innerHTML = `
+<div class="at hero" id="title">
+      <h1>${escape(COPY.title)}</h1>
+      <h2 class="gold" style="margin-top:41px">${escape(COPY.sub)}</h2>
+    </div>
+    <span class="at pill" id="switch" style="left:75px;top:858px">
+      ${escape(COPY.switchLabel)} <i id="toggle" style="display:block;width:66px;height:32px;background:#bbc1be;border-radius:50px;padding:4px"><b id="knob" style="display:block;width:24px;height:24px;background:#fff;border-radius:50%"></b></i>
+    </span>
+    <img class="at scene-icon" id="mic" src="../assets/mic.svg" alt="" style="left:674px;top:985px;width:247px;height:424px">
+    <article class="at card" id="reply" style="left:82px;top:1120px;width:534px">
+      <small class="mono" style="color:#2252c8">VOICE MESSAGE</small><p>${escape(COPY.reply)}</p>
+    </article>
+  `;
+
+  // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
+  function draw(t) {
+    enter('#title', t, .12);
+    enter('#switch', t, .56, { spring: true });
+    const p = ease(range(t, 1.12, .32));
+    $('#toggle').style.background = p > .5 ? '#2ecf7b' : '#bbc1be';
+    pose('#knob', { x: 34 * p });
+    enter('#mic', t, 1.22, { y: 95, scale: .63, rotate: -18, spring: true });
+    enter('#reply', t, 2.22, { x: -88, y: 0, spring: true });
+  }
+  mount(COPY, DURATION, START, draw);
+</script>
+</body>
+</html>

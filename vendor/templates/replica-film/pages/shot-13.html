@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>13 · 反馈更新</title>
+  <link rel="stylesheet" href="../assets/scene.css">
+
+</head>
+<body>
+<main id="stage" class="paper">
+  <div class="content" id="content"></div>
+</main>
+<script src="../assets/scene.js"></script>
+<script>
+  // 本镜头的可替换内容。配色在上方 stage 类名和本页 CSS 中修改。
+  const COPY = {
+    "chapter": "反馈更新",
+    "note": "再触发版本更新",
+    "presenter": {
+      "shape": "portrait",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "让反馈形成更新",
+    "feedback": [
+      "更清楚",
+      "有层次",
+      "看重点"
+    ],
+    "container": "内容模板",
+    "versions": [
+      "v1",
+      "v2"
+    ],
+    "cues": {
+      "title": 0.07,
+      "labels": [
+        1.02,
+        2.14,
+        2.67
+      ],
+      "container": 3.9,
+      "merge": 4.07,
+      "update": 4.8
+    }
+  };
+  const DURATION = 5.833;
+  const START = 76.2;
+  const { $, $$, range, ease, wave, pose, enter, text, escape, mount } = Scene;
+
+  $('#content').innerHTML = `
+<h2 class="at hero" id="title">${escape(COPY.title)}</h2>
+    ${COPY.feedback.map((label,i) => `<span class="at feedback" style="left:${[122,543,174][i]}px;top:${[618,765,893][i]}px;background:${['#eb3e7f','#2862e1','#7750ec'][i]}">${escape(label)}</span>`).join('')}
+    <article class="at card dark-card" id="box" style="left:300px;top:1015px;width:503px;height:323px">
+      <small class="mono soft" style="font-size:21px">WORKSPACE / 反馈</small>
+      <h2 style="margin-top:30px">${escape(COPY.container)}</h2>
+      <b class="mono gold" id="version" style="position:absolute;left:29px;bottom:30px"></b>
+    </article>
+    <div class="at" id="burst" style="left:548px;top:1182px;width:8px;height:8px">
+      ${Array.from({length:12},(_,i) => `<i class="at" style="display:block;width:13px;height:13px;border-radius:50%;background:${['#f2c94e','#f470a2','#5b7ff0'][i%3]};left:${273*Math.cos(i*Math.PI/6)}px;top:${230*Math.sin(i*Math.PI/6)}px"></i>`).join('')}
+    </div>
+  `;
+
+  // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
+  function draw(t) {
+    const cue = COPY.cues;
+    enter('#title', t, cue.title);
+    const merge = ease(range(t, cue.merge, .66));
+    $$('.feedback').forEach((node,i) => {
+      const visible = range(t, cue.labels[i], .35);
+      pose(node, { opacity: visible * (1 - merge), scale: 1 - merge * .8, x: ([365,-53,320][i]) * merge, y: (1 - visible) * 51 + ([489,345,218][i]) * merge, rotate: (i - 1) * 6 * (1 - visible) });
+    });
+    const appear = ease(range(t, cue.container, .4));
+    const pulse = wave(range(t, cue.update, .55));
+    pose('#box', { opacity: appear, y: 42 * (1 - appear), scale: .91 + .09 * appear + .055 * pulse });
+    text('#version', COPY.versions[t < cue.update ? 0 : 1]);
+    const burst = range(t, cue.update, .9);
+    pose('#burst', { scale: burst * 1.28, opacity: wave(burst), rotate: 35 * burst });
+  }
+  mount(COPY, DURATION, START, draw);
+</script>
+</body>
+</html>

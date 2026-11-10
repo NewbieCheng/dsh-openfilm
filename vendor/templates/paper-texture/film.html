@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1080, height=1920">
+  <title>纸纹讲堂 · 竖屏讲解 · OpenFilm 模板</title>
+  <style>
+    /* 本机直开时显示镜头墙；OpenFilm 读取下方 iframe 的 at 与 #t 时间。 */
+    body > #shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+    body:has(> #shots) { margin: 16px; background: #1d1b18; }
+    #shots > iframe { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; border: 0; }
+  </style>
+</head>
+<body>
+  <section id="shots" title="纸纹讲堂 · 2 组">
+    <iframe id="shot-01" title="01 · 标题与讲解台" src="pages/shot-01.html#t=0,6" at="0.000"></iframe>
+    <iframe id="shot-02" title="02 · 三个操作步骤" src="pages/shot-02.html#t=0,7" at="6.000"></iframe>
+  </section>
+</body>
+</html>

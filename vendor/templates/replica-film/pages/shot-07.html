@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>07 · 步骤护栏</title>
+  <link rel="stylesheet" href="../assets/scene.css">
+
+</head>
+<body>
+<main id="stage" class="paper">
+  <div class="content" id="content"></div>
+</main>
+<script src="../assets/scene.js"></script>
+<script>
+  // 本镜头的可替换内容。配色在上方 stage 类名和本页 CSS 中修改。
+  const COPY = {
+    "chapter": "步骤护栏",
+    "note": "进度、错误提示和检查结果都有动作",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "把方法写成步骤",
+    "chips": [
+      "文稿",
+      "流程",
+      "检查"
+    ],
+    "steps": [
+      "明确要讲的观点",
+      "整理配套的素材",
+      "核对画面和声音"
+    ],
+    "check": [
+      "进度有迹可循",
+      "问题可以定位",
+      "结果经过核对"
+    ]
+  };
+  const DURATION = 9.867;
+  const START = 36.833;
+  const { $, $$, range, ease, enter, text, escape, pills, mount } = Scene;
+
+  $('#content').innerHTML = `
+<div class="at hero" id="title"><h1 style="font-size:65px">${escape(COPY.title)}</h1><div class="chip-row" style="margin-top:60px">${pills(COPY.chips)}</div></div>
+    <div class="at" id="progress" style="left:80px;top:735px;width:699px">
+      <small class="mono" id="progress-label" style="font-size:20px"></small>
+      <div class="counter-progress" style="height:15px;background:#d9d9d0"><i></i></div>
+    </div>
+    <article class="at card" id="steps" style="left:80px;top:879px;width:595px">
+      <h2 style="font-size:34px">先有大纲</h2>
+      ${COPY.steps.map((line,i) => `<div class="step" style="margin-top:15px;font-size:24px"><b class="mono" style="color:#80766c">0${i+1}</b>　${escape(line)}<span style="float:right;border-radius:40px;background:#ef432f;color:white;padding:2px 13px;font-size:17px">${i===2?'已检查':'需核对'}</span></div>`).join('')}
+    </article>
+    <article class="at card dark-card" id="check" style="left:80px;top:1252px;width:645px">
+      <h2 class="gold" style="font-size:33px">方法 · 交付检查</h2>
+      ${COPY.check.map((line) => `<p class="check" style="margin-top:17px;font-size:23px">▸　${escape(line)}</p>`).join('')}
+    </article>
+  `;
+
+  // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
+  function draw(t) {
+    enter('#title', t, .13);
+    enter('#progress', t, .58);
+    const progress = ease(range(t, 1.2, 5.2));
+    $('.counter-progress i').style.transform = `scaleX(${progress})`;
+    text('#progress-label', `PROGRESS　${Math.round(progress * 100)}%`);
+    enter('#steps', t, 1.9, { spring: true });
+    $$('.step').forEach((node,i) => enter(node, t, 2.45 + i * .55, { x: -35, y: 0 }));
+    enter('#check', t, 4.85, { spring: true });
+    $$('.check').forEach((node,i) => enter(node, t, 5.25 + i * .55));
+  }
+  mount(COPY, DURATION, START, draw);
+</script>
+</body>
+</html>

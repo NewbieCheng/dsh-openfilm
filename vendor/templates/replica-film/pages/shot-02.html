@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>02 · 三项关系</title>
+  <link rel="stylesheet" href="../assets/scene.css">
+
+</head>
+<body>
+<main id="stage" class="orange">
+  <div class="content" id="content"></div>
+</main>
+<script src="../assets/scene.js"></script>
+<script>
+  // 本镜头的可替换内容。配色在上方 stage 类名和本页 CSS 中修改。
+  const COPY = {
+    "chapter": "三项关系",
+    "note": "再用反馈和示例数据收束",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "三种输入 · 一起协作",
+    "hub": "流程",
+    "labels": [
+      "文稿",
+      "画面",
+      "声音"
+    ],
+    "likes": "示例反馈 591"
+  };
+  const DURATION = 6.267;
+  const START = 5.233;
+  const { $, $$, range, wave, pose, enter, escape, mount } = Scene;
+
+  $('#content').innerHTML = `
+<h2 class="at sticker" id="title" style="left:77px;top:432px;font-size:34px">${escape(COPY.title)} ✓</h2>
+    <svg class="at" style="left:150px;top:622px;width:790px;height:540px;overflow:visible" viewBox="0 0 790 540" aria-hidden="true">
+      <path id="links" d="M360 285 100 127M360 285 660 136M360 285 360 476" fill="none" stroke="#fff0ab" stroke-width="3" stroke-dasharray="8 11"/>
+    </svg>
+    <span class="at pill" id="hub" style="left:412px;top:848px;font-size:31px">${escape(COPY.hub)}　<span style="font-size:16px;color:#957e51">WORKFLOW</span></span>
+    ${COPY.labels.map((label, i) => `<span class="at pill satellite" style="left:${[192,754,475][i]}px;top:${[711,722,1023][i]}px">• ${escape(label)}</span>`).join('')}
+    ${[110, 757, 794, 938, 232].map((x, i) => `<img class="at scene-icon heart" src="../assets/heart.svg" alt="" style="left:${x}px;top:${[819,838,929,1125,1230][i]}px;width:${[92,79,122,68,58][i]}px">`).join('')}
+    <span class="at pill" id="likes" style="left:75px;top:1302px"><b style="color:#e23e44">♥</b> ${escape(COPY.likes)}</span>
+  `;
+
+  // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
+  function draw(t) {
+    enter('#title', t, .15, { rotate: 4 });
+    enter('#hub', t, .62, { spring: true });
+    $('#links').style.opacity = range(t, .76, .8);
+    $$('.satellite').forEach((node, i) => enter(node, t, .95 + i * .22, { spring: true }));
+    $$('.heart').forEach((node, i) => {
+      const p = range(t, 1.05 + i * .28, .55);
+      pose(node, { opacity: p, scale: p * (1 + .15 * wave(p)), y: 92 * (1 - p) + Math.sin(t * 2.3 + i) * 8, rotate: -12 + i * 7 });
+    });
+    enter('#likes', t, 2.2, { spring: true });
+  }
+  mount(COPY, DURATION, START, draw);
+</script>
+</body>
+</html>

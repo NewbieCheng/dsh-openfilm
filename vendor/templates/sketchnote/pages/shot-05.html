@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>05 · 简化、打比方</title>
+  <link rel="stylesheet" href="../assets/fonts.css">
+  <link rel="stylesheet" href="../assets/page.css">
+</head>
+<body>
+  <canvas id="paper" width="1920" height="1080" aria-label="简化、打比方"></canvas>
+  <script src="../assets/notebook-config.js"></script>
+  <script src="../assets/drawing-tools.js"></script>
+  <script src="../assets/notebook.js"></script>
+  <script src="../assets/preview.js"></script>
+  <script>
+    const START = 12.562;
+    const DURATION = 3.859;
+    const notebook = createNotebook(document.querySelector('#paper'), NOTEBOOK);
+
+    // The page's local time maps to the same shared paper and camera as every other shot.
+    window.film = {
+      width: 1920,
+      height: 1080,
+      duration: DURATION,
+      ready: notebook.ready,
+      frame(t) {
+        const local = Math.max(0, Math.min(DURATION, t));
+        notebook.draw(toSourceTime(START + local));
+      },
+    };
+    previewShot(window.film);
+  </script>
+</body>
+</html>

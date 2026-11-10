@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>11 · 按钮响应</title>
+  <link rel="stylesheet" href="../assets/scene.css">
+  <style>#stage.orange.radial { --theme: linear-gradient(128deg,#ec321b,#ff9e24); }</style>
+</head>
+<body>
+<main id="stage" class="orange radial">
+  <div class="content" id="content"></div>
+</main>
+<script src="../assets/scene.js"></script>
+<script>
+  // 本镜头的可替换内容。配色在上方 stage 类名和本页 CSS 中修改。
+  const COPY = {
+    "chapter": "按钮响应",
+    "note": "也应该有清楚的回应",
+    "presenter": {
+      "shape": "portrait",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "有反馈",
+    "subtitle": "互动需要被看见",
+    "buttons": [
+      "已开始",
+      "确认方案",
+      "留下反馈"
+    ]
+  };
+  const DURATION = 5.633;
+  const START = 63.5;
+  const { $, $$, range, wave, pose, enter, escape, mount } = Scene;
+
+  $('#content').innerHTML = `
+<div class="at" style="left:84px;top:658px">
+      <div id="result"><h1 class="gold" style="font-size:125px;text-shadow:0 4px 24px #701a17ad">${escape(COPY.title)}</h1><p style="font-size:34px;margin-top:21px">${escape(COPY.subtitle)}</p></div>
+      <div class="chip-row" style="margin-top:121px;gap:25px">
+      ${COPY.buttons.map((button,i) => `<span class="pill button"><i class="dot ${i===1?'red':'green'}"></i>${escape(button)}</span>`).join('')}
+      </div>
+    </div>
+    <img class="at scene-icon" id="heart" src="../assets/heart.svg" alt="" style="left:537px;top:631px;width:136px">
+    <svg class="at" id="spark" style="left:364px;top:558px;width:375px;height:351px;overflow:visible" viewBox="0 0 375 351">
+      ${Array.from({length:14},(_,i) => `<circle cx="${184+150*Math.cos(i*Math.PI/7)}" cy="${175+127*Math.sin(i*Math.PI/7)}" r="${i%3+2}" fill="#ffde85"/>`).join('')}
+    </svg>
+  `;
+
+  // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
+  function draw(t) {
+    enter('#result', t, .45, { y: 75, scale: .6, spring: true });
+    enter('#heart', t, .78, { x: 55, y: -57, rotate: 40, spring: true });
+    const spark = range(t, .65, 1.25);
+    pose('#spark', { scale: spark * 1.4, opacity: wave(spark), rotate: 41 * spark });
+    $$('.button').forEach((node,i) => enter(node, t, 1.21 + i * .46, { spring: true, scale: .62 }));
+  }
+  mount(COPY, DURATION, START, draw);
+</script>
+</body>
+</html>

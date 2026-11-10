@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>19 · 你的表达</title>
+  <link rel="stylesheet" href="../assets/scene.css">
+
+</head>
+<body>
+<main id="stage" class="dark">
+  <div class="content" id="content"></div>
+</main>
+<script src="../assets/scene.js"></script>
+<script>
+  // 本镜头的可替换内容。配色在上方 stage 类名和本页 CSS 中修改。
+  const COPY = {
+    "chapter": "你的表达",
+    "note": "让模板服务于你的内容",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "让内容成为主角",
+    "body": "提供口播、字幕和素材，再检查画面与声音",
+    "items": [],
+    "colors": [
+      "#ffd166",
+      "#b6a1e6",
+      "#86ddc3",
+      "#eea698",
+      "#aabdea"
+    ],
+    "cue": 2.7,
+    "mode": "summary"
+  };
+  const DURATION = 6.0;
+  const START = 115.933;
+  const { $, $$, range, ease, wave, pose, enter, escape, mount } = Scene;
+
+  $('#content').innerHTML = `
+<div class="at hero" style="top:438px">
+      <h1 id="title" style="font-size:64px">${escape(COPY.title)}</h1>
+      <div class="gold-rule" id="rule" style="margin-top:74px"></div>
+      <p id="body" style="margin-top:36px;font-size:34px;width:870px">${escape(COPY.body)}</p>
+    </div>
+    <div class="at page-list">
+      ${COPY.items.map((item,i) => `<div class="list-item point" style="background:${COPY.colors[i%COPY.colors.length]}">${escape(item)}</div>`).join('')}
+    </div>
+    <span class="at sticker" id="stamp" style="left:796px;top:1278px;padding:4px 16px;font-family:monospace;font-size:35px">◎</span>
+  `;
+
+  // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
+  function draw(t) {
+    const start = COPY.cue;
+    enter('#title', t, start, { y: 22, duration: .52 });
+    const line = ease(range(t, start + .32, .65));
+    pose('#rule', { scale: Math.max(.001, line), opacity: line });
+    enter('#body', t, start + .72, { y: 18 });
+    $$('.point').forEach((node,i) => enter(node, t, start + .64 + i * .42, { x: -73, y: 0, spring: true }));
+    const phase = range(t, start + 1.05, .85);
+    const hit = wave(range(t, start + 1.67, .31));
+    const show = COPY.mode !== 'points';
+    pose('#stamp', { x: 174 * (1 - phase), y: -135 * wave(phase), scale: .62 + .38 * phase + .3 * hit,
+      rotate: 45 * (1 - phase) - 9 + 11 * hit, opacity: show ? phase : 0 });
+  }
+  mount(COPY, DURATION, START, draw);
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "entry": "film.html",
+  "prompt": "按 replica-film 模板复刻一部影片：保留它的分镜结构与视觉风格，替换成我要的主题与文案。",
+  "mode": "film",
+  "title": "复刻影片",
+  "id": "replica-film",
+  "description": "写实场景 + 角色插画的分镜影片模板，含 film.html 与分镜页"
+}
