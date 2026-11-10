@@ -240,6 +240,12 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
       }
       return fail(res);
     };
+    // Only navigations, so the log answers "what did the browser actually ask
+    // for, and did it still carry the session" without recording every asset.
+    const dest = req.headers['sec-fetch-dest'];
+    if (!film && req.method === 'GET' && (dest === 'document' || dest === 'iframe')) {
+      say.info('nav', { path: req.url.split('?')[0].slice(0, 60), dest, cookie: Boolean(req.headers.cookie && req.headers.cookie.includes(cookieName)) });
+    }
     const rejection = rejectionReason(req, film);
     if (rejection) return refuse(rejection);
     if (!film && !authenticated(req)) return refuse('OF_SESSION_REQUIRED');
