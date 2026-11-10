@@ -71,6 +71,31 @@ document.addEventListener('click', async (event) => {
         res.writeHead(302, { location, 'cache-control': 'no-store' }).end();
         return;
       }
+      if (url.pathname === '/api/studio-url' && (req.method === 'GET' || req.method === 'OPTIONS')) {
+        // The desktop window runs on a custom protocol (`dsh-app://app`), where a
+        // relative /api/... request never reaches this Host — it is answered by
+        // the app protocol handler with 404. So the panel asks this loopback
+        // console for an editor address instead.
+        //
+        // No cookie is required, which matches /editor above: a bare loopback
+        // address was never the authentication boundary here. The ticket is
+        // single-use and expires in 60 seconds; the cookie it buys is HttpOnly.
+        // `*` is safe because no credential is read or written by this route.
+        const cors = {
+          'access-control-allow-origin': '*',
+          'access-control-allow-methods': 'GET, OPTIONS',
+          'access-control-allow-headers': 'content-type',
+          'access-control-max-age': '600',
+          'cache-control': 'no-store',
+        };
+        if (req.method === 'OPTIONS') { res.writeHead(204, cors).end(); return; }
+        const location = await editorUrl();
+        if (!location) { res.writeHead(503, { ...cors, 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: 'editor not ready' })); return; }
+        const target = new URL(location);
+        const body = JSON.stringify({ origin: target.origin, ticket: target.hash.replace(/^#/, '') });
+        res.writeHead(200, { ...cors, 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
+        return;
+      }
       if (url.pathname === '/create' && req.method === 'POST') {
         // A loopback address alone is not authentication: arbitrary web pages
         // can send cross-origin form POSTs. Project creation is available only

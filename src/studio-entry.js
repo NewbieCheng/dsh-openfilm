@@ -70,7 +70,19 @@ window.__ModuleLoader__.load({
         },
       }, h(Panel, props));
     }
+    // The desktop window loads the UI from `dsh-app://app`, where a relative
+    // `/api/...` goes to the app protocol handler (which answers 404) instead of
+    // to the Host. Ask the loopback console for a ticketed editor address there.
+    const DESKTOP_PROTOCOL = ['dsh-app:', 'app:'].includes(window.location.protocol);
+    const CONSOLE_URL = 'http://127.0.0.1:47821/api/studio-url';
     const startStudio = async signal => {
+      if (DESKTOP_PROTOCOL) {
+        const response = await fetch(CONSOLE_URL, { method: 'GET', credentials: 'omit', cache: 'no-store', signal });
+        if (!response.ok) throw new Error(`HTTP ${response.status} @ ${window.location.origin} (console)`);
+        const data = await response.json();
+        if (typeof data?.origin !== 'string' || typeof data?.ticket !== 'string') throw new Error('Invalid console response');
+        return { editorOrigin: data.origin, ticket: data.ticket, webOrigin: '' };
+      }
       // The Host answers with the editor origin, a desktop ticket and the mode.
       // Project resolution belongs to the official shell itself; this panel no
       // longer creates or maps DSH conversations.

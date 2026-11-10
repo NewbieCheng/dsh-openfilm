@@ -12,6 +12,8 @@ export function templateProjectUrl(editorOrigin, projectId) {
   if (typeof projectId !== 'string' || !/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw new Error('Invalid project');
   return `${new URL(editorOrigin).origin}/projects/${projectId}`;
 }
+const HOST_HTTP = typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol);
+
 export function createStudioPanel(React) {
   const h = React.createElement;
   return function StudioPanel({ t, startStudio }) {
@@ -35,6 +37,9 @@ export function createStudioPanel(React) {
     const heardRef = React.useRef(false);
 
     React.useEffect(() => {
+      // A custom-scheme page (dsh-app://app) cannot reach /api/... at all; the
+      // app protocol handler answers 404. Skip instead of logging noise.
+      if (!HOST_HTTP) return undefined;
       let live = true;
       // Read the Host's own view of the video preset so a silent activation
       // failure is visible here instead of surfacing later as a broken chat.
@@ -68,7 +73,7 @@ export function createStudioPanel(React) {
         if (controller.signal.aborted) return;
         const target = new URL(result.editorOrigin);
         const desktop = window.location.hostname === 'app' && ['dsh-app:', 'app:'].includes(window.location.protocol);
-        const hostAllowed = desktop ? target.hostname === '127.0.0.2' : ['127.0.0.1', 'localhost'].includes(target.hostname) && target.hostname === window.location.hostname;
+        const hostAllowed = desktop ? ['127.0.0.1', '127.0.0.2'].includes(target.hostname) : ['127.0.0.1', 'localhost'].includes(target.hostname) && target.hostname === window.location.hostname;
         if (target.protocol !== 'http:' || !hostAllowed || !target.port || target.username || target.password || target.pathname !== '/' || target.search || target.hash) {
           throw new Error(`Invalid local Studio address (${window.location.hostname || 'none'} → ${target.hostname || 'none'})`);
         }
@@ -110,7 +115,7 @@ export function createStudioPanel(React) {
     }, [state.status, state.url, attempt]);
 
     React.useEffect(() => {
-      if (!silent || state.status !== 'ready') return undefined;
+      if (!HOST_HTTP || !silent || state.status !== 'ready') return undefined;
       let live = true;
       fetch('/api/no996-openfilm/diagnose', { method: 'POST', credentials: 'same-origin' })
         .then(response => (response.ok ? response.json() : { httpStatus: response.status }))
@@ -152,7 +157,7 @@ export function createStudioPanel(React) {
     // Archive polling: archiving in the DSH sidebar has no channel into this
     // frame, and a stalled send is the symptom we are removing.
     React.useEffect(() => {
-      if (!projectId || state.status !== 'ready') { setArchive(null); return undefined; }
+      if (!HOST_HTTP || !projectId || state.status !== 'ready') { setArchive(null); return undefined; }
       let live = true;
       const read = async () => {
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
