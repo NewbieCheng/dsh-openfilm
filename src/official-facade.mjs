@@ -119,7 +119,19 @@ function officialFacadeFactory(bridge) {
     ...methods('localAgents', ['signIn', 'disconnect', 'probe', 'running', 'ack', 'steer', 'adopt', 'cancel', 'setOption', 'answerPermission', 'answerQuestion', 'close']),
     list: async () => [],
     ack: async () => ({ ok: true }),
-    probe: async (agent) => ({ ok: true, id: agent }),
+    probe: async () => {
+      // The model menu calls probe() and reads `info.configOptions`; returning a
+      // bare {ok} crashed it with "cannot read properties of undefined".
+      const info = { sessionId: 'probe', agentInfo: { name: 'DeepSeek Harness' }, authMethods: [], mcp: false, models: null, modes: null, configOptions: [] };
+      const match = /^\/projects\/([A-Za-z0-9_-]{6,40})\/?$/.exec(globalThis.location?.pathname || '');
+      if (match) {
+        try {
+          const option = await rpc('agent:models', { projectId: match[1] });
+          if (option && option.id === 'model' && Array.isArray(option.options)) info.configOptions = [option];
+        } catch { /* keep the empty list */ }
+      }
+      return { ok: true, info };
+    },
     running: async () => [],
     adopt: async () => ({ ok: true }),
     close: async () => ({ ok: true }),

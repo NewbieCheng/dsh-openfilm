@@ -2,8 +2,37 @@
 
 OpenFilm 视频创作作为 DSH 插件：整页官方 Studio 0.3.1 + 官方对话列，对话经 Host 桥到 DSH 会话。
 
-## 安装（任何 DSH 环境）
+## 下载方式
 
+**方式一（推荐）：直接拿打包好的插件包**
+
+```
+dist/dsh-openfilm-0.1.0.tgz
+```
+
+下载后在你的 DSH 工作区安装：
+
+```sh
+pnpm add /path/to/dsh-openfilm-0.1.0.tgz
+# 或 npm i /path/to/dsh-openfilm-0.1.0.tgz
+```
+
+**方式二：克隆源码**
+
+```sh
+git clone https://github.com/NewbieCheng/dsh-openfilm.git
+cd dsh-openfilm && pnpm install
+```
+
+两种方式装好后，都在 DSH profile 里挂上插件：
+
+```yaml
+- insert:
+    - id: dsh-openfilm
+      name: 'dsh-openfilm'
+```
+
+重启 DSH，侧边栏出现「视频创作」。
 ```sh
 git clone https://github.com/NewbieCheng/dsh-openfilm.git
 cd dsh-openfilm
@@ -65,4 +94,5 @@ The production Studio runtime is the official OpenFilm npm release declared by t
 `src/project-core.mjs` is an isolated local experiment; it is **not** registered by the plugin. Its cooperative lock is not an atomic compare-and-swap against external writers, nor is its Node filesystem a substitute for DSH's sandbox. Do not connect it to the UI or tools as an authorization boundary. A DSH filesystem-backed service and a clear conflict and isolation model are needed first.
 
 Upstream film pages may contain arbitrary executable HTML/JavaScript. Do not execute them in the DSH origin or assume the upstream local server/renderer confines network, files or projects. No render sandbox is implemented.
+
 
