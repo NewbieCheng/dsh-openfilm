@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createOfficialAgentEventState, translateOfficialAgentEvent } from './official-agent-events.mjs';
 
 // Host-only adapter. verifier must authorize the caller and return the upstream
@@ -117,6 +120,7 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
       }
       if (active.has(projectId) || uncertain.has(projectId)) throw fail('OFFICIAL_AGENT_BUSY', 'Project turn is active or requires recovery');
       const operation = { admitted: false, rejected: false, matched: false, conflict: false, finished: false, sessionId: undefined, cancelRequested: false };
+      const trace = [];
       active.set(projectId, operation); // before the first await
       const abort = new AbortController();
       aborts.set(projectId, abort);
@@ -145,6 +149,12 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
               const next = await iterator.next();
               if (next.done) throw fail('OFFICIAL_AGENT_STREAM_LOST', 'Session stream ended before the turn completed');
               const frame = next.value;
+              // Temporary trace: the live frame shapes are not documented anywhere
+              // reachable, and guessing them is how thinking and tool output went
+              // missing. One file, overwritten per send, text truncated.
+              try {
+                trace.push(JSON.stringify(frame, (key, value) => (typeof value === 'string' ? value.slice(0, 200) : value)).slice(0, 800));
+              } catch { /* unserializable frame */ }
               if (frame?.type === 'event') {
                 const event = frame.event;
                 if (event?.type === 'turn/start') {
@@ -217,6 +227,7 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
         }
         throw error;
       } finally {
+        try { await writeFile(join(tmpdir(), 'dsh-openfilm-frames.jsonl'), trace.join('\n'), 'utf8'); } catch { /* diagnostics only */ }
         abort.abort();
         if (aborts.get(projectId) === abort) aborts.delete(projectId);
         if (iterator?.return) { try { await iterator.return(); } catch { /* stream already failed */ } }
