@@ -34,6 +34,7 @@ export function startLocalConsole({
 </style>
 <h1>OpenFilm 模板</h1>
 <p class="sub">此调试页面仅供查看模板；请在视频创作面板中创建项目。</p>
+<p><a class="btn" href="/editor">打开 OpenFilm Studio 编辑器 ›</a></p>
 ${body}
 <script>
 document.addEventListener('click', async (event) => {
@@ -66,7 +67,7 @@ document.addEventListener('click', async (event) => {
     void (async () => {
       if (url.pathname === '/editor') {
         const location = await editorUrl();
-        if (!location) return send(503, 'text/plain; charset=utf-8', '编辑器尚未就绪：请先打开左侧「视频创作」一次。');
+        if (!location) return send(503, 'text/plain; charset=utf-8', '编辑器尚未就绪：请先在视频创作面板打开一次（或稍后重试）。');
         res.writeHead(302, { location, 'cache-control': 'no-store' }).end();
         return;
       }

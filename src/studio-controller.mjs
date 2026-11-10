@@ -74,6 +74,15 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   if (process.env.NO996_OPENFILM_DEBUG_PORT !== '0') {
     debugBridge = startLocalConsole({
       templates: () => listTemplates(templatesRoot),
+      // The right-side browser has no DSH cookie, so /editor hands it a one-use
+      // ticket instead of a cookie-gated URL. Minted in-process, never logged.
+      editorUrl: async () => {
+        if (disposed || !lastProxy) return null;
+        try {
+          const proxy = await lastProxy;
+          return proxy?.issueTicket?.()?.url ?? null;
+        } catch { return null; }
+      },
     });
     debugBridge.catch(() => { debugBridge = undefined; });
   }
