@@ -203,8 +203,15 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
         // An invoked prompt can have been accepted even if its receipt was lost.
         // Only an explicit rejection or a verified terminal settles that doubt.
         if (operation.admitted && (!operation.rejected || operation.matched) && !operation.finished) {
-          uncertain.add(projectId);
-          throw fail('OFFICIAL_AGENT_OUTCOME_UNKNOWN', `${error?.message || String(error)} (admission or turn outcome unknown; do not retry without recovery)`);
+          // Only a turn that actually entered the session is uncertain: `matched`
+          // is set when this exact prompt's user message is observed. Without it
+          // nothing ran, so a permanent lock would just break the project — this
+          // is the "no model selected" path that made every first message 503.
+          if (operation.matched) {
+            uncertain.add(projectId);
+            throw fail('OFFICIAL_AGENT_OUTCOME_UNKNOWN', `${error?.message || String(error)} (admission or turn outcome unknown; do not retry without recovery)`);
+          }
+          throw fail('OFFICIAL_AGENT_NOT_STARTED', `${error?.message || String(error)}`);
         }
         throw error;
       } finally {

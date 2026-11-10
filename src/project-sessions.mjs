@@ -83,6 +83,16 @@ export async function openProjectSessions(ctx, { z } = {}) {
       } catch (cause) {
         throw recovery(projectId, cause);
       }
+      // A brand-new Session has no model, and prompting one fails before the turn
+      // can start. Adopt the Host default once, here, so it never overwrites a
+      // model the person picks later in the conversation.
+      try {
+        const catalog = await ctx.sessionController.modelCatalog();
+        const chosen = catalog?.default;
+        if (typeof chosen?.provider === 'string' && typeof chosen?.model === 'string') {
+          await ctx.sessionController.selectModel({ sessionId, provider: chosen.provider, model: chosen.model });
+        }
+      } catch { /* the first prompt reports an unusable model */ }
       try {
         await table.put(key, { state: 'bound', projectId, path: projectPath, sessionId });
       } catch (cause) {

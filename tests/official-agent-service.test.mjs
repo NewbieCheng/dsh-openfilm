@@ -113,9 +113,23 @@ test('unaccepted update fails explicitly and leaves unknown turn locked', async 
   await assert.rejects(send(f.service), { code: 'OFFICIAL_AGENT_BUSY' });
 });
 
-test('lost admission receipt locks project while explicit rejection does not', async () => {
+test('an unattributed prompt failure is retryable, an attributed one stays locked', async () => {
+  // Nothing entered the session: locking here is what turned "no model" into a
+  // permanently broken project.
+  const failed = fixture();
+  failed.controller.prompt = async () => { throw new Error('Model is not selected'); };
+  await assert.rejects(send(failed.service), { code: 'OFFICIAL_AGENT_NOT_STARTED' });
+  failed.controller.prompt = async () => { throw new Error('Model is not selected'); };
+  await assert.rejects(send(failed.service), { code: 'OFFICIAL_AGENT_NOT_STARTED' });
+
+  // The session did accept this exact prompt before the receipt was lost.
   const uncertain = fixture();
-  uncertain.controller.prompt = async () => { throw new Error('receipt lost'); };
+  uncertain.controller.prompt = async ({ requestId }) => {
+    uncertain.push({ type: 'event', event: { type: 'turn/start', data: { turn: 1 } } });
+    uncertain.push({ type: 'event', event: { type: 'user/message', data: { source: { kind: 'user', rpcId: requestId } } } });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    throw new Error('receipt lost');
+  };
   await assert.rejects(send(uncertain.service), /do not retry/);
   await assert.rejects(send(uncertain.service), { code: 'OFFICIAL_AGENT_BUSY' });
   const rejected = fixture();
