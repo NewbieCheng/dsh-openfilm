@@ -79,7 +79,10 @@ window.__ModuleLoader__.load({
       if (!response.ok) {
         const code = await response.text();
         const known = ['DSH_ORIGIN_REJECTED', 'DSH_SESSION_REQUIRED', 'DSH_BROWSER_REQUIRED', 'STUDIO_DISPOSED'];
-        throw new Error(`HTTP ${response.status}${known.includes(code) ? ` (${code})` : ''}`);
+        // The origin is part of the message on purpose: a 404 here means the
+        // request never reached this Host, and the only way to tell why without
+        // a console is to see which origin the page thinks it is on.
+        throw new Error(`HTTP ${response.status}${known.includes(code) ? ` (${code})` : ''} @ ${window.location.origin}`);
       }
       const data = await response.json();
       if (typeof data?.editorOrigin !== 'string') throw new Error('Invalid Studio response');

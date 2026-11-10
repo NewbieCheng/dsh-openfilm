@@ -427,7 +427,7 @@
         if (!response.ok) {
           const code = await response.text();
           const known = ["DSH_ORIGIN_REJECTED", "DSH_SESSION_REQUIRED", "DSH_BROWSER_REQUIRED", "STUDIO_DISPOSED"];
-          throw new Error(`HTTP ${response.status}${known.includes(code) ? ` (${code})` : ""}`);
+          throw new Error(`HTTP ${response.status}${known.includes(code) ? ` (${code})` : ""} @ ${window.location.origin}`);
         }
         const data = await response.json();
         if (typeof data?.editorOrigin !== "string") throw new Error("Invalid Studio response");
