@@ -1,6 +1,6 @@
 {
   "name": "dsh-openfilm",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "OpenFilm video studio as a DSH plugin: the official Studio + Chat shell, bridged to a DSH session.",
   "type": "module",
   "license": "MIT",

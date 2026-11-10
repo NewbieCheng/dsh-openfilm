@@ -417,7 +417,7 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
       if(busy)return; busy=true; el.textContent='创建中…';
       fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'template:create',payload:{templateId:t.id}})})
         .then(function(r){return r.json()})
-        .then(function(d){ if(d&&d.projectId){ location.href='/projects/'+d.projectId; return } throw new Error('无法创建项目') })
+        .then(function(d){ if(d&&d.projectId){ try{ if(d.prompt) localStorage.setItem('no996.openfilm.templatePrompt', d.prompt) }catch(e){} location.href='/projects/'+d.projectId; return } throw new Error('无法创建项目') })
         .catch(function(e){ busy=false; el.textContent=t.title; show((e&&e.message)||String(e)) });
     };
     return el;
@@ -446,6 +446,29 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
   }
   setTimeout(load,2500);
   setInterval(function(){ if(location.pathname!=='/'){ remove(); return } load() },8000);
+  // The template's prompt waits in localStorage until the new project page can
+  // take it: React owns the composer, so set the value through the native setter
+  // and fire input, then clear the flag.
+  var tries=0;
+  function prefill(){
+    if(!/^\/projects\//.test(location.pathname))return;
+    var text=null; try{ text=localStorage.getItem('no996.openfilm.templatePrompt') }catch(e){}
+    if(!text)return;
+    var box=document.querySelector('#of-chat textarea')||document.querySelector('#of-chat [contenteditable="true"]');
+    if(!box){ if(++tries<40)setTimeout(prefill,500); return }
+    try{
+      if(box.tagName==='TEXTAREA'){
+        var setter=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set;
+        setter.call(box,text);
+        box.dispatchEvent(new Event('input',{bubbles:true}));
+      } else {
+        box.focus();
+        document.execCommand('insertText',false,text);
+      }
+      localStorage.removeItem('no996.openfilm.templatePrompt');
+    }catch(e){ if(++tries<40)setTimeout(prefill,500) }
+  }
+  setTimeout(prefill,3000);
 })();</script><style>[data-app-menu]>[role="menuitem"]:not(:first-child),[data-community-menu]{display:none!important}</style>`;
               value = value.replace(/<head(?:\s[^>]*)?>/i, match => match + host);
               if (value.includes('__no996Diag')) diag.injected += 1;

@@ -90,7 +90,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       // folder under the home directory keeps the same one-project-one-folder shape.
       const projects = await proxy.listProjects().catch(() => []);
       const parentDir = projects.length ? dirname(projects[0].path) : join(homedir(), 'OpenFilm');
-      return installTemplate({ root: templatesRoot, id: chosen.id, parentDir, createProject: target => proxy.createProject(target), titleFor: () => chosen.title });
+      return { ...(await installTemplate({ root: templatesRoot, id: chosen.id, parentDir, createProject: target => proxy.createProject(target), titleFor: () => chosen.title })), prompt: chosen.prompt };
     }
     return createOfficialChatRpc(store, agentService)(channel, payload);
   };
