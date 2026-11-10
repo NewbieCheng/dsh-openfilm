@@ -37,7 +37,16 @@ function officialFacadeFactory(bridge) {
   const eventAllow = new Set(['desktop:full-screen', 'desktop:toggle-chat', 'desktop:open-settings']);
   const rpc = async (channel, payload) => {
     if (!rpcAllow.has(channel) || typeof bridge.invoke !== 'function') throw unavailable(channel);
-    try { return await bridge.invoke(channel, payload); } catch { throw unavailable(channel); }
+    try { return await bridge.invoke(channel, payload); }
+    catch (error) {
+      // Keep the Host's reason: replacing it with a bare 'unavailable' is what
+      // made a 503 look like a missing capability and cost a round of diagnosis.
+      const wrapped = unavailable(channel);
+      const detail = error && error.message ? String(error.message).slice(0, 300) : '';
+      if (detail) wrapped.message = wrapped.message + ' — ' + detail;
+      if (error && typeof error.code === 'string') wrapped.code = error.code;
+      throw wrapped;
+    }
   };
   // Do not forward the path supplied by a page. Match it to the official
   // shell's current project and send only the opaque ID; the Host must also
