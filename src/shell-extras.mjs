@@ -68,7 +68,12 @@ export const shellUiInjection = `<script>(function(){
       // regex escapes would be collapsed before the page ever parses it.
       var ok=typeof url==='string'&&(url.indexOf('http://127.0.0.1:')===0||url.indexOf('http://127.0.0.2:')===0||url.indexOf('http://localhost:')===0)&&url.indexOf('/__dsh/open#')>0;
       if(!ok)throw new Error('bad link');
-      window.open(url,'_blank','noopener');
+      // The ticket is one-use and short-lived, so also put it on the clipboard:
+      // a popup blocker after an await is common, and the person can paste it.
+      try{ if(navigator.clipboard) navigator.clipboard.writeText(url).catch(function(){}); }catch(e){}
+      open.title=url;
+      var win=window.open(url,'_blank','noopener');
+      if(!win){ open.textContent='已复制'; setTimeout(function(){ open.textContent='↗'; },2000); }
     }).catch(function(){ open.title='链接不可用'; }).then(function(){ setTimeout(function(){ open.disabled=false; },800); });
   });
   button.addEventListener('click',function(){

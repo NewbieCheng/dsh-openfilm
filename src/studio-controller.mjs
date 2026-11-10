@@ -418,6 +418,16 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       }
     },
   });
+  // Warm the editor port once at assembly. Otherwise the proxy only exists after
+  // the first bootstrap, so opening http://<host>:47822 directly (or pasting the
+  // address from the docs) reads as a dead port even though the plugin is fine.
+  // Failures are ignored on purpose: the panel still bootstraps lazily.
+  void (async () => {
+    try {
+      await runtime.ensureStarted();
+      if (!disposed && upstream) await proxyFor(webOrigin);
+    } catch { /* lazy bootstrap remains */ }
+  })();
   return async () => {
     disposed = true;
     unregisterContext();
