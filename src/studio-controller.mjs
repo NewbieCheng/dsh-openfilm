@@ -199,9 +199,19 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const admission = ctx.connection.admit({ headers: req.headers });
       if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('{}'); return; }
       const proxy = await lastProxy?.catch(() => undefined);
+      // Whether the video-editing preset actually activated, not just whether its
+      // row exists: the roster carries each preset's activation diagnostic.
+      let preset = null;
+      try {
+        const registry = ctx.get?.('agentPresets');
+        const roster = typeof registry?.list === 'function' ? await registry.list() : [];
+        const found = roster.find(item => item?.id === 'openfilm-video-editing');
+        preset = found ? { id: 'openfilm-video-editing', ok: !found.error && !found.failure, detail: String(found.error ?? found.failure ?? 'ok').slice(0, 200) } : { id: 'openfilm-video-editing', ok: false, detail: 'not registered' };
+      } catch (error) { preset = { id: 'openfilm-video-editing', ok: false, detail: String(error?.message || error).slice(0, 200) }; }
       const body = JSON.stringify({
         mode: officialShell ? 'official' : 'dsh',
         studio: runtime.status(),
+        preset,
         proxy: proxy?.diagnostics?.() ?? null,
       });
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);

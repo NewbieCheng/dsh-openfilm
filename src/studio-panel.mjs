@@ -23,6 +23,7 @@ export function createStudioPanel(React) {
     const [view, setView] = React.useState('home');
     const [templateError, setTemplateError] = React.useState(false);
     const [creationUncertain, setCreationUncertain] = React.useState(false);
+    const [preset, setPreset] = React.useState(null);
     const [creating, setCreating] = React.useState(false);
     const containerRef = React.useRef(null);
     const iframeRef = React.useRef(null);
@@ -30,6 +31,17 @@ export function createStudioPanel(React) {
     const creatingRef = React.useRef(false);
     const viewRef = React.useRef(view);
     viewRef.current = view;
+
+    React.useEffect(() => {
+      let live = true;
+      // Read the Host's own view of the video preset so a silent activation
+      // failure is visible here instead of surfacing later as a broken chat.
+      fetch('/api/no996-openfilm/diagnose', { method: 'POST', credentials: 'same-origin' })
+        .then(response => (response.ok ? response.json() : null))
+        .then(data => { if (live && data?.preset) setPreset(data.preset); })
+        .catch(() => {});
+      return () => { live = false; };
+    }, []);
 
     React.useEffect(() => {
       let live = true;
@@ -164,6 +176,10 @@ export function createStudioPanel(React) {
             h('span', null, creating ? t('templateBusy') : t('templateCreate'))))),
         templateError ? h('p', { role: 'alert' }, t(creationUncertain ? 'templateUncertain' : 'templateError')) : null,
         h('button', { type: 'button', disabled: creating || !ready, onClick: openExisting, style: { marginTop: 28 } }, t('openExisting')),
+        // Preset status: a silent activation failure would otherwise show up much
+        // later as a chat that cannot send.
+        preset ? h('p', { role: 'status', style: { marginTop: 12, fontSize: 12, opacity: 0.75 } },
+          preset.ok ? t('presetReady') : `${t('presetMissing')} ${String(preset.detail || '').slice(0, 120)}`) : null,
         !ready ? h('div', { style: { marginTop: 16 } }, state.status === 'ready' && !silent ? t('studioLoading') : studio) : null));
     return h('div', { ref: containerRef, style: { position: 'relative', width: '100%', height: '100%', minWidth: 0, minHeight: 0 } },
       state.status === 'ready' && !silent ? studio : view === 'editor' ? studio : null,

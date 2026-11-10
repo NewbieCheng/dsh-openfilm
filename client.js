@@ -17,6 +17,7 @@
       const [view, setView] = React.useState("home");
       const [templateError, setTemplateError] = React.useState(false);
       const [creationUncertain, setCreationUncertain] = React.useState(false);
+      const [preset, setPreset] = React.useState(null);
       const [creating, setCreating] = React.useState(false);
       const containerRef = React.useRef(null);
       const iframeRef = React.useRef(null);
@@ -24,6 +25,16 @@
       const creatingRef = React.useRef(false);
       const viewRef = React.useRef(view);
       viewRef.current = view;
+      React.useEffect(() => {
+        let live = true;
+        fetch("/api/no996-openfilm/diagnose", { method: "POST", credentials: "same-origin" }).then((response) => response.ok ? response.json() : null).then((data) => {
+          if (live && data?.preset) setPreset(data.preset);
+        }).catch(() => {
+        });
+        return () => {
+          live = false;
+        };
+      }, []);
       React.useEffect(() => {
         let live = true;
         Promise.resolve().then(() => templateRequest({ action: "list" })).then((result) => {
@@ -188,6 +199,13 @@
           ),
           templateError ? h("p", { role: "alert" }, t(creationUncertain ? "templateUncertain" : "templateError")) : null,
           h("button", { type: "button", disabled: creating || !ready, onClick: openExisting, style: { marginTop: 28 } }, t("openExisting")),
+          // Preset status: a silent activation failure would otherwise show up much
+          // later as a chat that cannot send.
+          preset ? h(
+            "p",
+            { role: "status", style: { marginTop: 12, fontSize: 12, opacity: 0.75 } },
+            preset.ok ? t("presetReady") : `${t("presetMissing")} ${String(preset.detail || "").slice(0, 120)}`
+          ) : null,
           !ready ? h("div", { style: { marginTop: 16 } }, state.status === "ready" && !silent ? t("studioLoading") : studio) : null
         )
       );
@@ -219,6 +237,8 @@
         templateBusy: "Creating\u2026",
         templateError: "Unable to load the templates.",
         templateUncertain: "The project may have been created. Open existing projects to check before trying again.",
+        presetReady: "Video editing mode: loaded",
+        presetMissing: "Video editing mode: not loaded \u2014",
         templateHomeTitle: "Start a video",
         templateHomeDescription: "Choose a template to create a project, or open an existing project.",
         openExisting: "Open existing projects"
@@ -234,6 +254,8 @@
         templateBusy: "\u6B63\u5728\u521B\u5EFA\u2026",
         templateError: "\u65E0\u6CD5\u52A0\u8F7D\u6A21\u677F\u3002",
         templateUncertain: "\u9879\u76EE\u53EF\u80FD\u5DF2\u7ECF\u521B\u5EFA\uFF0C\u8BF7\u5148\u6253\u5F00\u5DF2\u6709\u9879\u76EE\u68C0\u67E5\uFF0C\u907F\u514D\u91CD\u590D\u521B\u5EFA\u3002",
+        presetReady: "\u89C6\u9891\u526A\u8F91\u6A21\u5F0F\uFF1A\u5DF2\u52A0\u8F7D",
+        presetMissing: "\u89C6\u9891\u526A\u8F91\u6A21\u5F0F\uFF1A\u672A\u52A0\u8F7D \u2014",
         templateHomeTitle: "\u5F00\u59CB\u89C6\u9891\u521B\u4F5C",
         templateHomeDescription: "\u9009\u62E9\u6A21\u677F\u521B\u5EFA\u9879\u76EE\uFF0C\u6216\u6253\u5F00\u5DF2\u6709\u9879\u76EE\u3002",
         openExisting: "\u6253\u5F00\u5DF2\u6709\u9879\u76EE"
