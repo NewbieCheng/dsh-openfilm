@@ -1,0 +1,6 @@
+/* 纸纹讲堂 · 跨镜头共享的设计令牌与基线。
+   只放两个镜头完全一致的声明；任何会因镜头而变的数值都是单元里的变量。 */
+:root { --paper:#e1d5c5; --ink:#214f42; --wheat:#f0df9f; --charcoal:#242820; --white:#faf6ee; }
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1080px; height: 1920px; overflow: hidden; }
+body { font-family: "Songti SC", "SimSun", serif; color: var(--ink); }

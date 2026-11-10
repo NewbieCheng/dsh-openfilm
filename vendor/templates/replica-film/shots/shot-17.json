@@ -1,0 +1,53 @@
+{
+  "id": "shot-17",
+  "title": "交接结果",
+  "pageTitle": "17 · 交接结果",
+  "theme": "ice",
+  "start": 100.033,
+  "duration": 8.567,
+  "helpers": [
+    "$",
+    "$$",
+    "range",
+    "ease",
+    "wave",
+    "pose",
+    "enter",
+    "escape",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "交接结果",
+    "note": "",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "让内容接力",
+    "tags": [
+      "文稿",
+      "素材",
+      "准备就绪"
+    ],
+    "receivers": [
+      "画面",
+      "声音",
+      "字幕"
+    ],
+    "stamp": "交接完成",
+    "cues": {
+      "title": 0.02,
+      "first": 1.7,
+      "second": 1.9,
+      "giver": 2.37,
+      "object": 3.07,
+      "transfer": 4.24,
+      "receivers": 4.37,
+      "arrival": 5.07,
+      "confirmation": 6.38
+    }
+  }
+}

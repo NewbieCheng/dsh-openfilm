@@ -1,0 +1,46 @@
+{
+  "id": "shot-07",
+  "title": "步骤护栏",
+  "pageTitle": "07 · 步骤护栏",
+  "theme": "paper",
+  "start": 36.833,
+  "duration": 9.867,
+  "helpers": [
+    "$",
+    "$$",
+    "range",
+    "ease",
+    "enter",
+    "text",
+    "escape",
+    "pills",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "步骤护栏",
+    "note": "进度、错误提示和检查结果都有动作",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "把方法写成步骤",
+    "chips": [
+      "文稿",
+      "流程",
+      "检查"
+    ],
+    "steps": [
+      "明确要讲的观点",
+      "整理配套的素材",
+      "核对画面和声音"
+    ],
+    "check": [
+      "进度有迹可循",
+      "问题可以定位",
+      "结果经过核对"
+    ]
+  }
+}

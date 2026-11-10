@@ -5,11 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>03 · 开始回应</title>
   <link rel="stylesheet" href="../assets/scene.css">
-
 </head>
 <body>
 <main id="stage" class="blue radial">
-  <div class="content" id="content"></div>
+  <div class="content" id="content">
+<div class="at hero" id="title">
+      <h1>让回应有动作</h1>
+      <h2 class="gold" style="margin-top:41px">打开表达的开关</h2>
+    </div>
+    <span class="at pill" id="switch" style="left:75px;top:858px">
+      语音模式 <i id="toggle" style="display:block;width:66px;height:32px;background:#bbc1be;border-radius:50px;padding:4px"><b id="knob" style="display:block;width:24px;height:24px;background:#fff;border-radius:50%"></b></i>
+    </span>
+    <img class="at scene-icon" id="mic" src="../assets/mic.svg" alt="" style="left:674px;top:985px;width:247px;height:424px">
+    <article class="at card" id="reply" style="left:82px;top:1120px;width:534px">
+      <small class="mono" style="color:#2252c8">VOICE MESSAGE</small><p>收到。现在可以开始回应。</p>
+    </article>
+  </div>
 </main>
 <script src="../assets/scene.js"></script>
 <script>
@@ -33,29 +44,15 @@
   const START = 11.5;
   const { $, range, ease, pose, enter, escape, mount } = Scene;
 
-  $('#content').innerHTML = `
-<div class="at hero" id="title">
-      <h1>${escape(COPY.title)}</h1>
-      <h2 class="gold" style="margin-top:41px">${escape(COPY.sub)}</h2>
-    </div>
-    <span class="at pill" id="switch" style="left:75px;top:858px">
-      ${escape(COPY.switchLabel)} <i id="toggle" style="display:block;width:66px;height:32px;background:#bbc1be;border-radius:50px;padding:4px"><b id="knob" style="display:block;width:24px;height:24px;background:#fff;border-radius:50%"></b></i>
-    </span>
-    <img class="at scene-icon" id="mic" src="../assets/mic.svg" alt="" style="left:674px;top:985px;width:247px;height:424px">
-    <article class="at card" id="reply" style="left:82px;top:1120px;width:534px">
-      <small class="mono" style="color:#2252c8">VOICE MESSAGE</small><p>${escape(COPY.reply)}</p>
-    </article>
-  `;
-
   // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
   function draw(t) {
-    enter('#title', t, .12);
-    enter('#switch', t, .56, { spring: true });
-    const p = ease(range(t, 1.12, .32));
-    $('#toggle').style.background = p > .5 ? '#2ecf7b' : '#bbc1be';
-    pose('#knob', { x: 34 * p });
-    enter('#mic', t, 1.22, { y: 95, scale: .63, rotate: -18, spring: true });
-    enter('#reply', t, 2.22, { x: -88, y: 0, spring: true });
+      enter('#title', t, .12);
+      enter('#switch', t, .56, { spring: true });
+      const p = ease(range(t, 1.12, .32));
+      $('#toggle').style.background = p > .5 ? '#2ecf7b' : '#bbc1be';
+      pose('#knob', { x: 34 * p });
+      enter('#mic', t, 1.22, { y: 95, scale: .63, rotate: -18, spring: true });
+      enter('#reply', t, 2.22, { x: -88, y: 0, spring: true });
   }
   mount(COPY, DURATION, START, draw);
 </script>

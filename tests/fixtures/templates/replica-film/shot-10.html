@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>10 · 用量仪表</title>
+  <link rel="stylesheet" href="../assets/scene.css">
+
+</head>
+<body>
+<main id="stage" class="blue">
+  <div class="content" id="content"></div>
+</main>
+<script src="../assets/scene.js"></script>
+<script>
+  // 本镜头的可替换内容。配色在上方 stage 类名和本页 CSS 中修改。
+  const COPY = {
+    "chapter": "用量仪表",
+    "note": "用动画解释变化",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "让数值变化有过程",
+    "maximum": 100,
+    "label": "示例用量"
+  };
+  const DURATION = 4.233;
+  const START = 59.267;
+  const { $, $$, range, ease, wave, pose, enter, text, escape, mount } = Scene;
+
+  $('#content').innerHTML = `
+<h2 class="at hero" id="title">${escape(COPY.title)}</h2>
+    <div class="at" id="meter" style="left:76px;top:815px;width:928px">
+      <div class="mono" style="font-size:23px;display:flex;justify-content:space-between"><span>${escape(COPY.label)}</span><span id="meter-text"></span></div>
+      <div class="counter-progress"><i></i></div>
+    </div>
+    ${Array.from({length:9},(_,i) => `<img class="at scene-icon token" src="../assets/coin.svg" alt="" style="left:${98+i*92}px;top:1030px;width:58px">`).join('')}
+  `;
+
+  // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
+  function draw(t) {
+    enter('#title', t, .10);
+    enter('#meter', t, .62);
+    const p = ease(range(t, .8, 2.5));
+    text('#meter-text', Math.round(p * COPY.maximum) + ' / ' + COPY.maximum);
+    $('.counter-progress i').style.transform = `scaleX(${p})`;
+    $$('.token').forEach((node,i) => {
+      const arc = range(t, 1.05 + i * .12, 1.0);
+      pose(node, { opacity: Math.min(1, arc * 4) * (1 - range(t, 3.48, .36)), y: 55 - 157 * wave(arc) - i * 11, x: 37 * arc, scale: .62 + .38 * arc, rotate: i * 37 + arc * 168 });
+    });
+  }
+  mount(COPY, DURATION, START, draw);
+</script>
+</body>
+</html>

@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=1920, height=1080">
   <title>点阵手账 · 费曼学习法</title>
   <style>
-    /* A browser shows a shot wall. OpenFilm uses the track and explicit clip times. */
-    body:has(> #shots) { margin: 18px; background: #292d37; }
+    /* 本机直开时显示镜头墙；OpenFilm 读取下方 iframe 的 at 与 #t 时间。 */
     body > #shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
-    #shots > iframe { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 0; }
+    body:has(> #shots) { margin: 18px; background: #292d37; }
+    #shots > iframe { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; border: 0; }
   </style>
 </head>
 <body>

@@ -5,11 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>06 · 提示融入</title>
   <link rel="stylesheet" href="../assets/scene.css">
-
 </head>
 <body>
 <main id="stage" class="violet">
-  <div class="content" id="content"></div>
+  <div class="content" id="content">
+<div class="at hero" id="title"><h2>让想法变成提示</h2><div class="chip-row" style="margin-top:71px"><span class="pill">目标</span><span class="pill">语气</span></div></div>
+    <div class="at card" id="prompt" style="left:79px;top:816px;width:523px"><small class="mono" style="color:#786b95">PROMPT　/　结构</small><p>顺序：问题 → 例子 → 结论</p></div>
+    <img class="at scene-icon" id="brain" src="../assets/brain.svg" alt="" style="left:590px;top:866px;width:365px;height:298px">
+    <span class="at pill" id="result" style="left:640px;top:1205px"><i class="dot green"></i> 已理解目标</span>
+  </div>
 </main>
 <script src="../assets/scene.js"></script>
 <script>
@@ -36,22 +40,15 @@
   const START = 30.133;
   const { $, range, ease, wave, pose, enter, escape, pills, mount } = Scene;
 
-  $('#content').innerHTML = `
-<div class="at hero" id="title"><h2>${escape(COPY.title)}</h2><div class="chip-row" style="margin-top:71px">${pills(COPY.labels)}</div></div>
-    <div class="at card" id="prompt" style="left:79px;top:816px;width:523px"><small class="mono" style="color:#786b95">PROMPT　/　结构</small><p>${escape(COPY.prompt)}</p></div>
-    <img class="at scene-icon" id="brain" src="../assets/brain.svg" alt="" style="left:590px;top:866px;width:365px;height:298px">
-    <span class="at pill" id="result" style="left:640px;top:1205px"><i class="dot green"></i> ${escape(COPY.result)}</span>
-  `;
-
   // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
   function draw(t) {
-    enter('#title', t, .12);
-    enter('#brain', t, .82, { y: 35, rotate: 9, spring: true });
-    const inView = ease(range(t, .7, .46));
-    const absorb = ease(range(t, 3.8, .82));
-    pose('#prompt', { x: absorb * 570, y: (1 - inView) * 55 + absorb * 110, scale: 1 - absorb * .84, opacity: inView * (1 - absorb) });
-    $('#brain').style.filter = `drop-shadow(0 0 ${8 + wave(absorb) * 35}px #ffd27f90)`;
-    enter('#result', t, 4.62, { spring: true });
+      enter('#title', t, .12);
+      enter('#brain', t, .82, { y: 35, rotate: 9, spring: true });
+      const inView = ease(range(t, .7, .46));
+      const absorb = ease(range(t, 3.8, .82));
+      pose('#prompt', { x: absorb * 570, y: (1 - inView) * 55 + absorb * 110, scale: 1 - absorb * .84, opacity: inView * (1 - absorb) });
+      $('#brain').style.filter = `drop-shadow(0 0 ${8 + wave(absorb) * 35}px #ffd27f90)`;
+      enter('#result', t, 4.62, { spring: true });
   }
   mount(COPY, DURATION, START, draw);
 </script>

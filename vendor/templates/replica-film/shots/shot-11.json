@@ -1,0 +1,37 @@
+{
+  "id": "shot-11",
+  "title": "按钮响应",
+  "pageTitle": "11 · 按钮响应",
+  "theme": "orange radial",
+  "start": 63.5,
+  "duration": 5.633,
+  "helpers": [
+    "$",
+    "$$",
+    "range",
+    "wave",
+    "pose",
+    "enter",
+    "escape",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "按钮响应",
+    "note": "也应该有清楚的回应",
+    "presenter": {
+      "shape": "portrait",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "有反馈",
+    "subtitle": "互动需要被看见",
+    "buttons": [
+      "已开始",
+      "确认方案",
+      "留下反馈"
+    ]
+  },
+  "style": "#stage.orange.radial { --theme: linear-gradient(128deg,#ec321b,#ff9e24); }"
+}

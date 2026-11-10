@@ -1,0 +1,42 @@
+{
+  "id": "shot-19",
+  "title": "你的表达",
+  "pageTitle": "19 · 你的表达",
+  "theme": "dark",
+  "start": 115.933,
+  "duration": 6,
+  "helpers": [
+    "$",
+    "$$",
+    "range",
+    "ease",
+    "wave",
+    "pose",
+    "enter",
+    "escape",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "你的表达",
+    "note": "让模板服务于你的内容",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "让内容成为主角",
+    "body": "提供口播、字幕和素材，再检查画面与声音",
+    "items": [],
+    "colors": [
+      "#ffd166",
+      "#b6a1e6",
+      "#86ddc3",
+      "#eea698",
+      "#aabdea"
+    ],
+    "cue": 2.7,
+    "mode": "summary"
+  }
+}

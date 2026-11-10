@@ -1,0 +1,34 @@
+{
+  "id": "shot-01",
+  "title": "标题与讲解台",
+  "pageTitle": "纸纹讲堂 · 标题页",
+  "duration": 6,
+  "vars": {
+    "kicker-size": "34px",
+    "kicker-tracking": ".32em",
+    "title-size": "92px",
+    "title-gap": "20px",
+    "title-line": "1.12",
+    "em-pad": "6px",
+    "capsule-bottom": "120px"
+  },
+  "backdrop": "radial-gradient(120% 80% at 50% 0%, #ece2d3 0%, var(--paper) 55%, #d9cbb8 100%)",
+  "relative": true,
+  "copy": {
+    "kicker": "纸 纹 讲 堂",
+    "title": "一页纸，讲<em>清一件事</em>",
+    "slideTitle": "你的课件标题",
+    "slideHint": "把 PPT / 截图放进这里的通栏区域",
+    "nameplate": "讲者 · 你的名字",
+    "presenter": "人物窗口",
+    "capsule": "字幕胶囊：一句话说清这一页要讲什么。"
+  },
+  "units": [
+    { "unit": "paper.grain" },
+    { "unit": "paper.head", "props": { "kicker": "{{copy.kicker}}", "title": "{{{copy.title}}}" } },
+    { "unit": "paper.stage", "props": { "slideTitle": "{{copy.slideTitle}}", "slideHint": "{{copy.slideHint}}" } },
+    { "unit": "paper.nameplate", "props": { "text": "{{copy.nameplate}}" } },
+    { "unit": "paper.presenter", "props": { "text": "{{copy.presenter}}" } },
+    { "unit": "paper.capsule", "props": { "text": "{{copy.capsule}}" } }
+  ]
+}

@@ -1,0 +1,191 @@
+{
+  "version": 1,
+  "note": "素材目录：模板页由这里的单元拼出来。加一个单元 = 在 units 里加一条 + 两个文件（.html 与同名 .css）。",
+  "units": {
+    "paper.grain": {
+      "file": "paper/units/grain.html",
+      "css": "paper/units/grain.css",
+      "kind": "layer",
+      "slots": [],
+      "doc": "纸张颗粒噪点层，铺满画面；只在需要纹理的镜头上出现。"
+    },
+    "paper.head": {
+      "file": "paper/units/head.html",
+      "css": "paper/units/head.css",
+      "kind": "block",
+      "slots": [
+        "kicker",
+        "title"
+      ],
+      "vars": [
+        "--kicker-size",
+        "--kicker-tracking",
+        "--title-size",
+        "--title-gap",
+        "--title-line",
+        "--em-pad"
+      ],
+      "doc": "顶部双行标题。kicker 是字距拉开的小字，title 可用 <em> 做麦黄衬底高亮。三个字号与字距都是变量，便于同一模板的不同镜头微调。"
+    },
+    "paper.stage": {
+      "file": "paper/units/stage.html",
+      "css": "paper/units/stage.css",
+      "kind": "block",
+      "slots": [
+        "slideTitle",
+        "slideHint"
+      ],
+      "doc": "中上部通栏课件区：白色纸卡 + 虚线占位框，用来放 PPT / 截图 / 板书。"
+    },
+    "paper.nameplate": {
+      "file": "paper/units/nameplate.html",
+      "css": "paper/units/nameplate.css",
+      "kind": "block",
+      "slots": [
+        "text"
+      ],
+      "doc": "左下竖排名牌（writing-mode: vertical-rl），放讲者姓名或栏目名。"
+    },
+    "paper.presenter": {
+      "file": "paper/units/presenter.html",
+      "css": "paper/units/presenter.css",
+      "kind": "block",
+      "slots": [
+        "text"
+      ],
+      "doc": "右下圆角人物窗口占位。要换成真人视频时，把这个 div 换成 <video> 即可，尺寸与圆角已由 CSS 定义。"
+    },
+    "paper.capsule": {
+      "file": "paper/units/capsule.html",
+      "css": "paper/units/capsule.css",
+      "kind": "block",
+      "slots": [
+        "text"
+      ],
+      "vars": [
+        "--capsule-bottom"
+      ],
+      "doc": "底部炭黑字幕胶囊。一句一页，和分镜时长对齐。"
+    },
+    "paper.steps": {
+      "file": "paper/units/steps.html",
+      "css": "paper/units/steps.css",
+      "kind": "block",
+      "slots": [
+        "items"
+      ],
+      "doc": "竖排步骤容器：编号圆点 + 标题 + 说明。items 由 paper.step 逐个渲染后拼进 {{{items}}}。"
+    },
+    "paper.step": {
+      "file": "paper/units/step.html",
+      "css": null,
+      "kind": "item",
+      "slots": [
+        "num",
+        "title",
+        "body"
+      ],
+      "doc": "单个步骤条目（仅由 paper.steps 重复使用）。"
+    },
+    "replica.hero": {
+      "file": "replica/units/hero.html",
+      "kind": "block",
+      "slots": [
+        "id",
+        "titleSize",
+        "title",
+        "sticker",
+        "stickerGap"
+      ],
+      "doc": "镜头主标题（.hero）：一行大字 + 可选贴纸副标。字号逐镜头不同，用 titleSize 指定。样式在 assets/scene.css。"
+    },
+    "replica.sticker": {
+      "file": "replica/units/sticker.html",
+      "kind": "block",
+      "slots": [
+        "id",
+        "style",
+        "text"
+      ],
+      "doc": "贴纸标签（.sticker）：旋转的强调块，用于关键词、印章、批注。"
+    },
+    "replica.card": {
+      "file": "replica/units/card.html",
+      "kind": "block",
+      "slots": [
+        "id",
+        "style",
+        "body"
+      ],
+      "doc": "纸卡（.card）：浅底的内容卡片，body 可放任意段落；绝对定位由 style 传入。"
+    },
+    "replica.dark-card": {
+      "file": "replica/units/dark-card.html",
+      "kind": "block",
+      "slots": [
+        "id",
+        "style",
+        "body"
+      ],
+      "doc": "深色纸卡（.card.dark-card）：黑底金字的对照卡，用于结论与检查清单。"
+    },
+    "replica.chip-row": {
+      "file": "replica/units/chip-row.html",
+      "kind": "block",
+      "slots": [
+        "style",
+        "chips"
+      ],
+      "doc": "胶囊横排（.chip-row）：chips 由 replica.chip 逐个渲染。"
+    },
+    "replica.chip": {
+      "file": "replica/units/chip.html",
+      "kind": "item",
+      "slots": [
+        "label"
+      ],
+      "doc": "单个胶囊（.pill）：一个词或一个标签。"
+    },
+    "replica.metric": {
+      "file": "replica/units/metric.html",
+      "kind": "block",
+      "slots": [
+        "id",
+        "style",
+        "valueId",
+        "value",
+        "unit",
+        "chips",
+        "chipGap"
+      ],
+      "doc": "数字指标（.number.gold + 单位 + 可选胶囊排）：用于计数动画的落点，valueId 是动画写入的目标。"
+    },
+    "replica.page-list": {
+      "file": "replica/units/page-list.html",
+      "kind": "block",
+      "slots": [
+        "items"
+      ],
+      "doc": "竖排要点列表（.page-list）：items 由 replica.page-point 逐个渲染。"
+    },
+    "replica.page-point": {
+      "file": "replica/units/page-point.html",
+      "kind": "item",
+      "slots": [
+        "color",
+        "text"
+      ],
+      "doc": "单条要点（.list-item.point）：色块底 + 一句话。"
+    },
+    "replica.scene-icon": {
+      "file": "replica/units/scene-icon.html",
+      "kind": "block",
+      "slots": [
+        "kind",
+        "src",
+        "style"
+      ],
+      "doc": "场景图标（.scene-icon）：assets 里的 SVG 插画，kind 可加 heart/token 等状态类。"
+    }
+  }
+}

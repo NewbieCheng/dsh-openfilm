@@ -1,0 +1,75 @@
+{
+  "id": "shot-09",
+  "title": "分层展陈",
+  "pageTitle": "09 · 分层展陈",
+  "theme": "lilac",
+  "start": 53.933,
+  "duration": 5.334,
+  "helpers": [
+    "$",
+    "$$",
+    "enter",
+    "escape",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "分层展陈",
+    "note": "再把自己的作品铺成画廊",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "把素材铺成画廊",
+    "layers": [
+      "动画组件",
+      "内容结构",
+      "主题"
+    ],
+    "colors": [
+      "#6945ef",
+      "#3159e6",
+      "#8b898e"
+    ],
+    "tiles": [
+      {
+        "color": "#ec452f",
+        "label": "示例 01"
+      },
+      {
+        "color": "#2461ed",
+        "label": "示例 02"
+      },
+      {
+        "color": "#7950ef",
+        "label": "示例 03"
+      },
+      {
+        "color": "#ef8b31",
+        "label": "示例 04"
+      },
+      {
+        "color": "#397c72",
+        "label": "示例 05"
+      },
+      {
+        "color": "#4c57ac",
+        "label": "示例 06"
+      },
+      {
+        "color": "#d65d76",
+        "label": "示例 07"
+      },
+      {
+        "color": "#886ab8",
+        "label": "示例 08"
+      },
+      {
+        "color": "#2f7994",
+        "label": "示例 09"
+      }
+    ]
+  }
+}

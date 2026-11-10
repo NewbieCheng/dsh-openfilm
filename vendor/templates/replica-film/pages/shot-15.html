@@ -5,11 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>15 · 观点解释</title>
   <link rel="stylesheet" href="../assets/scene.css">
-
 </head>
 <body>
 <main id="stage" class="dark">
-  <div class="content" id="content"></div>
+  <div class="content" id="content">
+<div class="at hero" style="top:438px">
+      <h1 id="title" style="font-size:64px">文案以你为主</h1>
+      <div class="gold-rule" id="rule" style="margin-top:74px"></div>
+      <p id="body" style="margin-top:36px;font-size:34px;width:870px">动画服务于你真正想说的重点</p>
+    </div>
+    <div class="at page-list">
+      
+    </div>
+    <span class="at sticker" id="stamp" style="left:796px;top:1278px;padding:4px 16px;font-family:monospace;font-size:35px">◎</span>
+  </div>
 </main>
 <script src="../assets/scene.js"></script>
 <script>
@@ -37,35 +46,23 @@
     "cue": 0.14,
     "mode": "statement"
   };
-  const DURATION = 6.0;
+  const DURATION = 6;
   const START = 88.033;
   const { $, $$, range, ease, wave, pose, enter, escape, mount } = Scene;
 
-  $('#content').innerHTML = `
-<div class="at hero" style="top:438px">
-      <h1 id="title" style="font-size:64px">${escape(COPY.title)}</h1>
-      <div class="gold-rule" id="rule" style="margin-top:74px"></div>
-      <p id="body" style="margin-top:36px;font-size:34px;width:870px">${escape(COPY.body)}</p>
-    </div>
-    <div class="at page-list">
-      ${COPY.items.map((item,i) => `<div class="list-item point" style="background:${COPY.colors[i%COPY.colors.length]}">${escape(item)}</div>`).join('')}
-    </div>
-    <span class="at sticker" id="stamp" style="left:796px;top:1278px;padding:4px 16px;font-family:monospace;font-size:35px">◎</span>
-  `;
-
   // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
   function draw(t) {
-    const start = COPY.cue;
-    enter('#title', t, start, { y: 22, duration: .52 });
-    const line = ease(range(t, start + .32, .65));
-    pose('#rule', { scale: Math.max(.001, line), opacity: line });
-    enter('#body', t, start + .72, { y: 18 });
-    $$('.point').forEach((node,i) => enter(node, t, start + .64 + i * .42, { x: -73, y: 0, spring: true }));
-    const phase = range(t, start + 1.05, .85);
-    const hit = wave(range(t, start + 1.67, .31));
-    const show = COPY.mode !== 'points';
-    pose('#stamp', { x: 174 * (1 - phase), y: -135 * wave(phase), scale: .62 + .38 * phase + .3 * hit,
-      rotate: 45 * (1 - phase) - 9 + 11 * hit, opacity: show ? phase : 0 });
+      const start = COPY.cue;
+      enter('#title', t, start, { y: 22, duration: .52 });
+      const line = ease(range(t, start + .32, .65));
+      pose('#rule', { scale: Math.max(.001, line), opacity: line });
+      enter('#body', t, start + .72, { y: 18 });
+      $$('.point').forEach((node,i) => enter(node, t, start + .64 + i * .42, { x: -73, y: 0, spring: true }));
+      const phase = range(t, start + 1.05, .85);
+      const hit = wave(range(t, start + 1.67, .31));
+      const show = COPY.mode !== 'points';
+      pose('#stamp', { x: 174 * (1 - phase), y: -135 * wave(phase), scale: .62 + .38 * phase + .3 * hit,
+        rotate: 45 * (1 - phase) - 9 + 11 * hit, opacity: show ? phase : 0 });
   }
   mount(COPY, DURATION, START, draw);
 </script>

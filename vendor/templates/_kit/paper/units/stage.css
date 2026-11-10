@@ -1,0 +1,3 @@
+.stage { position: absolute; top: 400px; left: 88px; right: 88px; height: 900px; background: var(--white); border: 3px solid #cbbca6; border-radius: 10px; box-shadow: 0 24px 60px rgba(60,48,32,.18); display: flex; align-items: center; justify-content: center; }
+.stage .slide { width: 88%; height: 78%; border: 2px dashed #d8cab6; border-radius: 8px; display: flex; flex-direction: column; gap: 18px; align-items: center; justify-content: center; color: #8d7a60; font-size: 30px; }
+.slide b { font-size: 48px; color: var(--ink); }

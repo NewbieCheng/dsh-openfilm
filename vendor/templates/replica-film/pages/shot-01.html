@@ -9,7 +9,16 @@
 </head>
 <body>
 <main id="stage" class="red">
-  <div class="content" id="content"></div>
+  <div class="content" id="content">
+<div class="at hero" id="title">
+      <h2>从一条评论开始</h2>
+      <h1 class="sticker" style="margin-top:43px">把问题讲清楚</h1>
+    </div>
+    <article class="at card" id="message" style="left:73px;top:842px;width:799px;min-height:158px">
+      <div style="color:#80756d;font-size:21px">●　一位读者　<span class="mono" style="float:right">COMMENT 01</span></div>
+      <div style="margin:15px 0 0;font-size:28px"><span id="typed"></span><span id="caret" style="color:#ed3727">▌</span></div>
+    </article>
+  </div>
 </main>
 <script src="../assets/scene.js"></script>
 <script>
@@ -30,27 +39,16 @@
     "message": "这次的动画，能不能让观点更清楚？"
   };
   const DURATION = 5.233;
-  const START = 0.0;
+  const START = 0;
   const { $, range, enter, text, escape, mount } = Scene;
-
-  $('#content').innerHTML = `
-<div class="at hero" id="title">
-      <h2>${escape(COPY.title)}</h2>
-      <h1 class="sticker" style="margin-top:43px">${escape(COPY.focus)}</h1>
-    </div>
-    <article class="at card" id="message" style="left:73px;top:842px;width:799px;min-height:158px">
-      <div style="color:#80756d;font-size:21px">●　${escape(COPY.sender)}　<span class="mono" style="float:right">COMMENT 01</span></div>
-      <div style="margin:15px 0 0;font-size:28px"><span id="typed"></span><span id="caret" style="color:#ed3727">▌</span></div>
-    </article>
-  `;
 
   // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
   function draw(t) {
-    enter('#title', t, .10, { y: 24 });
-    enter('#message', t, .70, { y: 36, spring: true });
-    const letters = Array.from(COPY.message);
-    text('#typed', letters.slice(0, Math.floor(letters.length * range(t, 1.05, 2.1))).join(''));
-    $('#caret').style.opacity = t < 1.05 || t > 3.58 ? 0 : Number(Math.floor(t * 5) % 2 === 0);
+      enter('#title', t, .10, { y: 24 });
+      enter('#message', t, .70, { y: 36, spring: true });
+      const letters = Array.from(COPY.message);
+      text('#typed', letters.slice(0, Math.floor(letters.length * range(t, 1.05, 2.1))).join(''));
+      $('#caret').style.opacity = t < 1.05 || t > 3.58 ? 0 : Number(Math.floor(t * 5) % 2 === 0);
   }
   mount(COPY, DURATION, START, draw);
 </script>

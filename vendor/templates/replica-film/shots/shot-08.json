@@ -1,0 +1,41 @@
+{
+  "id": "shot-08",
+  "title": "代码变焦",
+  "pageTitle": "08 · 代码变焦",
+  "theme": "dark",
+  "start": 46.7,
+  "duration": 7.233,
+  "helpers": [
+    "$",
+    "$$",
+    "range",
+    "ease",
+    "lerp",
+    "pose",
+    "enter",
+    "text",
+    "escape",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "代码变焦",
+    "note": "让计数与变化一起发生",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "一段简报",
+    "snippet": [
+      "# 动画计划",
+      "风格：清晰、有节奏",
+      "输入：文稿与录屏",
+      "输出：可编辑镜头"
+    ],
+    "from": 20,
+    "to": 10000,
+    "unit": "行 · 演示数值"
+  }
+}

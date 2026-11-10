@@ -1,0 +1,41 @@
+{
+  "id": "shot-02",
+  "title": "三个操作步骤",
+  "pageTitle": "纸纹讲堂 · 操作步骤",
+  "duration": 7,
+  "vars": {
+    "kicker-size": "32px",
+    "kicker-tracking": ".3em",
+    "title-size": "78px",
+    "title-gap": "16px",
+    "em-pad": "8px",
+    "capsule-bottom": "130px"
+  },
+  "backdrop": "var(--paper)",
+  "copy": {
+    "kicker": "做 法",
+    "title": "三步做<em>完一页</em>",
+    "steps": [
+      { "num": "1", "title": "放素材", "body": "课件截图、板书照片、图表，一张一页，画面居中。" },
+      { "num": "2", "title": "写逐字稿", "body": "一页一段口播，控制在 15 秒内，句子短、主语明确。" },
+      { "num": "3", "title": "按句换页", "body": "讲到关键词就硬切换页，留空时回到纸纹底。" }
+    ],
+    "capsule": "字幕胶囊：三步的顺序不要打乱，先素材、再稿子、最后切页。"
+  },
+  "units": [
+    { "unit": "paper.head", "props": { "kicker": "{{copy.kicker}}", "title": "{{{copy.title}}}" } },
+    {
+      "unit": "paper.steps",
+      "repeat": {
+        "unit": "paper.step",
+        "as": "items",
+        "items": [
+          { "num": "{{copy.steps.0.num}}", "title": "{{copy.steps.0.title}}", "body": "{{copy.steps.0.body}}" },
+          { "num": "{{copy.steps.1.num}}", "title": "{{copy.steps.1.title}}", "body": "{{copy.steps.1.body}}" },
+          { "num": "{{copy.steps.2.num}}", "title": "{{copy.steps.2.title}}", "body": "{{copy.steps.2.body}}" }
+        ]
+      }
+    },
+    { "unit": "paper.capsule", "props": { "text": "{{copy.capsule}}" } }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "id": "shot-06",
+  "title": "提示融入",
+  "pageTitle": "06 · 提示融入",
+  "theme": "violet",
+  "start": 30.133,
+  "duration": 6.7,
+  "helpers": [
+    "$",
+    "range",
+    "ease",
+    "wave",
+    "pose",
+    "enter",
+    "escape",
+    "pills",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "提示融入",
+    "note": "吸入后给出理解反馈",
+    "presenter": {
+      "shape": "portrait",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "让想法变成提示",
+    "labels": [
+      "目标",
+      "语气"
+    ],
+    "prompt": "顺序：问题 → 例子 → 结论",
+    "result": "已理解目标"
+  }
+}

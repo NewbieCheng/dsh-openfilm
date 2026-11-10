@@ -9,7 +9,17 @@
 </head>
 <body>
 <main id="stage" class="dark">
-  <div class="content" id="content"></div>
+  <div class="content" id="content">
+<div class="at mono" id="rain" style="left:0;top:242px;width:1080px;height:1280px;overflow:hidden;color:#984338;opacity:.21;white-space:pre;font-size:26px"></div>
+    <svg class="at" style="left:63px;top:506px;width:931px;height:300px;overflow:visible" viewBox="0 0 931 300">
+      <ellipse id="circle" cx="452" cy="134" rx="445" ry="91" transform="rotate(-4 452 134)" fill="none" stroke="#bd3e29" stroke-width="7" pathLength="1" stroke-dasharray="1"/>
+    </svg>
+    <h1 class="at" id="title" style="left:84px;top:566px;width:928px;font-size:69px">“把重点圈出来”</h1>
+    <div class="at" id="metric" style="left:81px;top:897px">
+      <b class="number gold" id="value"></b>　<span>项 · 示例指标</span>
+      <div class="chip-row" style="margin-top:83px"><span class="pill">技术说明</span><span class="pill">内容证据</span></div>
+    </div>
+  </div>
 </main>
 <script src="../assets/scene.js"></script>
 <script>
@@ -36,29 +46,17 @@
   const START = 15.833;
   const { $, range, ease, enter, text, escape, pills, mount } = Scene;
 
-  $('#content').innerHTML = `
-<div class="at mono" id="rain" style="left:0;top:242px;width:1080px;height:1280px;overflow:hidden;color:#984338;opacity:.21;white-space:pre;font-size:26px"></div>
-    <svg class="at" style="left:63px;top:506px;width:931px;height:300px;overflow:visible" viewBox="0 0 931 300">
-      <ellipse id="circle" cx="452" cy="134" rx="445" ry="91" transform="rotate(-4 452 134)" fill="none" stroke="#bd3e29" stroke-width="7" pathLength="1" stroke-dasharray="1"/>
-    </svg>
-    <h1 class="at" id="title" style="left:84px;top:566px;width:928px;font-size:69px">${escape(COPY.title)}</h1>
-    <div class="at" id="metric" style="left:81px;top:897px">
-      <b class="number gold" id="value"></b>　<span>${escape(COPY.unit)}</span>
-      <div class="chip-row" style="margin-top:83px">${pills(COPY.labels)}</div>
-    </div>
-  `;
-
   // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
   function draw(t) {
-    const symbols = '010101110001  ‧   #     ';
-    const shift = Math.floor(t * 8);
-    const lines = Array.from({ length: 30 }, (_, row) => Array.from({ length: 76 }, (_, col) =>
-      symbols[(row * 13 + col * 7 + row * col + shift) % symbols.length]).join(''));
-    text('#rain', lines.join('\n'));
-    enter('#title', t, .25, { y: 24 });
-    $('#circle').style.strokeDashoffset = 1 - ease(range(t, 1.2, .9));
-    enter('#metric', t, 1.7, { spring: true });
-    text('#value', Math.round(COPY.value * ease(range(t, 1.7, 1.0))) + '+');
+      const symbols = '010101110001  ‧   #     ';
+      const shift = Math.floor(t * 8);
+      const lines = Array.from({ length: 30 }, (_, row) => Array.from({ length: 76 }, (_, col) =>
+        symbols[(row * 13 + col * 7 + row * col + shift) % symbols.length]).join(''));
+      text('#rain', lines.join('\n'));
+      enter('#title', t, .25, { y: 24 });
+      $('#circle').style.strokeDashoffset = 1 - ease(range(t, 1.2, .9));
+      enter('#metric', t, 1.7, { spring: true });
+      text('#value', Math.round(COPY.value * ease(range(t, 1.7, 1.0))) + '+');
   }
   mount(COPY, DURATION, START, draw);
 </script>

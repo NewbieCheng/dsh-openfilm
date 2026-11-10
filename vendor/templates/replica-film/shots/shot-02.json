@@ -1,0 +1,37 @@
+{
+  "id": "shot-02",
+  "title": "三项关系",
+  "pageTitle": "02 · 三项关系",
+  "theme": "orange",
+  "start": 5.233,
+  "duration": 6.267,
+  "helpers": [
+    "$",
+    "$$",
+    "range",
+    "wave",
+    "pose",
+    "enter",
+    "escape",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "三项关系",
+    "note": "再用反馈和示例数据收束",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "三种输入 · 一起协作",
+    "hub": "流程",
+    "labels": [
+      "文稿",
+      "画面",
+      "声音"
+    ],
+    "likes": "示例反馈 591"
+  }
+}

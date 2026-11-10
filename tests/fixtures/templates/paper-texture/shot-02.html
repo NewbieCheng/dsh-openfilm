@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>纸纹讲堂 · 操作步骤</title>
+<style>
+  :root { --paper:#e1d5c5; --ink:#214f42; --wheat:#f0df9f; --charcoal:#242820; --white:#faf6ee; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; }
+  body { background: var(--paper); font-family: "Songti SC", "SimSun", serif; color: var(--ink); }
+  .head { position: absolute; top: 96px; left: 88px; right: 88px; }
+  .kicker { font-size: 32px; letter-spacing: .3em; color: #6b5c47; }
+  .title { margin-top: 16px; font-size: 78px; font-weight: 700; }
+  .title em { font-style: normal; background: linear-gradient(transparent 58%, var(--wheat) 58%); padding: 0 8px; }
+  .steps { position: absolute; top: 420px; left: 88px; right: 88px; display: flex; flex-direction: column; gap: 34px; }
+  .step { display: flex; gap: 34px; align-items: flex-start; background: var(--white); border-radius: 14px; padding: 40px 44px; box-shadow: 0 16px 40px rgba(60,48,32,.14); }
+  .num { flex: none; width: 92px; height: 92px; border-radius: 50%; background: var(--ink); color: #f7f1e3; font-size: 44px; display: flex; align-items: center; justify-content: center; }
+  .body h3 { font-size: 50px; margin-bottom: 12px; }
+  .body p { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 30px; line-height: 1.5; color: #5c5546; }
+  .capsule { position: absolute; left: 88px; right: 88px; bottom: 130px; background: rgba(36,40,32,.92); color: #f3efe6; border-radius: 999px; padding: 26px 44px; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 34px; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <div class="kicker">做 法</div>
+    <div class="title">三步做<em>完一页</em></div>
+  </div>
+  <div class="steps">
+    <div class="step"><div class="num">1</div><div class="body"><h3>放素材</h3><p>课件截图、板书照片、图表，一张一页，画面居中。</p></div></div>
+    <div class="step"><div class="num">2</div><div class="body"><h3>写逐字稿</h3><p>一页一段口播，控制在 15 秒内，句子短、主语明确。</p></div></div>
+    <div class="step"><div class="num">3</div><div class="body"><h3>按句换页</h3><p>讲到关键词就硬切换页，留空时回到纸纹底。</p></div></div>
+  </div>
+  <div class="capsule">字幕胶囊：三步的顺序不要打乱，先素材、再稿子、最后切页。</div>
+  <script>
+    // A still page has the same DOM picture at every local time.
+    window.film = { width: 1080, height: 1920, duration: 7, ready: document.fonts.ready, frame(_t) {} };
+  </script>
+</body>
+</html>

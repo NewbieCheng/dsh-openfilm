@@ -1,0 +1,32 @@
+{
+  "id": "shot-01",
+  "title": "评论开场",
+  "pageTitle": "01 · 评论开场",
+  "theme": "red",
+  "start": 0,
+  "duration": 5.233,
+  "helpers": [
+    "$",
+    "range",
+    "enter",
+    "text",
+    "escape",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "评论开场",
+    "note": "从真实的问题开始",
+    "presenter": {
+      "shape": "portrait",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "从一条评论开始",
+    "focus": "把问题讲清楚",
+    "sender": "一位读者",
+    "message": "这次的动画，能不能让观点更清楚？"
+  },
+  "style": ".red .content { background: linear-gradient(90deg, transparent 72%, #fff3 72.1%, transparent 72.2%), linear-gradient(0deg, transparent 18%, #fff2 18.1%, transparent 18.2%); }"
+}

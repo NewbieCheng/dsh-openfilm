@@ -1,0 +1,34 @@
+{
+  "id": "shot-10",
+  "title": "用量仪表",
+  "pageTitle": "10 · 用量仪表",
+  "theme": "blue",
+  "start": 59.267,
+  "duration": 4.233,
+  "helpers": [
+    "$",
+    "$$",
+    "range",
+    "ease",
+    "wave",
+    "pose",
+    "enter",
+    "text",
+    "escape",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "用量仪表",
+    "note": "用动画解释变化",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "让数值变化有过程",
+    "maximum": 100,
+    "label": "示例用量"
+  }
+}

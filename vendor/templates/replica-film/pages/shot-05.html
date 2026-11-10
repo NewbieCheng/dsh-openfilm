@@ -5,11 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>05 · 关键词聚能</title>
   <link rel="stylesheet" href="../assets/scene.css">
-
 </head>
 <body>
 <main id="stage" class="dark">
-  <div class="content" id="content"></div>
+  <div class="content" id="content">
+<svg class="at" style="left:212px;top:642px;width:659px;height:632px;overflow:visible" viewBox="0 0 660 630">
+      <defs><filter id="glow" x="-.5" y="-.5" width="2" height="2"><feGaussianBlur stdDeviation="8"/></filter>
+        <linearGradient id="gold"><stop stop-color="#fff2aa"/><stop offset=".48" stop-color="#9c6a21"/><stop offset="1" stop-color="#fce597"/></linearGradient>
+      </defs>
+      <circle cx="330" cy="310" r="241" fill="none" stroke="#ffc759" stroke-width="7" filter="url(#glow)" id="glow-ring"/>
+      <g id="rings" fill="none" stroke="url(#gold)"><circle cx="330" cy="310" r="241" stroke-width="4"/>
+      <ellipse cx="330" cy="310" rx="274" ry="56" transform="rotate(-23 330 310)" opacity=".65"/>
+      <ellipse cx="330" cy="310" rx="276" ry="90" transform="rotate(17 330 310)" opacity=".5"/></g>
+    </svg>
+    <span class="at pill orbit-chip word" style="left:194px;top:732px">●　表达</span><span class="at pill orbit-chip word" style="left:546px;top:823px">●　内容</span><span class="at pill orbit-chip word" style="left:395px;top:1070px">●　图像</span><span class="at pill orbit-chip word" style="left:680px;top:1028px">●　声音</span><span class="at pill orbit-chip word" style="left:218px;top:935px">●　节奏</span><span class="at pill orbit-chip word" style="left:336px;top:851px">●　重点</span>
+    <h1 class="at gold" id="conclusion" style="left:64px;top:855px;width:952px;text-align:center;font-size:86px;text-shadow:0 0 42px #ffc5478a">让内容成为主角</h1>
+  </div>
 </main>
 <script src="../assets/scene.js"></script>
 <script>
@@ -47,32 +58,18 @@
   const START = 22.067;
   const { $, $$, range, ease, wave, pose, enter, escape, mount } = Scene;
 
-  $('#content').innerHTML = `
-<svg class="at" style="left:212px;top:642px;width:659px;height:632px;overflow:visible" viewBox="0 0 660 630">
-      <defs><filter id="glow" x="-.5" y="-.5" width="2" height="2"><feGaussianBlur stdDeviation="8"/></filter>
-        <linearGradient id="gold"><stop stop-color="#fff2aa"/><stop offset=".48" stop-color="#9c6a21"/><stop offset="1" stop-color="#fce597"/></linearGradient>
-      </defs>
-      <circle cx="330" cy="310" r="241" fill="none" stroke="#ffc759" stroke-width="7" filter="url(#glow)" id="glow-ring"/>
-      <g id="rings" fill="none" stroke="url(#gold)"><circle cx="330" cy="310" r="241" stroke-width="4"/>
-      <ellipse cx="330" cy="310" rx="274" ry="56" transform="rotate(-23 330 310)" opacity=".65"/>
-      <ellipse cx="330" cy="310" rx="276" ry="90" transform="rotate(17 330 310)" opacity=".5"/></g>
-    </svg>
-    ${COPY.keywords.map((word,i) => `<span class="at pill orbit-chip word" style="left:${[194,546,395,680,218,336][i]}px;top:${[732,823,1070,1028,935,851][i]}px">●　${escape(word)}</span>`).join('')}
-    <h1 class="at gold" id="conclusion" style="left:64px;top:855px;width:952px;text-align:center;font-size:86px;text-shadow:0 0 42px #ffc5478a">${escape(COPY.conclusion)}</h1>
-  `;
-
   // t 是镜头内的秒数，任意顺序调用都会重建同一画面。
   function draw(t) {
-    const burst = range(t, COPY.impact, .42);
-    const halo = ease(range(t, 1.25, 3.4));
-    pose('#rings', { scale: .73 + halo * .27 + .08 * wave(burst), opacity: halo * (1 - burst * .8), rotate: t * 2 });
-    $('#glow-ring').style.opacity = halo * (.4 + .18 * Math.sin(t * 4)) * (1 - burst);
-    $$('.word').forEach((node, i) => {
-      const p = range(t, COPY.cues[i], .4);
-      const focus = i === COPY.cues.findLastIndex((cue) => t >= cue);
-      pose(node, { x: (1 - ease(p)) * -47, opacity: p * (focus ? 1 : .26) * (1 - burst), scale: .9 + p * .1 });
-    });
-    enter('#conclusion', t, COPY.impact, { scale: .7, y: 10, spring: true, duration: .48 });
+      const burst = range(t, COPY.impact, .42);
+      const halo = ease(range(t, 1.25, 3.4));
+      pose('#rings', { scale: .73 + halo * .27 + .08 * wave(burst), opacity: halo * (1 - burst * .8), rotate: t * 2 });
+      $('#glow-ring').style.opacity = halo * (.4 + .18 * Math.sin(t * 4)) * (1 - burst);
+      $$('.word').forEach((node, i) => {
+        const p = range(t, COPY.cues[i], .4);
+        const focus = i === COPY.cues.findLastIndex((cue) => t >= cue);
+        pose(node, { x: (1 - ease(p)) * -47, opacity: p * (focus ? 1 : .26) * (1 - burst), scale: .9 + p * .1 });
+      });
+      enter('#conclusion', t, COPY.impact, { scale: .7, y: 10, spring: true, duration: .48 });
   }
   mount(COPY, DURATION, START, draw);
 </script>

@@ -1,0 +1,48 @@
+{
+  "id": "shot-16",
+  "title": "整理要点",
+  "pageTitle": "16 · 整理要点",
+  "theme": "dark",
+  "start": 94.033,
+  "duration": 6,
+  "helpers": [
+    "$",
+    "$$",
+    "range",
+    "ease",
+    "wave",
+    "pose",
+    "enter",
+    "escape",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "整理要点",
+    "note": "跟随你的表达节奏",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "按内容选择动画",
+    "body": "",
+    "items": [
+      "口播与字幕",
+      "自己的素材",
+      "选择完整场景",
+      "检查画面和声音",
+      "导出横屏与竖屏"
+    ],
+    "colors": [
+      "#ffd166",
+      "#b6a1e6",
+      "#86ddc3",
+      "#eea698",
+      "#aabdea"
+    ],
+    "cue": 0.14,
+    "mode": "points"
+  }
+}

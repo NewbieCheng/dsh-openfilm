@@ -1,6 +1,6 @@
 {
   "name": "dsh-openfilm",
-  "version": "0.5.8",
+  "version": "0.6.0",
   "description": "OpenFilm video studio as a DSH plugin: the official Studio + Chat shell, bridged to a DSH session.",
   "type": "module",
   "license": "MIT",
@@ -13,7 +13,9 @@
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
-    "dev": "node scripts/dev.mjs"
+    "dev": "node scripts/dev.mjs",
+    "templates:build": "node scripts/templates-build.mjs",
+    "templates:check": "node scripts/templates-build.mjs --check"
   },
   "devDependencies": {
     "esbuild": "0.24.2"

@@ -1,0 +1,48 @@
+{
+  "id": "shot-05",
+  "title": "关键词聚能",
+  "pageTitle": "05 · 关键词聚能",
+  "theme": "dark",
+  "start": 22.067,
+  "duration": 8.066,
+  "helpers": [
+    "$",
+    "$$",
+    "range",
+    "ease",
+    "wave",
+    "pose",
+    "enter",
+    "escape",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "关键词聚能",
+    "note": "把结论留在画面里",
+    "presenter": {
+      "shape": "circle",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "keywords": [
+      "表达",
+      "内容",
+      "图像",
+      "声音",
+      "节奏",
+      "重点"
+    ],
+    "conclusion": "让内容成为主角",
+    "cues": [
+      0.03,
+      1.6,
+      3.03,
+      3.73,
+      4.46,
+      5.23
+    ],
+    "impact": 6.16
+  }
+}

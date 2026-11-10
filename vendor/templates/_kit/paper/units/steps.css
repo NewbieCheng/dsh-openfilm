@@ -1,0 +1,5 @@
+.steps { position: absolute; top: 420px; left: 88px; right: 88px; display: flex; flex-direction: column; gap: 34px; }
+.step { display: flex; gap: 34px; align-items: flex-start; background: var(--white); border-radius: 14px; padding: 40px 44px; box-shadow: 0 16px 40px rgba(60,48,32,.14); }
+.num { flex: none; width: 92px; height: 92px; border-radius: 50%; background: var(--ink); color: #f7f1e3; font-size: 44px; display: flex; align-items: center; justify-content: center; }
+.body h3 { font-size: 50px; margin-bottom: 12px; }
+.body p { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 30px; line-height: 1.5; color: #5c5546; }

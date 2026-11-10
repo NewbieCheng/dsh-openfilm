@@ -1,0 +1,32 @@
+{
+  "id": "shot-03",
+  "title": "开始回应",
+  "pageTitle": "03 · 开始回应",
+  "theme": "blue radial",
+  "start": 11.5,
+  "duration": 4.333,
+  "helpers": [
+    "$",
+    "range",
+    "ease",
+    "pose",
+    "enter",
+    "escape",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "开始回应",
+    "note": "让回复卡飞向下一步",
+    "presenter": {
+      "shape": "portrait",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "让回应有动作",
+    "sub": "打开表达的开关",
+    "switchLabel": "语音模式",
+    "reply": "收到。现在可以开始回应。"
+  }
+}

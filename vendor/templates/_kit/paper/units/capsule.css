@@ -1,0 +1,1 @@
+.capsule { position: absolute; left: 88px; right: 88px; bottom: var(--capsule-bottom); background: rgba(36,40,32,.92); color: #f3efe6; border-radius: 999px; padding: 26px 44px; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 34px; text-align: center; }

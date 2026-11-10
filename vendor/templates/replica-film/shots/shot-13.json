@@ -1,0 +1,53 @@
+{
+  "id": "shot-13",
+  "title": "反馈更新",
+  "pageTitle": "13 · 反馈更新",
+  "theme": "paper",
+  "start": 76.2,
+  "duration": 5.833,
+  "helpers": [
+    "$",
+    "$$",
+    "range",
+    "ease",
+    "wave",
+    "pose",
+    "enter",
+    "text",
+    "escape",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "反馈更新",
+    "note": "再触发版本更新",
+    "presenter": {
+      "shape": "portrait",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "让反馈形成更新",
+    "feedback": [
+      "更清楚",
+      "有层次",
+      "看重点"
+    ],
+    "container": "内容模板",
+    "versions": [
+      "v1",
+      "v2"
+    ],
+    "cues": {
+      "title": 0.07,
+      "labels": [
+        1.02,
+        2.14,
+        2.67
+      ],
+      "container": 3.9,
+      "merge": 4.07,
+      "update": 4.8
+    }
+  }
+}

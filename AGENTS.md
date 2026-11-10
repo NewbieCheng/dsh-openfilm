@@ -11,7 +11,7 @@
 
 把官方 **OpenFilm 0.3.1** 视频工作台封装成可分发的 **DSH 插件**：Host 侧拉起官方 Studio 并做反向代理，浏览器侧用 `shell.overlay` 常驻一个 iframe 面板显示官方界面，右侧官方对话经 Host RPC 桥到 DSH 会话（模型、审批、会话都是 DSH 的）。
 
-当前版本 `0.5.8`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
+当前版本 `0.6.0`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
 
 ---
 
@@ -37,6 +37,9 @@
 | 代理 | `src/studio-proxy.mjs` | 回环反向代理：cookie / Host / Origin / WebSocket 校验，DESKTOP 票据 |
 | 官方对话桥 | `src/official-agent-service.mjs`、`official-agent-events.mjs`、`official-chat-rpc.mjs`、`official-approvals.mjs`、`official-event-hub.mjs`、`official-event-stream.mjs`、`official-chat-store.mjs`、`official-facade.mjs`、`official-model-catalog.mjs` | DSH 会话 ↔ 官方 ACP 事件 |
 | 模板 | `src/official-templates.mjs`、`src/template-bridge.mjs`、`vendor/templates/*` | 列举、复制、官方 `openProject` 注册；HTTP 桥鉴权 |
+| 模板素材库 | `vendor/templates/_kit/`（`catalog.json` + 单元 + `render.mjs` + 各模板 `page.mjs`） | 单元 = 标记 + 样式 + 目录条目；三个模板的页面都由它生成 |
+| 模板源数据 | `vendor/templates/<模板>/shots/*.json`、`replica-film/shots/*.content.html` / `*.anim.js` | 一个镜头一份数据；页面是产物 |
+| 模板文档 | `docs/TEMPLATES.md` | 三个模板各自的模型、怎么加单元/镜头、自包含边界 |
 | 草稿工具 | `src/draft-tool.mjs`、`film-draft.mjs`、`film-operations.mjs`、`film-source.mjs`、`film-summary.mjs`、`timeline-*.mjs`、`draft-session.mjs` | 解析 `film.html`、生成摘要、内存内 move/trim/split |
 | 客户端源码 | `src/studio-entry.js`、`studio-panel.mjs`、`panel-keepalive.mjs` | 注册 `main`(占位) / `sidebar.panellist`(图标) / `shell.overlay`(真面板)。**面板没有模板首页**，打开就是官方 Studio |
 | 官方界面注入 | `src/shell-extras.mjs`（读取器）+ `assets/shell-ui.js`（真正的脚本） | 往官方 shell 页面叠模板下拉 / 故障卡片 / 隐藏「视频复刻」；每次渲染读盘，改完刷新即生效 |
@@ -55,7 +58,9 @@
 
 ```sh
 npm run build                      # 只在改了客户端源码时需要
-node --test tests/*.test.mjs       # 期望 128 tests / 127 pass / 1 skip
+npm run templates:build            # 改了 vendor/templates/_kit 或 shots/*.json 时必须
+npm run templates:check            # 只校验页面与源是否一致
+node --test tests/*.test.mjs       # 期望 186 tests / 185 pass / 1 skip
 ```
 
 顺序：**先判断改的是哪一层 → 改 `src/` 源码 → build（如需）→ 跑测试 → 按 §4 让变更生效 → 在真实 GUI 里确认。**
@@ -159,7 +164,7 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 
 ## 7. 测试规则
 
-- `node --test tests/*.test.mjs`；当前 **128 tests / 127 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
+- `node --test tests/*.test.mjs`；当前 **186 tests / 185 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
 - 只允许模拟对象与 `mkdtemp` 临时目录；`OPENFILM_HOME` 指到临时目录，绝不碰用户库。
 - 真实项目注册验证可以跑官方 `openfilm` 服务端 `openProject`，但必须用临时 home。
 - 新增行为必须带测试；本仓的历史 bug 大多是"逻辑没问题但顺序/形状假设错"，测试是唯一便宜的判断手段。
@@ -181,7 +186,8 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 1. **官方输入框表现只读**：能力协商位不全（未开工）。
 2. **默认权限不是完全访问**：`SessionCreateRequest` 没有权限字段，需建会话后用会话级接口设置（未开工）。
 3. **思考/工具卡片还没在真机 GUI 里看到过**：0.4.0/0.4.1 只用真实帧夹具在单元测试里验证；下一次发送要确认卡片出现。
-4. **模板拆素材**（未开工）：把三个模板拆成可检索/可组装的素材单元。首页直进对话、模板下拉、隐藏「视频复刻」已在 0.4.2 完成。
+4. **模板字体子集化**（未开工）：`sketchnote/assets/fonts.css` 10.4 MB 内嵌字体，影响首屏体积，不影响画面。
+   模板拆素材已在 0.6.0 完成（`vendor/templates/_kit/`，见 `docs/TEMPLATES.md`）；首页直进对话、模板下拉、隐藏「视频复刻」在 0.4.2 完成。
 
 > 0.4.x 已修并从清单移除：归档会话导致的 `OFFICIAL_AGENT_NOT_STARTED`、工具调用不显示、思考无内容、归档与 DSH 侧边栏不同步、注入指令被当并发输入、预设自报误报未注册（真机已确认 `registered:true, ok:true`）。
 
@@ -203,6 +209,8 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 - **把「重启插件」当成万能药**：面板报 `HTTP 404` 时连着重载三次都没用，因为请求根本没到 Host。教训：先分清「服务端坏了」和「浏览器没发对地方」——`curl` 打同一个路由（401＝路由在）+ 看页面自己的 `location.origin`，两步就能分开。错误信息里带上来源（`HTTP 404 @ dsh-app://app`）比任何猜测都快（0.5.4）。
 - **只在 http 语境下设计前端**：相对路径 `/api/...`、`frame-ancestors <http 源>`，在 `dsh-app://app` 下分别是 404 和静默白屏。桌面端不是「浏览器换个地址」，是**换了一套 URL 语义**（0.5.5 / 0.5.7）。
 - **把 404 当终态**：插件重载有几百毫秒路由空窗，落在窗口里的请求会 404 并被面板记成错误。现在：`404/503` 先静默重试两次（0.5.3）。
+- **模板页面引用模板目录之外的文件**：模板安装是整目录复制，`../../_kit/…` 在仓库里能跑、复制进项目就 404。现在：共享样式由构建合并成 `<模板>/assets/kit.css`，并有测试扫 `href`/`src`（0.6.0）。
+- **手写 `at` 与 `#t=`**：镜头墙的时间轴与镜头自己的时长一旦不一致，影片照播、内容错位。现在：`film.html` 由 `shots/*.json` 生成（0.6.0）。
 - **日志字段名撞脱敏规则**：`path`/`session`/`cookie` 这类键会被写成 `[redacted]` 或哈希，日志看着"有了"其实没用。写日志时换名字（`route`/`authed`），或先跑一次 `redact()` 看输出（0.5.1 / 0.5.8）。
 
 ---

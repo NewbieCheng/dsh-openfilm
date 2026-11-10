@@ -1,0 +1,37 @@
+{
+  "id": "shot-04",
+  "title": "代码圈选",
+  "pageTitle": "04 · 代码圈选",
+  "theme": "dark",
+  "start": 15.833,
+  "duration": 6.234,
+  "helpers": [
+    "$",
+    "range",
+    "ease",
+    "enter",
+    "text",
+    "escape",
+    "pills",
+    "mount"
+  ],
+  "copy": {
+    "chapter": "代码圈选",
+    "note": "红笔圈出真正的重点",
+    "presenter": {
+      "shape": "portrait",
+      "image": "../assets/presenter.svg",
+      "label": "人物位",
+      "video": "",
+      "in": 0
+    },
+    "title": "“把重点圈出来”",
+    "value": 10,
+    "unit": "项 · 示例指标",
+    "labels": [
+      "技术说明",
+      "内容证据"
+    ]
+  },
+  "style": ".dark .pill { background: #26201d; color: #e6d0bc; }"
+}
