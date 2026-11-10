@@ -1,23 +1,94 @@
 import { createServer } from 'node:http';
 
 /**
- * The same fixed debug port, for the case where this host runs inside DSH's own
- * browser surface: there is no Studio ticket to redeem, so the listener cannot
- * hold Studio's session cookie itself. Instead it points the window at the DSH
- * origin's standalone route, which the person's browser is already signed in to.
+ * A small console on the fixed loopback port.
  *
- * Loopback only, same port as the ticketed listener, so one bookmark works in
- * whichever mode the host was started.
+ * Why it exists: the right-side browser does not share DSH's session cookie, so
+ * every DSH route answers 401 there. The only origin it can reach is this
+ * listener, so the template list and the "make a project" button live here and
+ * all Studio work happens in the Host behind them.
+ *
+ * Loopback only; bound to the same port as the editor window, so one bookmark
+ * covers both: `/` is the template console, `/editor` opens the editor page.
  */
-export function startStudioRedirect({ target, port = Number(process.env.NO996_OPENFILM_DEBUG_PORT || 47821) }) {
-  const destination = new URL(target);
-  if (destination.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(destination.hostname)) {
-    throw new TypeError('Invalid redirect target');
+export function startLocalConsole({
+  port = Number(process.env.NO996_OPENFILM_DEBUG_PORT || 47821),
+  templates = async () => [],
+  create = async () => { throw new Error('创建不可用'); },
+  editorUrl = () => null,
+} = {}) {
+  const escape = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+
+  const page = (body) => `<!doctype html><meta charset="utf-8"><title>OpenFilm 模板</title>
+<style>
+  :root { color-scheme: dark }
+  body { font: 14px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; background:#161616; color:#e9e9e9; margin:0; padding:28px 32px }
+  h1 { font-size:20px; margin:0 0 4px } .sub { opacity:.6; margin:0 0 22px }
+  ul { list-style:none; padding:0; margin:0; display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)) }
+  li { border:1px solid #2e2e2e; border-radius:10px; padding:16px; background:#1d1d1d }
+  h2 { font-size:15px; margin:0 0 6px } .tag { font-size:11px; padding:2px 6px; border-radius:999px; background:#2b3b33; color:#8fd3ac; margin-left:6px; vertical-align:2px }
+  p { margin:0 0 12px; opacity:.75; font-size:13px }
+  button, a.btn { display:inline-block; padding:7px 13px; border-radius:7px; border:1px solid #4a4a4a; background:#262626; color:inherit; cursor:pointer; font:inherit; text-decoration:none }
+  button:hover, a.btn:hover { background:#313131 } button:disabled { opacity:.5; cursor:default }
+  #msg { margin-top:18px } .ok { color:#7ddc9b } .err { color:#ff8a8a }
+  code { background:#242424; padding:1px 5px; border-radius:4px }
+</style>
+<h1>OpenFilm 模板</h1>
+<p class="sub">选一个模板，插件会在影片库里新建项目并把模板文件放进去。</p>
+${body}
+<script>
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-id]');
+  if (!button) return;
+  const msg = document.getElementById('msg');
+  button.disabled = true; const label = button.textContent; button.textContent = '创建中…';
+  try {
+    const response = await fetch('/create?template=' + encodeURIComponent(button.dataset.id), { method: 'POST' });
+    const data = await response.json();
+    if (!response.ok || !data.projectId) throw new Error(data.error || ('HTTP ' + response.status));
+    msg.className = 'ok';
+    msg.innerHTML = '已创建项目 <code>' + data.projectId + '</code>' +
+      (data.link ? ' · <a class="btn" href="' + data.link + '">打开编辑器</a>' : '') +
+      '<br>回到左侧「视频创作」刷新即可看到它。';
+  } catch (error) {
+    msg.className = 'err'; msg.textContent = '创建失败：' + (error && error.message || error);
+    button.disabled = false; button.textContent = label;
   }
+});
+</script>`;
+
   const server = createServer((req, res) => {
-    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { allow: 'GET, HEAD' }).end(); return; }
-    res.writeHead(302, { location: destination.href, 'cache-control': 'no-store' }).end();
+    const url = new URL(req.url, 'http://127.0.0.1');
+    const send = (status, type, body) => {
+      if (res.writableEnded) return;
+      res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store', 'content-length': Buffer.byteLength(body) });
+      res.end(body);
+    };
+    void (async () => {
+      if (url.pathname === '/editor') {
+        const location = await editorUrl();
+        if (!location) return send(503, 'text/plain; charset=utf-8', '编辑器尚未就绪：请先打开左侧「视频创作」一次。');
+        res.writeHead(302, { location, 'cache-control': 'no-store' }).end();
+        return;
+      }
+      if (url.pathname === '/create' && req.method === 'POST') {
+        const id = url.searchParams.get('template') || '';
+        try {
+          const result = await create(id);
+          send(200, 'application/json; charset=utf-8', JSON.stringify({ projectId: result.projectId, path: result.path, ...(result.link ? { link: result.link } : {}) }));
+        } catch (error) {
+          send(500, 'application/json; charset=utf-8', JSON.stringify({ error: String((error && error.message) || error) }));
+        }
+        return;
+      }
+      if (url.pathname !== '/' || req.method !== 'GET') return send(405, 'text/plain; charset=utf-8', '不支持的请求');
+      let items = [];
+      try { items = await templates(); } catch { /* an empty page still explains itself */ }
+      const cards = items.map(item => `<li><h2>${escape(item.title)}<span class="tag">${escape(item.mode)}</span></h2><p>${escape(item.description || '')}</p><button type="button" data-id="${escape(item.id)}">用这个模板建项目</button></li>`).join('');
+      send(200, 'text/html; charset=utf-8', page(`<ul>${cards || '<li><p>没有可用模板。</p></li>'}</ul><div id="msg"></div>`));
+    })();
   });
+
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, '127.0.0.1', () => {

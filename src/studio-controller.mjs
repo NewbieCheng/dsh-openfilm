@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 
 const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.url));
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
-import { startStudioRedirect } from './studio-debug-redirect.mjs';
+import { startLocalConsole } from './studio-debug-redirect.mjs';
 import { createDshAskAgent } from './dsh-ai.mjs';
 import { openProjectConversations } from './project-conversation.mjs';
 import { createGuideTool } from './guide-tool.mjs';
@@ -41,10 +41,26 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   let lastProxy;
   let debugBridge;
   // A stable address the person can type into the right-side browser without
-  // opening the panel first: same fixed port, forwarding to the DSH standalone
-  // page. Disable with NO996_OPENFILM_DEBUG_PORT=0.
+  // opening the panel first. That browser does not share DSH's cookie, so DSH
+  // routes answer 401 there; this listener serves the template console itself and
+  // does the Studio work in the Host. Disable with NO996_OPENFILM_DEBUG_PORT=0.
   if (process.env.NO996_OPENFILM_DEBUG_PORT !== '0') {
-    debugBridge = startStudioRedirect({ target: `${origin.origin}/no996-openfilm/standalone` });
+    debugBridge = startLocalConsole({
+      templates: () => listTemplates(templatesRoot),
+      create: async (templateId) => {
+        const chosen = (await listTemplates(templatesRoot)).find(item => item.id === templateId);
+        if (!chosen) throw Object.assign(new Error('未知模板'), { code: 'TEMPLATE_INPUT' });
+        await runtime.ensureStarted();
+        const proxy = await proxyFor(origin.origin, false);
+        const projects = await proxy.listProjects().catch(() => []);
+        const parentDir = projects.length ? dirname(projects[0].path) : join(homedir(), 'OpenFilm');
+        const installed = await installTemplate({
+          root: templatesRoot, id: chosen.id, parentDir,
+          createProject: target => proxy.createProject(target), titleFor: () => chosen.title,
+        });
+        return { ...installed, link: null };
+      },
+    });
     debugBridge.catch(() => { debugBridge = undefined; });
   }
   const proxies = new Map();
