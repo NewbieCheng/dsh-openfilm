@@ -111,18 +111,54 @@ function officialFacadeFactory(bridge) {
   // bar, so the shape must be absent rather than present-but-rejecting.
   const tabs = undefined;
   const agentKeys = new Map();
+  const pendingAgentPrompts = new Map();
   const agentListeners = new Set();
   const agentSources = new Map();
   const emitAgent = (event) => { for (const listener of [...agentListeners]) { try { listener(event); } catch { /* one closed view */ } } };
   const ensureAgentSource = (id) => {
-    if (agentSources.has(id) || typeof EventSource !== 'function') return;
-    try {
-      const source = new EventSource('/__dsh/official-events?projectId=' + encodeURIComponent(id));
-      source.onmessage = (message) => {
-        try { const value = JSON.parse(message.data); if (value && typeof value === 'object') emitAgent(value); } catch { /* ignore bad frame */ }
-      };
-      agentSources.set(id, source);
-    } catch { /* the composer will report the failed send */ }
+    const current = agentSources.get(id);
+    if (current) return current.ready;
+    if (typeof EventSource !== 'function') return Promise.reject(unavailable('agent.events'));
+    let source;
+    try { source = new EventSource('/__dsh/official-events?projectId=' + encodeURIComponent(id)); }
+    catch { return Promise.reject(unavailable('agent.events')); }
+    let resolveReady, rejectReady;
+    const entry = { source, ready: new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; }) };
+    agentSources.set(id, entry);
+    let waiting = true;
+    const fail = () => {
+      if (agentSources.get(id) !== entry) return;
+      agentSources.delete(id);
+      clearTimeout(timer);
+      source.close();
+      if (waiting) { waiting = false; rejectReady(unavailable('agent.events')); }
+      for (const pending of pendingAgentPrompts.values()) {
+        if (pending.source === entry && pending.dispatched) pending.rejectTerminal(unavailable('agent.events: stream disconnected; output may be incomplete'));
+      }
+    };
+    const timer = setTimeout(fail, 10000);
+    source.addEventListener('ready', () => {
+      if (!waiting || agentSources.get(id) !== entry || source.readyState !== 1) return;
+      waiting = false;
+      clearTimeout(timer);
+      resolveReady(entry);
+    });
+    source.onerror = fail;
+    source.onmessage = (message) => {
+      if (agentSources.get(id) !== entry) return;
+      let value;
+      try { value = JSON.parse(message.data); } catch { fail(); return; }
+      if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.key !== 'string' || typeof value.kind !== 'string') { fail(); return; }
+      if (value.kind === 'done') {
+        const pending = pendingAgentPrompts.get(value.key);
+        if (!pending || pending.source !== entry || !pending.dispatched || value.turnId !== pending.turnId || pending.terminalSeen) return;
+        if (typeof value.ok !== 'boolean' || (value.ok && !['end_turn', 'cancelled'].includes(value.stopReason)) || (!value.ok && typeof value.error !== 'string')) { fail(); return; }
+        pending.terminalSeen = true;
+        emitAgent(value);
+        pending.resolveTerminal(value.ok ? { ok: true, stopReason: value.stopReason } : { ok: false, error: value.error });
+      } else emitAgent(value);
+    };
+    return entry.ready;
   };
   const localAgents = {
     ...methods('localAgents', ['signIn', 'disconnect', 'probe', 'running', 'ack', 'steer', 'adopt', 'cancel', 'setOption', 'answerPermission', 'answerQuestion', 'close']),
@@ -159,7 +195,6 @@ function officialFacadeFactory(bridge) {
       } catch (error) {
         return { ok: false, error: `Cannot resolve project: ${String((error && error.message) || error)}` };
       }
-      ensureAgentSource(id);
       const key = 'dsh-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
       agentKeys.set(key, id);
       // The composer's model menu reads ACP config options, so publish the Host
@@ -174,9 +209,13 @@ function officialFacadeFactory(bridge) {
     cancel: async (key) => {
       const id = agentKeys.get(key);
       if (!id) throw unavailable('localAgents.cancel');
-      const result = await rpc('agent:cancel', { projectId: id });
-      emitAgent({ key, kind: 'done', turnId: '', ok: false, stopReason: 'cancelled' });
-      return result;
+      const pending = pendingAgentPrompts.get(key);
+      if (pending && !pending.dispatched) {
+        pending.cancelled = true;
+        pending.cancelWait();
+        return { ok: true };
+      }
+      return await rpc('agent:cancel', { projectId: id });
     },
     setOption: async (key, optionId, value) => {
       const id = agentKeys.get(key);
@@ -199,9 +238,40 @@ function officialFacadeFactory(bridge) {
         .map(image => ({ mediaType: image.mediaType, data: image.data, ...(typeof image.name === 'string' ? { name: image.name.slice(0, 120) } : {}) })) : [];
       if (!text.trim() && stills.length === 0) throw unavailable('localAgents.prompt');
       const turnId = typeof meta?.turnId === 'string' ? meta.turnId : '';
-      const result = await rpc('agent:prompt', { projectId: id, key, turnId, text: text || '（参考图）', ...(stills.length ? { images: stills } : {}) });
-      emitAgent({ key, kind: 'done', turnId, ok: result?.ok === true, ...(result?.stopReason ? { stopReason: result.stopReason } : {}) });
-      return { ok: true };
+      if (pendingAgentPrompts.has(key)) throw unavailable('localAgents.prompt.busy');
+      let cancelWait;
+      const cancelled = new Promise(resolve => { cancelWait = resolve; });
+      let resolveTerminal, rejectTerminal;
+      const terminal = new Promise((resolve, reject) => { resolveTerminal = resolve; rejectTerminal = reject; });
+      terminal.catch(() => {});
+      const pending = { dispatched: false, cancelled: false, cancelWait, turnId, resolveTerminal, rejectTerminal, terminalSeen: false };
+      let terminalTimer;
+      let settled = false;
+      pendingAgentPrompts.set(key, pending);
+      try {
+        const sourceEntry = await Promise.race([ensureAgentSource(id), cancelled]);
+        // A cancelled pre-admission prompt must never be sent after ready arrives.
+        if (pending.cancelled) return { ok: true, stopReason: 'cancelled' };
+        if (agentSources.get(id) !== sourceEntry) throw unavailable('agent.events');
+        if (sourceEntry.source.readyState !== 1) {
+          agentSources.delete(id);
+          sourceEntry.source.close();
+          throw unavailable('agent.events');
+        }
+        pending.source = sourceEntry;
+        pending.dispatched = true;
+        // RPC completion is not an ordering barrier for SSE. Only the matching
+        // terminal on this exact stream can finish the visible turn.
+        const request = rpc('agent:prompt', { projectId: id, key, turnId, text: text || '（参考图）', ...(stills.length ? { images: stills } : {}) });
+        const rpcFailure = request.then(() => new Promise((_, reject) => {
+          if (!settled) terminalTimer = setTimeout(() => reject(unavailable('agent.events: terminal missing; output may be incomplete')), 15000);
+        }));
+        return await Promise.race([terminal, rpcFailure]);
+      } finally {
+        settled = true;
+        if (terminalTimer !== undefined) clearTimeout(terminalTimer);
+        if (pendingAgentPrompts.get(key) === pending) pendingAgentPrompts.delete(key);
+      }
     },
   };
   const revisions = new Map();

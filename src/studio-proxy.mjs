@@ -462,17 +462,15 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-length': body.length });
         res.end(body);
       } catch (error) {
-        // Codes only (OFFICIAL_AGENT_BUSY, OFFICIAL_AGENT_MODEL_UNAVAILABLE, ...):
-        // they name the failing step without exposing paths, keys or stacks.
+        // Never forward arbitrary exception text: providers and filesystem errors
+        // may contain credentials or private paths. The turn reason is emitted
+        // only when it is one of the explicitly recognized fixed values.
         const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,40}$/.test(error.code) ? error.code : 'OFFICIAL_RPC_FAILED';
-        // The code names the step; the message says why (which turn reason, which
-        // model error). A code alone cost several blind rounds. Host-side messages
-        // never carry keys or absolute paths; line breaks are flattened.
-        const reason = typeof error?.message === 'string' ? error.message.replace(/\\s+/g, ' ').trim().slice(0, 240) : '';
-        try { console.warn('[openfilm] rpc failed', value.channel, code, reason); } catch {}
+        const match = code === 'OFFICIAL_AGENT_TURN_FAILED' && typeof error?.message === 'string'
+          ? /^Turn ended without completion \((aborted|blocked|error|max-tokens|interrupted|forked|unknown)\)$/.exec(error.message) : null;
         if (!res.destroyed && !res.writableEnded) {
           res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
-          res.end(reason ? code + ': ' + reason : code);
+          res.end(match ? `${code}: ${match[1]}` : code);
         }
       } finally {
         officialRequests -= 1;

@@ -12,6 +12,22 @@ const fail = (code, message) => Object.assign(new Error(message), { code });
 const nonempty = value => typeof value === 'string' && value.trim().length > 0 && !value.includes('\0');
 const ordinal = value => Number.isSafeInteger(value) && value >= 0;
 
+// Only fixed categories are sent to the page. Raw provider messages, codes and
+// request IDs can contain private data and must remain in the owning DSH session.
+function turnFailureMessage(reason) {
+  if (reason?.kind === 'error') {
+    const status = reason.error?.status;
+    const category = status === 401 ? '模型认证失败，请检查登录或凭据' :
+      status === 403 ? '模型访问被拒绝，请检查权限' :
+      status === 429 ? '模型请求受到限流，请稍后重试' :
+      Number.isInteger(status) && status >= 500 && status <= 599 ? '模型服务暂时不可用' :
+      Number.isInteger(status) && status >= 400 && status <= 499 ? '模型服务拒绝了请求' : '模型调用失败，请检查 DSH 会话详情';
+    return `Turn ended without completion (error): ${category}`;
+  }
+  const kind = ['aborted', 'blocked', 'max-tokens', 'interrupted', 'forked'].includes(reason?.kind) ? reason.kind : 'unknown';
+  return `Turn ended without completion (${kind})`;
+}
+
 export function createOfficialAgentService(ctx, { verifier, openProjectSessions, emit } = {}) {
   const controller = ctx?.sessionController;
   if (typeof verifier !== 'function' || typeof emit !== 'function' ||
@@ -100,7 +116,7 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
         }
       }
       if (active.has(projectId) || uncertain.has(projectId)) throw fail('OFFICIAL_AGENT_BUSY', 'Project turn is active or requires recovery');
-      const operation = { admitted: false, matched: false, conflict: false };
+      const operation = { admitted: false, rejected: false, matched: false, conflict: false, finished: false, sessionId: undefined, cancelRequested: false };
       active.set(projectId, operation); // before the first await
       const abort = new AbortController();
       aborts.set(projectId, abort);
@@ -108,16 +124,9 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
       let pump;
       try {
         const sessionId = await sessionFor(projectId);
-        // A freshly created Session may have no model yet. Adopt the Host's
-        // configured default so the first message can run; a failure here keeps
-        // whatever the Session already had and is reported by the prompt.
-        try {
-          const catalog = await controller.modelCatalog();
-          const chosen = catalog?.default;
-          if (nonempty(chosen?.provider) && nonempty(chosen?.model)) {
-            await controller.selectModel({ sessionId, provider: chosen.provider, model: chosen.model });
-          }
-        } catch { /* the prompt below reports an unusable model */ }
+        operation.sessionId = sessionId;
+        // Preserve the Session's existing model selection. Selecting the Host
+        // default here would overwrite an explicit choice on every message.
         const requestId = randomUUID();
         const stream = controller.follow({ address: { kind: 'session', sessionId }, activate: true, assistantStream: true }, abort.signal);
         iterator = stream[Symbol.asyncIterator]();
@@ -152,9 +161,14 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
                 } else if (event?.type === 'turn/end') {
                   if (!operation.matched || event.data?.turn !== candidate) throw fail('OFFICIAL_AGENT_CONFLICT', 'Unexpected turn end');
                   finished = true;
+                  operation.finished = true;
                   const reason = event.data?.reason?.kind;
-                  if (reason === 'completed') resolveEnd({ ok: true, stopReason: 'end_turn' });
-                  else rejectEnd(fail('OFFICIAL_AGENT_TURN_FAILED', `Turn ended without completion (${typeof reason === 'string' ? reason : 'unknown'})`));
+                  const result = reason === 'completed' ? { ok: true, stopReason: 'end_turn' }
+                    : reason === 'aborted' && operation.cancelRequested && event.data?.reason?.reason?.kind === 'user'
+                      ? { ok: true, stopReason: 'cancelled' }
+                    : { ok: false, error: turnFailureMessage(event.data?.reason) };
+                  if (await emit(projectId, { key, kind: 'done', turnId, ...result }) === false) throw fail('OFFICIAL_AGENT_STREAM_LOST', 'No live event stream accepted the terminal event');
+                  resolveEnd(result);
                 }
               } else if (frame?.type === 'assistant-stream') {
                 if (!state) throw fail('OFFICIAL_AGENT_CONFLICT', 'Assistant stream arrived before prompt attribution');
@@ -162,11 +176,9 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
                 if (result.state === state) throw fail('OFFICIAL_AGENT_STREAM_INVALID', 'Assistant stream lost turn or attempt continuity');
                 state = result.state;
                 for (const event of result.events) {
-                  // Delivery is best effort: the live view may be reconnecting or
-                  // closed. A missed delta must not abort a running turn, or one
-                  // refresh would kill the conversation. Durable history is the
-                  // chat store's job, not the stream's.
-                  try { await emit(projectId, event); } catch { /* no live view */ }
+                  // Refuse to report success if the transport cannot accept a frame.
+                  // Acceptance is not browser acknowledgement or durable replay.
+                  if (await emit(projectId, event) === false) throw fail('OFFICIAL_AGENT_STREAM_LOST', 'No live event stream accepted the update');
                 }
               } else throw fail('OFFICIAL_AGENT_STREAM_INVALID', 'Unexpected session stream frame');
             }
@@ -178,15 +190,22 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
         // The stream loop and all attribution state exist before admission.
         if (operation.conflict) throw fail('OFFICIAL_AGENT_CONFLICT', 'Session changed before prompt admission');
         operation.admitted = true; // outcome can be uncertain even if prompt rejects
-        const receipt = await controller.prompt({ requestId, sessionId, mode: 'queue', content: parts }, abort.signal);
-        if (receipt?.accepted !== true) throw fail('OFFICIAL_AGENT_ADMISSION', 'Prompt admission was not confirmed');
+        const receipt = await Promise.race([
+          controller.prompt({ requestId, sessionId, mode: 'queue', content: parts }, abort.signal),
+          end.then(() => new Promise(() => {})), // propagate stream errors while admission is pending
+        ]);
+        if (receipt?.accepted !== true) {
+          operation.rejected = receipt?.accepted === false;
+          throw fail('OFFICIAL_AGENT_ADMISSION', 'Prompt admission was not confirmed');
+        }
         return await end;
       } catch (error) {
-        // Only a turn that actually started can leave this project's state
-        // unknown. A rejected prompt (busy session, unusable model, refused
-        // admission) never ran a turn, so locking the project forever would
-        // make one bad message block every later attempt.
-        if (operation.matched) uncertain.add(projectId);
+        // An invoked prompt can have been accepted even if its receipt was lost.
+        // Only an explicit rejection or a verified terminal settles that doubt.
+        if (operation.admitted && (!operation.rejected || operation.matched) && !operation.finished) {
+          uncertain.add(projectId);
+          throw fail('OFFICIAL_AGENT_OUTCOME_UNKNOWN', `${error?.message || String(error)} (admission or turn outcome unknown; do not retry without recovery)`);
+        }
         throw error;
       } finally {
         abort.abort();
@@ -198,13 +217,22 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
     },
     async cancel(projectId) {
       await verify(projectId);
-      const abort = aborts.get(projectId);
-      // Only a turn this bridge is running can be stopped: the Host cancel is
-      // session-wide and could end a turn that started elsewhere.
-      if (!abort) throw fail('OFFICIAL_AGENT_NOT_RUNNING', 'No turn from this window is running');
-      abort.abort();
-      uncertain.add(projectId);
-      return { ok: true };
+      const operation = active.get(projectId);
+      // cancel is session-wide: do not cancel before attribution or after a
+      // terminal event, when the active turn could belong to another client.
+      if (!operation?.matched || operation.finished || operation.conflict || operation.cancelRequested || !operation.sessionId) {
+        throw fail('OFFICIAL_AGENT_NOT_RUNNING', 'No attributable turn from this window is running');
+      }
+      operation.cancelRequested = true;
+      try {
+        const receipt = await controller.cancel({ sessionId: operation.sessionId });
+        if (receipt?.accepted !== true) throw fail('OFFICIAL_AGENT_CANCEL_FAILED', 'Cancellation was not confirmed');
+        // Keep following until turn/end; an acknowledgement is not completion.
+        return { ok: true };
+      } catch (error) {
+        operation.cancelRequested = false;
+        throw error;
+      }
     },
   });
 }

@@ -71,7 +71,7 @@ export async function openProjectConversations(ctx, { z } = {}) {
       }
       let sessionId;
       try {
-        ({ sessionId } = await ctx.sessionController.create({ cwd: canonical }));
+        ({ sessionId } = await ctx.sessionController.create({ cwd: canonical, agentPreset: 'openfilm-video-editing' }));
       } catch (cause) {
         throw error('PROJECT_CONVERSATION_CREATE', 'A conversation for this project could not be created') ;
       }

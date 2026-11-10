@@ -31,5 +31,9 @@
   <div class="nameplate">讲者 · 你的名字</div>
   <div class="presenter">人物窗口</div>
   <div class="capsule">字幕胶囊：一句话说清这一页要讲什么。</div>
+  <script>
+    // A still page has the same DOM picture at every local time.
+    window.film = { width: 1080, height: 1920, duration: 6, ready: document.fonts.ready, frame(_t) {} };
+  </script>
 </body>
 </html>

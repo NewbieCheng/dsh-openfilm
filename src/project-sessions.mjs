@@ -78,7 +78,7 @@ export async function openProjectSessions(ctx, { z } = {}) {
       let sessionId;
       try {
         // Omitting sessionId is essential: a supplied blank session can be reused.
-        ({ sessionId } = await ctx.sessionController.create({ cwd: projectPath }));
+        ({ sessionId } = await ctx.sessionController.create({ cwd: projectPath, agentPreset: 'openfilm-video-editing' }));
         if (typeof sessionId !== 'string' || !sessionId.trim()) throw new Error('Session creation returned no ID');
       } catch (cause) {
         throw recovery(projectId, cause);

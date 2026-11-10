@@ -14,7 +14,6 @@ import { createServer } from 'node:http';
 export function startLocalConsole({
   port = Number(process.env.NO996_OPENFILM_DEBUG_PORT || 47821),
   templates = async () => [],
-  create = async () => { throw new Error('创建不可用'); },
   editorUrl = () => null,
 } = {}) {
   const escape = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
@@ -34,7 +33,7 @@ export function startLocalConsole({
   code { background:#242424; padding:1px 5px; border-radius:4px }
 </style>
 <h1>OpenFilm 模板</h1>
-<p class="sub">选一个模板，插件会在影片库里新建项目并把模板文件放进去。</p>
+<p class="sub">此调试页面仅供查看模板；请在视频创作面板中创建项目。</p>
 ${body}
 <script>
 document.addEventListener('click', async (event) => {
@@ -72,19 +71,16 @@ document.addEventListener('click', async (event) => {
         return;
       }
       if (url.pathname === '/create' && req.method === 'POST') {
-        const id = url.searchParams.get('template') || '';
-        try {
-          const result = await create(id);
-          send(200, 'application/json; charset=utf-8', JSON.stringify({ projectId: result.projectId, path: result.path, ...(result.link ? { link: result.link } : {}) }));
-        } catch (error) {
-          send(500, 'application/json; charset=utf-8', JSON.stringify({ error: String((error && error.message) || error) }));
-        }
+        // A loopback address alone is not authentication: arbitrary web pages
+        // can send cross-origin form POSTs. Project creation is available only
+        // through the authenticated editor bridge.
+        send(403, 'application/json; charset=utf-8', JSON.stringify({ error: '请在视频创作面板中创建项目。' }));
         return;
       }
       if (url.pathname !== '/' || req.method !== 'GET') return send(405, 'text/plain; charset=utf-8', '不支持的请求');
       let items = [];
       try { items = await templates(); } catch { /* an empty page still explains itself */ }
-      const cards = items.map(item => `<li><h2>${escape(item.title)}<span class="tag">${escape(item.mode)}</span></h2><p>${escape(item.description || '')}</p><button type="button" data-id="${escape(item.id)}">用这个模板建项目</button></li>`).join('');
+      const cards = items.map(item => `<li><h2>${escape(item.title)}<span class="tag">${escape(item.mode)}</span></h2><p>${escape(item.description || '')}</p></li>`).join('');
       send(200, 'text/html; charset=utf-8', page(`<ul>${cards || '<li><p>没有可用模板。</p></li>'}</ul><div id="msg"></div>`));
     })();
   });

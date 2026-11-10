@@ -6,21 +6,43 @@
  * the official chat and their two-phase registry could dead-end in a state the
  * page could not recover from.
  */
+export function templateProjectUrl(editorOrigin, projectId) {
+  if (typeof projectId !== 'string' || !/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw new Error('Invalid project');
+  return `${new URL(editorOrigin).origin}/projects/${projectId}`;
+}
+
 export function createStudioPanel(React) {
   const h = React.createElement;
-  return function StudioPanel({ t, startStudio }) {
+  return function StudioPanel({ t, startStudio, templateRequest }) {
     const [state, setState] = React.useState({ status: 'loading' });
     const [attempt, setAttempt] = React.useState(0);
     const [silent, setSilent] = React.useState(false);
     const [diag, setDiag] = React.useState(null);
     const [boot, setBoot] = React.useState(null);
+    const [templates, setTemplates] = React.useState([]);
+    const [view, setView] = React.useState('home');
+    const [templateError, setTemplateError] = React.useState(false);
+    const [creationUncertain, setCreationUncertain] = React.useState(false);
+    const [creating, setCreating] = React.useState(false);
     const containerRef = React.useRef(null);
     const iframeRef = React.useRef(null);
     const heardRef = React.useRef(false);
+    const creatingRef = React.useRef(false);
+    const viewRef = React.useRef(view);
+    viewRef.current = view;
+
+    React.useEffect(() => {
+      let live = true;
+      Promise.resolve().then(() => templateRequest({ action: 'list' })).then(result => {
+        if (live && Array.isArray(result?.templates)) setTemplates(result.templates.filter(item => item && typeof item.id === 'string' && typeof item.title === 'string'));
+      }).catch(() => { if (live) setTemplateError(true); });
+      return () => { live = false; };
+    }, [templateRequest]);
 
     React.useEffect(() => {
       const controller = new AbortController();
       setState({ status: 'loading' });
+      setBoot(null);
       heardRef.current = false;
       Promise.resolve().then(() => startStudio(controller.signal)).then(result => {
         if (controller.signal.aborted) return;
@@ -32,15 +54,7 @@ export function createStudioPanel(React) {
         }
         if (desktop && (typeof result.ticket !== 'string' || !/^[A-Za-z0-9_-]{32,128}$/.test(result.ticket))) throw new Error('Invalid Studio desktop ticket');
         const url = desktop ? `${target.origin}/__dsh/open#${result.ticket}` : `${target.origin}/`;
-        // Remember the project the user was editing so coming back from another
-        // page reopens it instead of the project list. Studio keeps the film on
-        // disk; this only restores where they were.
-        let start = url;
-        try {
-          const last = localStorage.getItem('no996.openfilm.lastProject');
-          if (!desktop && typeof last === 'string' && /^[A-Za-z0-9_-]{6,40}$/.test(last)) start = `${target.origin}/projects/${last}`;
-        } catch { /* no stored project */ }
-        setState({ status: 'ready', url: start, webOrigin: typeof result.webOrigin === 'string' ? result.webOrigin : '' });
+        setState({ status: 'ready', url, webOrigin: typeof result.webOrigin === 'string' ? result.webOrigin : '' });
       }).catch(error => {
         if (!controller.signal.aborted) setState({ status: 'error', message: String(error?.message || error) });
       });
@@ -57,7 +71,7 @@ export function createStudioPanel(React) {
           heardRef.current = true;
           setBoot({ hasNative: data.hasNative === true, rendered: data.rendered === true });
         }
-        if (data && typeof data === 'object' && data.type === 'no996-openfilm:project' && data.version === 1 && typeof data.projectId === 'string') {
+        if (viewRef.current === 'editor' && data && typeof data === 'object' && data.type === 'no996-openfilm:project' && data.version === 1 && typeof data.projectId === 'string') {
           try {
             if (/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId)) localStorage.setItem('no996.openfilm.lastProject', data.projectId);
             else localStorage.removeItem('no996.openfilm.lastProject');
@@ -81,6 +95,40 @@ export function createStudioPanel(React) {
     }, [silent, state.status, attempt]);
 
     const retry = () => { setSilent(false); setAttempt(value => value + 1); };
+    const createTemplate = async id => {
+      if (creatingRef.current || creationUncertain || !iframeRef.current || state.status !== 'ready') return;
+      const frame = iframeRef.current;
+      creatingRef.current = true;
+      setCreating(true);
+      setTemplateError(false);
+      try {
+        const result = await templateRequest({ action: 'create', templateId: id });
+        const url = templateProjectUrl(state.url, result?.projectId);
+        // Keep React's source of truth aligned while preserving the iframe node.
+        if (iframeRef.current === frame) {
+          setState(current => current.status === 'ready' ? { ...current, url } : current);
+          setView('editor');
+        }
+      } catch {
+        // A lost response can follow successful registration. Do not offer an
+        // immediate retry that may create a second project.
+        setCreationUncertain(true);
+        setTemplateError(true);
+      }
+      finally { creatingRef.current = false; setCreating(false); }
+    };
+    const openExisting = () => {
+      // The frame has already redeemed the desktop ticket. Restore a known
+      // project only in response to this explicit action; otherwise show Studio.
+      try {
+        const last = localStorage.getItem('no996.openfilm.lastProject');
+        if (typeof last === 'string' && /^[A-Za-z0-9_-]{6,40}$/.test(last)) {
+          const url = templateProjectUrl(state.url, last);
+          setState(current => current.status === 'ready' ? { ...current, url } : current);
+        }
+      } catch { /* Studio's own project list remains available */ }
+      setView('editor');
+    };
     let studio;
     if (state.status === 'loading') {
       studio = h('div', { role: 'status', style: { padding: 24, color: 'var(--dsw-alias-label-secondary)' } }, t('studioLoading'));
@@ -97,14 +145,28 @@ export function createStudioPanel(React) {
     } else {
       studio = h('iframe', {
         ref: iframeRef, title: t('studioTitle'), src: state.url,
+        'aria-hidden': view === 'home' ? true : undefined, tabIndex: view === 'home' ? -1 : undefined,
         sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-modals',
         allow: 'clipboard-read; clipboard-write',
         referrerPolicy: 'no-referrer',
-        style: { display: 'block', width: '100%', height: '100%', border: 0, background: 'var(--dsw-alias-bg-base)' },
+        style: { display: 'block', width: '100%', height: '100%', border: 0, background: 'var(--dsw-alias-bg-base)', visibility: view === 'home' ? 'hidden' : 'visible' },
       });
     }
-    // No floating controls: the Studio shell owns the whole panel. The debug
-    // window is still reachable at /no996-openfilm/standalone for development.
-    return h('div', { ref: containerRef, style: { position: 'relative', display: 'flex', width: '100%', height: '100%', minWidth: 0, minHeight: 0 } }, studio);
+    const ready = state.status === 'ready' && !!boot && !silent;
+    const home = h('main', { style: { position: 'absolute', inset: 0, overflow: 'auto', padding: 'clamp(24px, 5vw, 64px)', color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-base)' } },
+      h('div', { style: { maxWidth: 960, margin: '0 auto' } },
+        h('h1', { style: { margin: '0 0 8px', fontSize: 28 } }, t('templateHomeTitle')),
+        h('p', { style: { margin: '0 0 28px', color: 'var(--dsw-alias-label-secondary)' } }, t('templateHomeDescription')),
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))', gap: 12 } },
+          ...templates.map(item => h('button', { key: item.id, type: 'button', disabled: creating || creationUncertain || !ready, onClick: () => createTemplate(item.id), style: { textAlign: 'left', minHeight: 150, padding: 20, border: '1px solid var(--dsw-alias-separator, #8886)', borderRadius: 8, background: 'var(--dsw-alias-bg-layer-1, transparent)', color: 'inherit', cursor: 'pointer' } },
+            h('strong', { style: { display: 'block', fontSize: 17, marginBottom: 8 } }, item.title),
+            h('span', { style: { display: 'block', color: 'var(--dsw-alias-label-secondary)', marginBottom: 20 } }, item.description || ''),
+            h('span', null, creating ? t('templateBusy') : t('templateCreate'))))),
+        templateError ? h('p', { role: 'alert' }, t(creationUncertain ? 'templateUncertain' : 'templateError')) : null,
+        h('button', { type: 'button', disabled: creating || !ready, onClick: openExisting, style: { marginTop: 28 } }, t('openExisting')),
+        !ready ? h('div', { style: { marginTop: 16 } }, state.status === 'ready' && !silent ? t('studioLoading') : studio) : null));
+    return h('div', { ref: containerRef, style: { position: 'relative', width: '100%', height: '100%', minWidth: 0, minHeight: 0 } },
+      state.status === 'ready' && !silent ? studio : view === 'editor' ? studio : null,
+      view === 'home' ? home : null);
   };
 }

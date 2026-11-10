@@ -18,6 +18,7 @@ import { createOfficialAgentService } from './official-agent-service.mjs';
 import { attachOfficialEventStream } from './official-event-stream.mjs';
 import { z } from 'zod';
 import { realpath } from 'node:fs/promises';
+import { registerTemplateBridge } from './template-bridge.mjs';
 
 /**
  * Host-only route and Studio lifecycle. `createProxy` receives the private
@@ -47,19 +48,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   if (process.env.NO996_OPENFILM_DEBUG_PORT !== '0') {
     debugBridge = startLocalConsole({
       templates: () => listTemplates(templatesRoot),
-      create: async (templateId) => {
-        const chosen = (await listTemplates(templatesRoot)).find(item => item.id === templateId);
-        if (!chosen) throw Object.assign(new Error('未知模板'), { code: 'TEMPLATE_INPUT' });
-        await runtime.ensureStarted();
-        const proxy = await proxyFor(origin.origin, false);
-        const projects = await proxy.listProjects().catch(() => []);
-        const parentDir = projects.length ? dirname(projects[0].path) : join(homedir(), 'OpenFilm');
-        const installed = await installTemplate({
-          root: templatesRoot, id: chosen.id, parentDir,
-          createProject: target => proxy.createProject(target), titleFor: () => chosen.title,
-        });
-        return { ...installed, link: null };
-      },
     });
     debugBridge.catch(() => { debugBridge = undefined; });
   }
@@ -92,7 +80,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     return officialStorePromise;
   };
   const officialRpc = async (channel, payload) => {
-    const store = await officialStore();
     if (disposed) throw new Error('Studio disposed');
     if (channel === 'agent:prompt') {
       if (!agentService) throw new Error('Agent bridge unavailable');
@@ -116,7 +103,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const parentDir = projects.length ? dirname(projects[0].path) : join(homedir(), 'OpenFilm');
       return { ...(await installTemplate({ root: templatesRoot, id: chosen.id, parentDir, createProject: target => proxy.createProject(target), titleFor: () => chosen.title })), prompt: chosen.prompt };
     }
-    return createOfficialChatRpc(store, agentService)(channel, payload);
+    return createOfficialChatRpc(await officialStore(), agentService)(channel, payload);
   };
   // Stage 1 trust model: the editor origin is the official OpenFilm window for
   // this local DSH user (the same trust upstream's desktop app gives its own
@@ -198,6 +185,12 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     pending.catch(() => { if (proxies.get(browserOrigin) === pending) proxies.delete(browserOrigin); });
     return pending;
   }
+  const unregisterTemplateBridge = registerTemplateBridge(ctx, {
+    webOrigin,
+    list: () => listTemplates(templatesRoot),
+    create: templateId => officialRpc('template:create', { templateId }),
+    isDisposed: () => disposed,
+  });
   const unregister = ctx.webServer.register({
     kind: 'exact', path: '/api/no996-openfilm/diagnose',
     async handler(req, res) {
@@ -245,19 +238,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         if (disposed || !upstream) { res.writeHead(503).end(); return; }
         const proxy = await proxyFor(desktop ? surface : browser.origin, desktop);
         if (disposed) { res.writeHead(503).end(); return; }
-        // Bring the fixed debug port up with the first bootstrap, so a typed
-        // http://127.0.0.1:47821/ works without clicking anything first. In
-        // desktop mode the listener holds Studio's cookie; inside DSH's own
-        // browser there is no ticket, so it forwards to the DSH standalone page.
-        try {
-          const boot = proxy.bootstrapData();
-          if (!debugBridge) {
-            debugBridge = boot?.ticket
-              ? redeemStudioSession(boot.editorOrigin, boot.ticket).then(cookie => startStudioDebug({ editorOrigin: boot.editorOrigin, sessionCookie: cookie }))
-              : startStudioRedirect({ target: `${boot?.webOrigin ?? origin.origin}/no996-openfilm/standalone` });
-            debugBridge.catch(() => { debugBridge = undefined; });
-          }
-        } catch { /* the panel still loads without it */ }
         await proxy.bootstrap(res);
       } catch {
         // Upstream errors may contain bearer keys; never relay them.
@@ -352,6 +332,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     disposed = true;
     unregisterContext();
     unregisterGuide();
+    unregisterTemplateBridge();
     unregisterBootstrap();
     unregisterStandalone();
     unregisterTemplatesPage();
