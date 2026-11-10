@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 
 const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.url));
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
+import { startStudioRedirect } from './studio-debug-redirect.mjs';
 import { createDshAskAgent } from './dsh-ai.mjs';
 import { openProjectConversations } from './project-conversation.mjs';
 import { createGuideTool } from './guide-tool.mjs';
@@ -39,6 +40,13 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   let officialStorePromise;
   let lastProxy;
   let debugBridge;
+  // A stable address the person can type into the right-side browser without
+  // opening the panel first: same fixed port, forwarding to the DSH standalone
+  // page. Disable with NO996_OPENFILM_DEBUG_PORT=0.
+  if (process.env.NO996_OPENFILM_DEBUG_PORT !== '0') {
+    debugBridge = startStudioRedirect({ target: `${origin.origin}/no996-openfilm/standalone` });
+    debugBridge.catch(() => { debugBridge = undefined; });
+  }
   const proxies = new Map();
   // Resolve project IDs against the active Studio, never a renderer path. The
   // store calls this on every operation so a removed project loses access.
@@ -222,12 +230,15 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         const proxy = await proxyFor(desktop ? surface : browser.origin, desktop);
         if (disposed) { res.writeHead(503).end(); return; }
         // Bring the fixed debug port up with the first bootstrap, so a typed
-        // http://127.0.0.1:47821/ works without clicking anything first.
+        // http://127.0.0.1:47821/ works without clicking anything first. In
+        // desktop mode the listener holds Studio's cookie; inside DSH's own
+        // browser there is no ticket, so it forwards to the DSH standalone page.
         try {
           const boot = proxy.bootstrapData();
-          if (boot?.ticket && !debugBridge) {
-            debugBridge = redeemStudioSession(boot.editorOrigin, boot.ticket)
-              .then(cookie => startStudioDebug({ editorOrigin: boot.editorOrigin, sessionCookie: cookie }));
+          if (!debugBridge) {
+            debugBridge = boot?.ticket
+              ? redeemStudioSession(boot.editorOrigin, boot.ticket).then(cookie => startStudioDebug({ editorOrigin: boot.editorOrigin, sessionCookie: cookie }))
+              : startStudioRedirect({ target: `${boot?.webOrigin ?? origin.origin}/no996-openfilm/standalone` });
             debugBridge.catch(() => { debugBridge = undefined; });
           }
         } catch { /* the panel still loads without it */ }
