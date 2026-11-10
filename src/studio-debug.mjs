@@ -32,7 +32,12 @@ export function startStudioDebug({ editorOrigin, sessionCookie, logger, port = N
       return;
     }
     const held = String(req.headers.cookie || '').split(';').map(part => part.trim()).find(part => part.startsWith(`${cookieName}=`));
-    if (!held || !sessions.has(held.slice(cookieName.length + 1))) {
+    // A URL typed or bookmarked in a browser sends no Origin and Sec-Fetch-Site:
+    // none: that is the person asking for this window directly, so it is let in
+    // without the one-time ticket. Anything linked from another site (the way a
+    // stray page would try to use this port) still needs the ticket.
+    const typed = !req.headers.origin && (req.headers['sec-fetch-site'] === 'none' || !req.headers['sec-fetch-site']);
+    if ((!held || !sessions.has(held.slice(cookieName.length + 1))) && !(typed && req.method === 'GET')) {
       res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }).end('open this window through the video panel button');
       return;
     }

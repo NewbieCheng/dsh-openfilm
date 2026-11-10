@@ -221,6 +221,16 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         if (disposed || !upstream) { res.writeHead(503).end(); return; }
         const proxy = await proxyFor(desktop ? surface : browser.origin, desktop);
         if (disposed) { res.writeHead(503).end(); return; }
+        // Bring the fixed debug port up with the first bootstrap, so a typed
+        // http://127.0.0.1:47821/ works without clicking anything first.
+        try {
+          const boot = proxy.bootstrapData();
+          if (boot?.ticket && !debugBridge) {
+            debugBridge = redeemStudioSession(boot.editorOrigin, boot.ticket)
+              .then(cookie => startStudioDebug({ editorOrigin: boot.editorOrigin, sessionCookie: cookie }));
+            debugBridge.catch(() => { debugBridge = undefined; });
+          }
+        } catch { /* the panel still loads without it */ }
         await proxy.bootstrap(res);
       } catch {
         // Upstream errors may contain bearer keys; never relay them.
