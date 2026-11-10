@@ -39,7 +39,8 @@
 | 模板 | `src/official-templates.mjs`、`src/template-bridge.mjs`、`vendor/templates/*` | 列举、复制、官方 `openProject` 注册；HTTP 桥鉴权 |
 | 草稿工具 | `src/draft-tool.mjs`、`film-draft.mjs`、`film-operations.mjs`、`film-source.mjs`、`film-summary.mjs`、`timeline-*.mjs`、`draft-session.mjs` | 解析 `film.html`、生成摘要、内存内 move/trim/split |
 | 客户端源码 | `src/studio-entry.js`、`studio-panel.mjs`、`panel-keepalive.mjs` | 注册 `main`(占位) / `sidebar.panellist`(图标) / `shell.overlay`(真面板)。**面板没有模板首页**，打开就是官方 Studio |
-| 官方界面注入 | `src/shell-extras.mjs` | 往官方 shell 页面叠一个模板下拉 + 隐藏「视频复刻」卡片；只加 DOM 覆盖层，上游文件不动 |
+| 官方界面注入 | `src/shell-extras.mjs`（读取器）+ `assets/shell-ui.js`（真正的脚本） | 往官方 shell 页面叠模板下拉 / 故障卡片 / 隐藏「视频复刻」；每次渲染读盘，改完刷新即生效 |
+| 热更新教程 | `docs/HOT-RELOAD.md` | 三档热更新的具体做法与坑 |
 | 归档 | `src/workspace-archive.mjs`、`src/archive-bridge.mjs` | DSH 归档集合的唯一 Host 视图 + `/api/no996-openfilm/archive` |
 | 事件流 | `src/official-event-stream.mjs`、`official-event-hub.mjs` | SSE 写出与按项目 fan-out；**背压只排队不关闭**（0.4.2 修） |
 | 客户端产物 | `client.js` | **由 `npm run build` 生成，禁止手改** |
@@ -54,7 +55,7 @@
 
 ```sh
 npm run build                      # 只在改了客户端源码时需要
-node --test tests/*.test.mjs       # 期望 125 tests / 124 pass / 1 skip
+node --test tests/*.test.mjs       # 期望 126 tests / 125 pass / 1 skip
 ```
 
 顺序：**先判断改的是哪一层 → 改 `src/` 源码 → build（如需）→ 跑测试 → 按 §4 让变更生效 → 在真实 GUI 里确认。**
@@ -95,7 +96,8 @@ plugin_manager set_plugin enabled=true  target=include:dsh-openfilm
 | `vendor/templates/**`（`manifest.json`、`film.html`、页面） | 否 | **下一次请求即生效**（`listTemplates` 每次都读盘）；面板首页的列表要刷新页面重新 mount 才重列 | 无 |
 | `vendor/official-shell/ui/**` | **是**，且必须用 `scripts/build-official-shell.mjs` 重生成 `manifest.json` | 重启 Studio（= 重载插件/重启 Host） | 未保存编辑丢失。**手改 ui 而不更新 manifest 会直接 `OFFICIAL_SHELL_UNAVAILABLE`**（启动时逐个文件校验 sha256） |
 | `cordis.patch.yml` | 否 | 重新 `install_bundle` 或重启 Host | 已存在的会话不会被迁移或改写 |
-| `src/shell-extras.mjs`（注入到官方页面的 UI/隐藏规则） | 否 | **重载插件** + 刷新页面（代理在插件装配时读取它） | 刷新会重载 iframe |
+| `assets/shell-ui.js`（注入到官方页面的 UI/隐藏规则） | 否 | **保存 + 刷新页面**（每次渲染读盘，mtime 缓存） | 刷新会重载 iframe |
+| `src/shell-extras.mjs`（读取上面的文件，几乎不用改） | 否 | 重载插件 + 刷新页面 | 同上 |
 | `locale/*.json` | 否 | 刷新页面（Host 读取） | 无 |
 
 ### 4.3 关于 DSH 的 HMR
@@ -150,7 +152,7 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 
 ## 7. 测试规则
 
-- `node --test tests/*.test.mjs`；当前 **125 tests / 124 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
+- `node --test tests/*.test.mjs`；当前 **126 tests / 125 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
 - 只允许模拟对象与 `mkdtemp` 临时目录；`OPENFILM_HOME` 指到临时目录，绝不碰用户库。
 - 真实项目注册验证可以跑官方 `openfilm` 服务端 `openProject`，但必须用临时 home。
 - 新增行为必须带测试；本仓的历史 bug 大多是"逻辑没问题但顺序/形状假设错"，测试是唯一便宜的判断手段。

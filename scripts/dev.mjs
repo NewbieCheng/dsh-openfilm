@@ -1,22 +1,34 @@
 import { context } from 'esbuild';
 import { fileURLToPath } from 'node:url';
-import { statSync } from 'node:fs';
+import { statSync, readdirSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
+import { watch } from 'node:fs';
 
 /**
  * Watch mode for the three surfaces we edit, and nothing else.
  *
  *   1. assets/shell-ui.js      → read on every page render (refresh only)
  *   2. src/studio-entry.js     → this script rebuilds `client.js` (refresh only)
- *   3. src/*.mjs (Host)        → needs a plugin reload; this script only tells
- *                               you it saw the change, so you do not sit there
- *                               wondering why the page looks the same.
+ *   3. src/*.mjs (Host)        → needs a plugin reload; this script touches the
+ *                                whole Host graph on every change, because the
+ *                                loader re-evaluates only modules whose mtime it
+ *                                sees change — an untouched importer keeps its old
+ *                                import and the edit silently does nothing.
  */
 const root = fileURLToPath(new URL('../', import.meta.url));
 
 const stamp = () => {
   try { const info = statSync(join(root, 'client.js')); return `${info.size}@${info.mtimeMs}`; } catch { return 'none'; }
 };
+
+function touchHost() {
+  const now = new Date();
+  const files = ['index.js', ...readdirSync(join(root, 'src')).filter(name => name.endsWith('.mjs')).map(name => join('src', name))];
+  for (const name of files) {
+    try { utimesSync(join(root, name), now, now); } catch { /* a missing file is not fatal */ }
+  }
+  return files.length;
+}
 
 let builds = 0;
 const ctx = await context({
@@ -44,5 +56,17 @@ const ctx = await context({
 await ctx.watch();
 console.log('[dev] watching src/studio-entry.js → client.js');
 console.log('[dev] assets/shell-ui.js: edit + refresh the studio page, no reload needed');
-console.log('[dev] src/*.mjs (Host): edit, then reload the plugin (see docs/DEVELOPMENT.md §4.1.1)');
-console.log('[dev] Ctrl+C to stop');
+console.log('[dev] src/*.mjs (Host): edit → touched → reload the plugin, then F5');
+
+// Host files: touch the whole graph so the next plugin reload cannot reuse a
+// stale importer. The reload itself stays a deliberate action.
+let hostTimer = null;
+watch(join(root, 'src'), { persistent: true }, (event, file) => {
+  if (!file || !file.endsWith('.mjs')) return;
+  if (hostTimer) clearTimeout(hostTimer);
+  hostTimer = setTimeout(() => {
+    const count = touchHost();
+    console.log(`\n[dev] ${file} changed → touched ${count} Host modules. Reload the plugin, then F5.`);
+  }, 120);
+});
+
