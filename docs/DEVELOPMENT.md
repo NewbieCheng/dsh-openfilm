@@ -3,7 +3,7 @@
 > 面向改动本仓的人（含智能体）。给智能体的最短约束看 `../AGENTS.md`；决策与历史看 `NOTES.md`。
 > 文中的结论都对应可复查的代码位置；标"待验证"的项不要当既成事实引用。
 
-- 版本：`0.3.4`
+- 版本：`0.5.8`
 - 运行时：Node 20+，DSH 内核（需 `session-controller`、`storageDomain`、`webServer`、`llm`、`agents`）
 - 上游：`openfilm@0.3.1`（`package.json` 里的 tarball URL 是唯一版本来源）
 
