@@ -26,6 +26,11 @@ export function createStudioPanel(React) {
     const [projectId, setProjectId] = React.useState(null);
     const [archive, setArchive] = React.useState(null);
     const [archiveBusy, setArchiveBusy] = React.useState(false);
+    // The official shell keeps running in the iframe after the Host side goes
+    // away (plugin reload, Studio crash), and its own overlay says to restart an
+    // app that is not involved. Watch the Host instead and re-bootstrap.
+    const [health, setHealth] = React.useState(null);
+    const autoRetriedRef = React.useRef(false);
     const iframeRef = React.useRef(null);
     const heardRef = React.useRef(false);
 
@@ -100,9 +105,38 @@ export function createStudioPanel(React) {
       return () => { live = false; };
     }, [silent, state.status, attempt]);
 
-    const retry = () => { setSilent(false); setAttempt(value => value + 1); };
-    // Poll while the editor is open: archiving in the DSH sidebar has no channel
-    // into this frame, and a stalled send is the symptom we are removing.
+    const retry = () => { setSilent(false); setHealth(null); setAttempt(value => value + 1); };
+    // Poll the Host's own Studio state while the panel is up. One automatic
+    // re-bootstrap per outage, then a visible manual control: a dead iframe must
+    // never be the only thing the person sees.
+    React.useEffect(() => {
+      if (state.status !== 'ready') return undefined;
+      let live = true;
+      let misses = 0;
+      const check = async () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+        let running = false;
+        try {
+          const response = await fetch('/api/no996-openfilm/diagnose', { method: 'POST', credentials: 'same-origin' });
+          const data = response.ok ? await response.json() : null;
+          running = data?.studio?.running === true;
+        } catch { /* the Host itself may be reloading */ }
+        if (!live) return;
+        setHealth({ running, at: Date.now() });
+        if (running) { misses = 0; autoRetriedRef.current = false; return; }
+        misses += 1;
+        if (misses >= 2 && !autoRetriedRef.current) {
+          autoRetriedRef.current = true;
+          setSilent(false);
+          setAttempt(value => value + 1);
+        }
+      };
+      check();
+      const timer = setInterval(check, 10000);
+      return () => { live = false; clearInterval(timer); };
+    }, [state.status, attempt]);
+    // Archive polling: archiving in the DSH sidebar has no channel into this
+    // frame, and a stalled send is the symptom we are removing.
     React.useEffect(() => {
       if (!projectId || state.status !== 'ready') { setArchive(null); return undefined; }
       let live = true;
@@ -177,8 +211,32 @@ export function createStudioPanel(React) {
       h('button', { type: 'button', disabled: archiveBusy, onClick: () => changeArchive('unarchive') }, t('archiveRestore')),
       h('button', { type: 'button', disabled: archiveBusy, onClick: () => changeArchive('rebind') }, t('archiveRebind')))
       : null;
+    // The Host stopped its Studio (plugin reload, crash). The official frame
+    // shows its own "restart OpenFilm" overlay, which is true for the desktop app
+    // and misleading here — so cover it and offer the one action that works.
+    const stopped = state.status === 'ready' && !archived && health?.running === false;
+    const stoppedOverlay = stopped
+      ? h('div', {
+        role: 'alert',
+        style: {
+          position: 'absolute', inset: 0, zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 24, background: 'color-mix(in srgb, var(--dsw-alias-bg-base, #111) 82%, transparent)',
+        },
+      },
+      h('div', {
+        style: {
+          maxWidth: 380, width: '100%', padding: '20px 22px', borderRadius: 12, textAlign: 'center',
+          background: 'var(--dsw-alias-bg-layer-2, #232326)', color: 'var(--dsw-alias-label-primary)',
+          border: '1px solid var(--dsw-alias-separator, #8886)', boxShadow: '0 12px 40px #0007',
+        },
+      },
+      h('strong', { style: { display: 'block', fontSize: 14, marginBottom: 6 } }, t('studioStopped')),
+      h('span', { style: { display: 'block', fontSize: 12, lineHeight: 1.6, opacity: 0.75, marginBottom: 14 } }, t('studioStoppedHint')),
+      h('button', { type: 'button', onClick: retry, style: { padding: '7px 16px', borderRadius: 8, cursor: 'pointer' } }, t('studioRestart'))))
+      : null;
     return h('div', { style: { position: 'relative', width: '100%', height: '100%', minWidth: 0, minHeight: 0 } },
       studio,
-      banner);
+      banner,
+      stoppedOverlay);
   };
 }

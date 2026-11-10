@@ -109,3 +109,23 @@ test('an invalid editor origin is refused instead of framed', async () => {
     assert.match(text(tree), /Invalid local Studio address/);
   } finally { panel.close(); cleanup(); }
 });
+
+test('a stopped Studio gets a centered restart control instead of a dead frame', async () => {
+  browser();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ studio: { running: false } }) });
+  const panel = mount(createStudioPanel, { t: key => key, startStudio: async () => ({ editorOrigin: 'http://127.0.0.1:47822' }) });
+  try {
+    panel.render(); await new Promise(resolve => setImmediate(resolve));
+    panel.render(); await new Promise(resolve => setImmediate(resolve));
+    const tree = panel.render();
+    // The official frame's own overlay tells the person to restart an app that
+    // is not involved; ours names the real cause and the real action.
+    const overlay = find(tree, 'div').find(node => node.props.role === 'alert');
+    assert.ok(overlay, 'a stopped Studio must be announced');
+    const labels = text(overlay);
+    assert.match(labels, /studioStopped/);
+    assert.match(labels, /studioStoppedHint/);
+    assert.match(labels, /studioRestart/);
+  } finally { panel.close(); globalThis.fetch = realFetch; cleanup(); }
+});

@@ -13,6 +13,8 @@
       const [projectId, setProjectId] = React.useState(null);
       const [archive, setArchive] = React.useState(null);
       const [archiveBusy, setArchiveBusy] = React.useState(false);
+      const [health, setHealth] = React.useState(null);
+      const autoRetriedRef = React.useRef(false);
       const iframeRef = React.useRef(null);
       const heardRef = React.useRef(false);
       React.useEffect(() => {
@@ -92,8 +94,43 @@
       }, [silent, state.status, attempt]);
       const retry = () => {
         setSilent(false);
+        setHealth(null);
         setAttempt((value) => value + 1);
       };
+      React.useEffect(() => {
+        if (state.status !== "ready") return void 0;
+        let live = true;
+        let misses = 0;
+        const check = async () => {
+          if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+          let running = false;
+          try {
+            const response = await fetch("/api/no996-openfilm/diagnose", { method: "POST", credentials: "same-origin" });
+            const data = response.ok ? await response.json() : null;
+            running = data?.studio?.running === true;
+          } catch {
+          }
+          if (!live) return;
+          setHealth({ running, at: Date.now() });
+          if (running) {
+            misses = 0;
+            autoRetriedRef.current = false;
+            return;
+          }
+          misses += 1;
+          if (misses >= 2 && !autoRetriedRef.current) {
+            autoRetriedRef.current = true;
+            setSilent(false);
+            setAttempt((value) => value + 1);
+          }
+        };
+        check();
+        const timer = setInterval(check, 1e4);
+        return () => {
+          live = false;
+          clearInterval(timer);
+        };
+      }, [state.status, attempt]);
       React.useEffect(() => {
         if (!projectId || state.status !== "ready") {
           setArchive(null);
@@ -202,11 +239,48 @@
         h("button", { type: "button", disabled: archiveBusy, onClick: () => changeArchive("unarchive") }, t("archiveRestore")),
         h("button", { type: "button", disabled: archiveBusy, onClick: () => changeArchive("rebind") }, t("archiveRebind"))
       ) : null;
+      const stopped = state.status === "ready" && !archived && health?.running === false;
+      const stoppedOverlay = stopped ? h(
+        "div",
+        {
+          role: "alert",
+          style: {
+            position: "absolute",
+            inset: 0,
+            zIndex: 30,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            background: "color-mix(in srgb, var(--dsw-alias-bg-base, #111) 82%, transparent)"
+          }
+        },
+        h(
+          "div",
+          {
+            style: {
+              maxWidth: 380,
+              width: "100%",
+              padding: "20px 22px",
+              borderRadius: 12,
+              textAlign: "center",
+              background: "var(--dsw-alias-bg-layer-2, #232326)",
+              color: "var(--dsw-alias-label-primary)",
+              border: "1px solid var(--dsw-alias-separator, #8886)",
+              boxShadow: "0 12px 40px #0007"
+            }
+          },
+          h("strong", { style: { display: "block", fontSize: 14, marginBottom: 6 } }, t("studioStopped")),
+          h("span", { style: { display: "block", fontSize: 12, lineHeight: 1.6, opacity: 0.75, marginBottom: 14 } }, t("studioStoppedHint")),
+          h("button", { type: "button", onClick: retry, style: { padding: "7px 16px", borderRadius: 8, cursor: "pointer" } }, t("studioRestart"))
+        )
+      ) : null;
       return h(
         "div",
         { style: { position: "relative", width: "100%", height: "100%", minWidth: 0, minHeight: 0 } },
         studio,
-        banner
+        banner,
+        stoppedOverlay
       );
     };
   }
@@ -263,6 +337,9 @@
         studioLoading: "Starting OpenFilm Studio\u2026",
         studioFailed: "Unable to start OpenFilm Studio.",
         studioRetry: "Try again",
+        studioStopped: "Video workspace stopped",
+        studioStoppedHint: "The editing service is not running. Restart it to continue; projects and media are untouched.",
+        studioRestart: "Restart workspace",
         studioTitle: "OpenFilm Studio",
         presetReady: "Video editing mode: loaded",
         presetMissing: "Video editing mode: not loaded \u2014",
@@ -275,6 +352,9 @@
         studioLoading: "\u6B63\u5728\u542F\u52A8 OpenFilm \u5DE5\u4F5C\u53F0\u2026",
         studioFailed: "\u65E0\u6CD5\u542F\u52A8 OpenFilm \u5DE5\u4F5C\u53F0\u3002",
         studioRetry: "\u91CD\u8BD5",
+        studioStopped: "\u5DE5\u4F5C\u53F0\u5DF2\u505C\u6B62\u8FD0\u884C",
+        studioStoppedHint: "\u89C6\u9891\u7F16\u8F91\u670D\u52A1\u5DF2\u65AD\u5F00\u3002\u91CD\u65B0\u542F\u52A8\u5373\u53EF\u7EE7\u7EED\uFF0C\u9879\u76EE\u548C\u7D20\u6750\u4E0D\u53D7\u5F71\u54CD\u3002",
+        studioRestart: "\u91CD\u65B0\u542F\u52A8\u5DE5\u4F5C\u53F0",
         studioTitle: "OpenFilm \u5DE5\u4F5C\u53F0",
         presetReady: "\u89C6\u9891\u526A\u8F91\u6A21\u5F0F\uFF1A\u5DF2\u52A0\u8F7D",
         presetMissing: "\u89C6\u9891\u526A\u8F91\u6A21\u5F0F\uFF1A\u672A\u52A0\u8F7D \u2014",
