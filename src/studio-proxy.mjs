@@ -1,7 +1,22 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { appendFileSync, statSync, truncateSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createServer, request } from 'node:http';
 import { officialFacadeSource } from './official-facade.mjs';
 import { shellUiInjection } from './shell-extras.mjs';
+
+// Upstream 5xx bodies are the only description of a Studio failure the person
+// can act on, and the page shows just the status. Keep the last few for
+// diagnosis; never the request body, never a project path.
+const failureLog = join(tmpdir(), 'dsh-openfilm-errors.jsonl');
+function recordFailure(method, path, status, body) {
+  try {
+    const line = JSON.stringify({ at: new Date().toISOString(), method, path, status, body: String(body).slice(0, 800) }) + '\n';
+    appendFileSync(failureLog, line, 'utf8');
+    if (statSync(failureLog).size > 64 * 1024) truncateSync(failureLog, 0);
+  } catch { /* diagnostics must never affect the response */ }
+}
 
 // Proxy for the pinned OpenFilm 0.3.1 protocol. It does not provide process
 // isolation. Unrecognized or unsafe representations fail closed.
@@ -327,6 +342,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
             let value = body.toString('utf8');
             if (!Buffer.from(value).equals(body)) return fail(res, 502);
             value = value.replaceAll(filmUpstream.origin, filmOrigin);
+            if (status >= 500 && !film) recordFailure(req.method, url.pathname, status, value);
             if (film && type.startsWith('text/html')) {
               value = value.replaceAll(`const EDITOR = ${JSON.stringify(editorUpstream.origin)};`, `const EDITOR = ${JSON.stringify(editorOrigin)};`);
             } else if (!film && type.startsWith('text/html') && !url.pathname.startsWith('/api/')) {
@@ -359,7 +375,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
                 'addEventListener("error",function(e){var m=e.message||"unknown";if(/ResizeObserver loop/.test(m))return;show("[JS] "+m+" @ "+(e.filename||"")+":"+(e.lineno||0));});' +
                 'addEventListener("unhandledrejection",function(e){var r=e.reason;var m=(r&&r.message)||String(r);var s=(r&&r.stack)||"";var at=String(s).split("\\n").filter(function(l){return l.indexOf("at ")>=0}).slice(0,3).join(" | ");show("[Promise] "+m+(at?"\\n"+at:""));});' +
                 'var ce=console.error;console.error=function(){try{if(n<4){for(var i=0;i<arguments.length;i++){var a=arguments[i];if(a instanceof Error){show("[React] "+(a.message||a.name));break;}}}}catch(e){}return ce.apply(console,arguments);};' +
-                'var f=globalThis.fetch;if(f)globalThis.fetch=function(u,o){return f.apply(this,arguments).then(function(r){try{var s=String(u);if((r.status>=500||(r.status===404&&s.indexOf("/api/projects")>=0))&&n<4)show("[HTTP "+r.status+"] "+s.slice(0,180));}catch(e){}return r;},function(e){try{if(n<4)show("[网络] "+String(u).slice(0,180)+" "+((e&&e.message)||e));}catch(_){}throw e;});};' +
+                'var f=globalThis.fetch;if(f)globalThis.fetch=function(u,o){return f.apply(this,arguments).then(function(r){try{var s=String(u);if((r.status>=500||(r.status===404&&s.indexOf("/api/projects")>=0))&&n<4){var base="[HTTP "+r.status+"] "+s.slice(0,180);if(r.status>=500){r.clone().text().then(function(t){var why="";try{var j=JSON.parse(t);if(j&&typeof j.error==="string"&&j.error)why=" - "+j.error.slice(0,240);}catch(e){}show(base+why);}).catch(function(){show(base);});}else show(base);}}catch(e){}return r;},function(e){try{if(n<4)show("[网络] "+String(u).slice(0,180)+" "+((e&&e.message)||e));}catch(_){}throw e;});};' +
                 'setTimeout(function(){try{parent.postMessage({type:"no996-openfilm:boot",version:1,hasNative:!!globalThis.openfilmNative,rendered:!!(document.getElementById("root")||{}).firstElementChild},' + "'*'" + ')}catch(e){}},1500);' +
                 'setTimeout(function(){var r=document.getElementById("root");if(r&&!r.firstElementChild)show("界面 10 秒后仍未渲染（#root 为空）");},10000);' +
                 '})()</script>' : '';
