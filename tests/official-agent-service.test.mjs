@@ -188,3 +188,32 @@ test('tool calls and results reach the panel as an ordered act pair', async () =
     ['tool_call', 'agent_thought_chunk', 'tool_call_update']);
   assert.equal(f.events.at(-1).kind, 'done');
 });
+
+// Recorded order on this machine: the prompt splice, turn/start, the queue
+// removal, then the prompt's own `user/message` followed by the injected
+// AGENTS.md block. The injected block is prompt assembly, not a second person.
+test('injected workspace instructions do not count as a competing prompt', async () => {
+  const f = fixture();
+  f.controller.prompt = async ({ requestId }) => {
+    f.push({ type: 'event', event: { type: 'agent/inbox/spliced', data: { target: 'next-turn', start: 0, inserted: [{ content: [{ type: 'text', text: '你好' }], source: { kind: 'user', rpcId: requestId }, role: 'user' }] } } });
+    f.push({ type: 'event', event: { type: 'turn/start', data: { turn: 1 } } });
+    f.push({ type: 'event', event: { type: 'agent/inbox/spliced', data: { target: 'next-turn', start: 0, removedCount: 1, inserted: [] } } });
+    f.push({ type: 'event', event: { type: 'step/start', data: { turn: 1, step: 1 } } });
+    f.push({ type: 'event', event: { type: 'user/message', data: { content: [{ type: 'text', text: '你好' }], source: { kind: 'user', rpcId: requestId }, role: 'user' } } });
+    f.push({ type: 'event', event: { type: 'user/message', data: { content: [{ type: 'text', text: '<system-reminder>…' }], source: { kind: 'agent-instructions', form: 'instructions' }, role: 'user' } } });
+    f.push({ type: 'event', event: { type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'ops_glob', arguments: '{}' } } });
+    f.push({ type: 'event', event: { type: 'tool/result', data: { turn: 1, step: 1, toolCallId: 'c1', message: { role: 'tool', toolCallId: 'c1', content: [{ type: 'text', text: 'ok' }] } } } });
+    f.push({ type: 'event', event: { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } } });
+    return { accepted: true };
+  };
+  assert.deepEqual(await send(f.service), { ok: true, stopReason: 'end_turn' });
+  assert.deepEqual(f.events.filter(event => event.kind === 'update').map(event => event.update.sessionUpdate), ['tool_call', 'tool_call_update']);
+  // The project is not left locked by an event that was merely context.
+  f.controller.prompt = async ({ requestId }) => {
+    f.push({ type: 'event', event: { type: 'turn/start', data: { turn: 2 } } });
+    f.push({ type: 'event', event: { type: 'user/message', data: { source: { kind: 'user', rpcId: requestId } } } });
+    f.push({ type: 'event', event: { type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } } });
+    return { accepted: true };
+  };
+  assert.deepEqual(await send(f.service), { ok: true, stopReason: 'end_turn' });
+});

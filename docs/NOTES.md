@@ -114,7 +114,7 @@
 | 0.2.1 | `cbae0df` | 面板显示"视频剪辑模式"预设加载状态 |
 | 0.2.0 | `dd39cee` | 预设、模板首页、对话可靠性（首个功能完整里程碑） |
 
-当前测试：**97 tests / 96 pass / 1 skip** ✅（本次 `node --test tests/*.test.mjs` 实测，760ms）。
+当前测试：**115 tests / 114 pass / 1 skip** ✅（`node --test tests/*.test.mjs`）。
 
 ---
 

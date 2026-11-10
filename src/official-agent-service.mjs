@@ -15,6 +15,19 @@ const fail = (code, message) => Object.assign(new Error(message), { code });
 const nonempty = value => typeof value === 'string' && value.trim().length > 0 && !value.includes('\\0');
 const ordinal = value => Number.isSafeInteger(value) && value >= 0;
 
+/** Clamp a frame for the diagnostic trace while keeping it valid JSON. */
+function clampTrace(value, depth = 0) {
+  if (typeof value === 'string') return value.length > 200 ? `${value.slice(0, 200)}…` : value;
+  if (depth > 6) return '[deep]';
+  if (Array.isArray(value)) return value.slice(0, 40).map(item => clampTrace(item, depth + 1));
+  if (value && typeof value === 'object') {
+    const copy = {};
+    for (const [key, item] of Object.entries(value).slice(0, 40)) copy[key] = clampTrace(item, depth + 1);
+    return copy;
+  }
+  return value;
+}
+
 // Only fixed categories are sent to the page. Raw provider messages, codes and
 // request IDs can contain private data and must remain in the owning DSH session.
 function turnFailureMessage(reason, { archived = false } = {}) {
@@ -181,10 +194,9 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
               const frame = next.value;
               // Temporary trace: the live frame shapes are not documented anywhere
               // reachable, and guessing them is how thinking and tool output went
-              // missing. One file, overwritten per send, text truncated.
-              try {
-                trace.push(JSON.stringify(frame, (key, value) => (typeof value === 'string' ? value.slice(0, 200) : value)).slice(0, 800));
-              } catch { /* unserializable frame */ }
+              // missing. One file, overwritten per send, strings clamped so every
+              // line stays parseable JSON (mid-line slicing made forensics manual).
+              try { trace.push(JSON.stringify(clampTrace(frame))); } catch { /* unserializable frame */ }
               if (frame?.type === 'event') {
                 const event = frame.event;
                 if (event?.type === 'turn/start') {
@@ -193,15 +205,22 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
                   if (operation.sawPrompt) attribute();
                 } else if (event?.type === 'user/message') {
                   const source = event.data?.source;
-                  if (source?.kind === 'runtime-context') continue;
-                  // Our own prompt can be recorded twice (queued splice, then the
-                  // durable message): attributing it again is correct, not a
-                  // conflict. Any other input during this turn is.
-                  if (source?.kind === 'user' && source.rpcId === requestId) {
-                    operation.sawPrompt = true;
-                    attribute();
-                  } else {
-                    throw fail('OFFICIAL_AGENT_CONFLICT', 'Concurrent or unidentifiable session input');
+                  // Only a *human* input can be a competing prompt. Prompt
+                  // assembly records its own user-role messages here too
+                  // (`agent-instructions` for AGENTS.md, `runtime-context`, …);
+                  // treating those as foreign input failed every turn on this
+                  // machine, where the workspace instruction block is injected
+                  // right after the person's message.
+                  if (source?.kind === 'user') {
+                    // Our own prompt can be recorded twice (queued splice, then
+                    // the durable message): attributing it again is correct, not
+                    // a conflict. Any other human input during this turn is.
+                    if (source.rpcId === requestId) {
+                      operation.sawPrompt = true;
+                      attribute();
+                    } else {
+                      throw fail('OFFICIAL_AGENT_CONFLICT', 'Concurrent or unidentifiable session input');
+                    }
                   }
                 } else if (event?.type === 'agent/inbox/spliced') {
                   // Admission-only notice: the prompt is queued for the next turn
@@ -269,6 +288,9 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
         }
         return await end;
       } catch (error) {
+        // The page only ever sees a code. Record the bridge's own reason next to
+        // the frames so the next failure needs no guessing.
+        try { trace.push(JSON.stringify({ bridgeError: { code: String(error?.code || 'UNKNOWN'), message: String(error?.message || error).slice(0, 200) } })); } catch { /* diagnostics only */ }
         // An invoked prompt can have been accepted even if its receipt was lost.
         // Only an explicit rejection or a verified terminal settles that doubt.
         if (operation.admitted && (!operation.rejected || operation.matched) && !operation.finished) {

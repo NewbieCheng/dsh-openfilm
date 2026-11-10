@@ -1,5 +1,17 @@
 # 更新记录
 
+## 0.4.1
+
+**修 503：注入的工作区指令不算并发输入**
+
+- 真实帧显示：每轮 `turn/start` 之后，DSH 会把 prompt 组装产生的 `user/message` 也记进会话（`source.kind: "agent-instructions"`，即 AGENTS.md 块）。0.4.0 把任何非 `runtime-context` 的 `user/message` 都当并发输入 → 抛 CONFLICT → `OFFICIAL_AGENT_OUTCOME_UNKNOWN`。
+- 现在只有 `source.kind === "user"` 且 `rpcId` 不匹配才算冲突；`agent-instructions` / `runtime-context` 等注入消息一律忽略，不影响归因。
+- 诊断帧改成合法 JSON（字符串截断到 200 字并加省略号，不再从中间切断），且失败时追加 `{"bridgeError":{"code","message"}}` 一行，下次不必再猜。
+
+**同版本附带**：预设自报在真机确认生效（`registered:true, ok:true`，`openfilm-video-editing` 已出现在预设清单里）。
+
+`node --test tests/*.test.mjs` → 115 通过 / 1 跳过。
+
 ## 0.4.0
 
 **修 503：归档会话不再以 `blocked` 伪造成协议冲突**

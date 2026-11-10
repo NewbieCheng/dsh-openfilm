@@ -11,7 +11,7 @@
 
 把官方 **OpenFilm 0.3.1** 视频工作台封装成可分发的 **DSH 插件**：Host 侧拉起官方 Studio 并做反向代理，浏览器侧用 `shell.overlay` 常驻一个 iframe 面板显示官方界面，右侧官方对话经 Host RPC 桥到 DSH 会话（模型、审批、会话都是 DSH 的）。
 
-当前版本 `0.4.0`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
+当前版本 `0.4.1`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
 
 ---
 
@@ -51,7 +51,7 @@
 
 ```sh
 npm run build                      # 只在改了客户端源码时需要
-node --test tests/*.test.mjs       # 期望 114 tests / 113 pass / 1 skip
+node --test tests/*.test.mjs       # 期望 115 tests / 114 pass / 1 skip
 ```
 
 顺序：**先判断改的是哪一层 → 改 `src/` 源码 → build（如需）→ 跑测试 → 按 §4 让变更生效 → 在真实 GUI 里确认。**
@@ -129,7 +129,7 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 
 ## 7. 测试规则
 
-- `node --test tests/*.test.mjs`；当前 **114 tests / 113 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
+- `node --test tests/*.test.mjs`；当前 **115 tests / 114 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
 - 只允许模拟对象与 `mkdtemp` 临时目录；`OPENFILM_HOME` 指到临时目录，绝不碰用户库。
 - 真实项目注册验证可以跑官方 `openfilm` 服务端 `openProject`，但必须用临时 home。
 - 新增行为必须带测试；本仓的历史 bug 大多是"逻辑没问题但顺序/形状假设错"，测试是唯一便宜的判断手段。
@@ -150,11 +150,10 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 
 1. **官方输入框表现只读**：能力协商位不全（未开工）。
 2. **默认权限不是完全访问**：`SessionCreateRequest` 没有权限字段，需建会话后用会话级接口设置（未开工）。
-3. **预设实际激活未验证**：0.4.0 修掉了"报告太早、误报未注册"的时序 bug，但 `openfilm-video-editing` 行是否真的挂上仍未在真机确认；下次启动看 `preset.json` 的 `registered/broken/children`。
-4. **0.4.0 的思考/工具显示只在单元测试里验证过**（真实帧夹具），还没在真机 GUI 里看到工具卡片。
-5. **模板拆素材 + 首页改造**（新需求，未开工）：三模板拆成可检索素材单元；首页直进对话；"内置模板"移到对话下拉；隐藏"视频复刻"入口。
+3. **思考/工具卡片还没在真机 GUI 里看到过**：0.4.0/0.4.1 只用真实帧夹具在单元测试里验证；下一次发送要确认卡片出现。
+4. **模板拆素材 + 首页改造**（新需求，未开工）：三模板拆成可检索素材单元；首页直进对话；"内置模板"移到对话下拉；隐藏"视频复刻"入口。
 
-> 0.4.0 已修并从清单移除：归档会话导致的 `OFFICIAL_AGENT_NOT_STARTED` 误报、工具调用不显示、思考无内容（被 blocked 解释为"没有流"的那部分）、归档与 DSH 侧边栏不同步。
+> 0.4.x 已修并从清单移除：归档会话导致的 `OFFICIAL_AGENT_NOT_STARTED`、工具调用不显示、思考无内容、归档与 DSH 侧边栏不同步、注入指令被当并发输入、预设自报误报未注册（真机已确认 `registered:true, ok:true`）。
 
 ---
 
@@ -170,6 +169,7 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 - 只按 `user/message` 归因准入 → 真实事件是 `agent/inbox/spliced`，归档会话的 `turn/end blocked` 被误判成 CONFLICT，页面只剩 503。现在：两种归因都认，`blocked` 单独成终态（0.4.0）。
 - 绑定表不校验归档状态 → 四个项目全部指向已归档会话，每次发送都 503。现在：发送前探针 + 归档横幅（0.4.0）。
 - 预设自报在预设行挂载前就读 roster → 永远报 "not registered"。现在：有界重试（0.4.0）。
+- 把注入的 AGENTS.md 块当并发输入 → 每轮 CONFLICT → `OFFICIAL_AGENT_OUTCOME_UNKNOWN`。注入的 `user/message` 带 `source.kind:'agent-instructions'`，不是人。现在：只有 `kind:'user'` 且 rpcId 不匹配才算冲突（0.4.1）。
 
 ---
 
