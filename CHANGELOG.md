@@ -4,9 +4,10 @@
 
 **重载方式更正：插件可以热插拔，不必退出 DSH**
 
-- 实测： → （target ）会让加载器重新求值 Host 模块，新代码立即生效（进程 PID 不变）。此前文档里“必须重启 Host”的说法是错的。
-- 新增 ：每次插件装配写 。重载后这不是新时间，就说明看到的还是旧代码。
-- 页面仍需  刷新：注入到官方页面的 UI 属于服务端返回的 HTML。
+- 实测：`plugin_manager set_plugin enabled=false` → `enabled=true`（target `include:dsh-openfilm`）会让加载器重新求值 Host 模块，新代码立即生效（进程 PID 不变）。此前文档里“必须重启 Host”的说法是错的。
+- 新增 `%TEMP%\dsh-openfilm-host.json`：每次插件装配写 `{version,pid,startedAt}`。重载后 `startedAt` 不是新时间，就说明看到的还是旧代码。
+- 页面仍需 `Ctrl+Shift+R` 刷新：注入到官方页面的 UI 属于服务端返回的 HTML。
+
 ## 0.4.2
 
 **界面：删掉模板首页，模板进官方界面**
