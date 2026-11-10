@@ -28,6 +28,34 @@ function find(node, type) {
   return [...(node.type === type ? [node] : []), ...node.children.flatMap(child => Array.isArray(child) ? child.flatMap(x => find(x, type)) : find(child, type))];
 }
 
+test('the three shipped templates reach the panel from real manifests', async () => {
+  const { listTemplates } = await import('../src/official-templates.mjs');
+  const { dirname, join, resolve } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'vendor', 'templates');
+  // Real manifests, shaped exactly as the Host bridge hands them to the page.
+  const wired = (await listTemplates(root)).map(({ id, title, description, mode }) => ({ id, title, description, mode }));
+  assert.deepEqual(wired.map(item => item.id), ['paper-texture', 'replica-film', 'sketchnote']);
+  globalThis.window = { location: { protocol: 'http:', host: '127.0.0.1:1234', hostname: '127.0.0.1' }, addEventListener: () => {}, removeEventListener: () => {} };
+  globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+  const panel = mount(createStudioPanel, { t: key => key, startStudio: async () => ({ editorOrigin: 'http://127.0.0.1:47822' }), templateRequest: async body => (body.action === 'list' ? { templates: wired } : { projectId: 'film123' }) });
+  try {
+    panel.render(); await new Promise(resolve => setImmediate(resolve));
+    const tree = panel.render();
+    const buttons = find(tree, 'button');
+    // Three template buttons plus the explicit existing-projects entry.
+    assert.equal(buttons.length, 4);
+    const text = [];
+    const walk = node => {
+      if (typeof node === 'string') text.push(node);
+      else if (node && typeof node === 'object') (Array.isArray(node.children) ? node.children : []).forEach(walk);
+    };
+    walk(tree);
+    const labels = text.join('|');
+    for (const title of ['纸纹讲堂', '复刻影片', '手绘笔记']) assert.match(labels, new RegExp(title), title);
+  } finally { panel.close(); delete globalThis.window; delete globalThis.localStorage; }
+});
+
 test('template button navigates the already authenticated iframe', async () => {
   const listeners = new Map();
   globalThis.window = { location: { protocol: 'http:', host: '127.0.0.1:1234', hostname: '127.0.0.1' }, addEventListener: (event, fn) => listeners.set(event, fn), removeEventListener: event => listeners.delete(event) };
