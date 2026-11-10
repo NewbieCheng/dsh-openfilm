@@ -11,7 +11,7 @@
 
 把官方 **OpenFilm 0.3.1** 视频工作台封装成可分发的 **DSH 插件**：Host 侧拉起官方 Studio 并做反向代理，浏览器侧用 `shell.overlay` 常驻一个 iframe 面板显示官方界面，右侧官方对话经 Host RPC 桥到 DSH 会话（模型、审批、会话都是 DSH 的）。
 
-当前版本 `0.4.2`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
+当前版本 `0.5.1`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
 
 ---
 
@@ -54,7 +54,7 @@
 
 ```sh
 npm run build                      # 只在改了客户端源码时需要
-node --test tests/*.test.mjs       # 期望 116 tests / 115 pass / 1 skip
+node --test tests/*.test.mjs       # 期望 125 tests / 124 pass / 1 skip
 ```
 
 顺序：**先判断改的是哪一层 → 改 `src/` 源码 → build（如需）→ 跑测试 → 按 §4 让变更生效 → 在真实 GUI 里确认。**
@@ -140,6 +140,8 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 | 真实帧 | `%TEMP%\dsh-openfilm-frames.jsonl` | 0.3.4 起每轮写，文本截断 200 字符，用于对齐真实分片/事件名 |
 | 调试地址 | `POST /api/no996-openfilm/debug-url` | 可粘进右侧浏览器的稳定入口 |
 | Host 构建标记 | `%TEMP%\dsh-openfilm-host.json` | `{version,pid,startedAt}`；重载插件后 `startedAt` 必须更新，否则说明你看到的还是旧代码 |
+| 运行日志 | `%TEMP%\dsh-openfilm\plugin.log` | JSON Lines，512 KB 轮转；`host-start`/`studio-warm`/`host-stop`/`ticket-*`/`upstream-5xx`/`upstream-error`/`page-*`；密钥与路径自动脱敏。**排查崩溃先读这个**，`diagnose` 也会带回最近 12 条 |
+| 上游 5xx 原文 | `%TEMP%\dsh-openfilm-errors.jsonl` | 上游返回 5xx 时的响应体（截 800 字符），用于解释「删除失败」这类没有文案的错误 |
 | 归档通道 | `POST /api/no996-openfilm/archive` | `{action:'state'\|'archive'\|'unarchive'\|'rebind', projectId}`，只认项目 ID |
 
 **不要靠猜分片形状。** `official-agent-events.mjs` 的 bug 必须用 `frames.jsonl` 里的真实 `type` 名反推。
@@ -148,7 +150,7 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 
 ## 7. 测试规则
 
-- `node --test tests/*.test.mjs`；当前 **116 tests / 115 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
+- `node --test tests/*.test.mjs`；当前 **125 tests / 124 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
 - 只允许模拟对象与 `mkdtemp` 临时目录；`OPENFILM_HOME` 指到临时目录，绝不碰用户库。
 - 真实项目注册验证可以跑官方 `openfilm` 服务端 `openProject`，但必须用临时 home。
 - 新增行为必须带测试；本仓的历史 bug 大多是"逻辑没问题但顺序/形状假设错"，测试是唯一便宜的判断手段。

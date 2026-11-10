@@ -233,12 +233,36 @@ Host 代码改完后执行 `plugin_manager set_plugin enabled=false` → `enable
 
 **验证清单（缺一项就不算生效）**
 
-1. `node --test tests/*.test.mjs` → 116 tests / 115 pass / 1 skip；
+1. `node --test tests/*.test.mjs` → 125 tests / 124 pass / 1 skip；
 2. `POST /api/no996-openfilm/bootstrap` 返回 200（不是 503 错误码）；
 3. 目标行为在真实界面可见；
 4. 若改的是错误路径，确认 503 只回固定码、无隐私串。
 
 ---
+
+### 8.1 运行日志（排查崩溃的第一站）
+
+Host 侧所有关键事件写一份 JSON Lines 文件：
+
+| 项 | 值 |
+|---|---|
+| 路径 | `%TEMP%\dsh-openfilm\plugin.log` |
+| 轮转 | 超过 512 KB 时滚动为 `.1`（保留一份旧文件），因此不会无限增长 |
+| 事件 | `host-start`（版本/端口/是否官方 shell）、`studio-warm`（毫秒）、`studio-warm-failed`、`host-stop`（存活时长/事件数）、`ticket-minted`、`ticket-redeemed`、`upstream-5xx`（方法/路径/状态）、`upstream-error`（连接失败）、`page-recovery-shown`、`page-restart-click` |
+| 脱敏 | 键名含 key/secret/token/ticket/cookie/session/password 的一律 `[redacted]`；键名含 path/file/dir/folder/root/home/name 的一律写成 `sha256前10位:长度`。自由文本截断 200 字符 |
+| 内存副本 | 最近 200 条常驻内存，`POST /api/no996-openfilm/diagnose` 返回最近 12 条（`log.tail`） |
+| 上游 5xx 原文 | 另存 `%TEMP%\dsh-openfilm-errors.jsonl`（响应体截 800 字符），用来解释「删除失败」这类只有状态码的错误 |
+
+页面侧只允许 4 个固定枚举（`recovery-shown`/`restart-click`/`picker-placed`/`session-expired`），经 `official-rpc` 的 `client:log` 通道上报；不接收任意文本，不接收项目内容。
+
+读法：
+
+```sh
+tail -20 "$LOCALAPPDATA/Temp/dsh-openfilm/plugin.log"
+grep '"level":"error"' "$LOCALAPPDATA/Temp/dsh-openfilm/plugin.log" | tail -5
+```
+
+**每次改完 Host 代码、重载插件之后，先看这两行**：`host-start.version` 是不是新版本、`studio-warm` 有没有失败。比“界面看起来没变”可靠。
 
 ## 9. 调试
 
