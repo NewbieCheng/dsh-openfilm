@@ -8,6 +8,7 @@ const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
 import { startLocalConsole } from './studio-debug-redirect.mjs';
 import { createDshAskAgent } from './dsh-ai.mjs';
+import { reportPresetStatus } from './preset-report.mjs';
 import { openProjectConversations } from './project-conversation.mjs';
 import { createGuideTool } from './guide-tool.mjs';
 import { resolveOfficialShell } from './official-shell.mjs';
@@ -41,6 +42,10 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   let officialStorePromise;
   let lastProxy;
   let debugBridge;
+  // Write the preset activation result once per Host start so it can be checked
+  // without a browser session (see preset-report.mjs).
+  const presetReport = reportPresetStatus(ctx);
+  presetReport.done.catch(() => {});
   // A stable address the person can type into the right-side browser without
   // opening the panel first. That browser does not share DSH's cookie, so DSH
   // routes answer 401 there; this listener serves the template console itself and
