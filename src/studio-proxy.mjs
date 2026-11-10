@@ -726,9 +726,16 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
     },
     async createProject(projectPath) {
       if (typeof projectPath !== 'string' || !projectPath) throw new Error('A project path is required');
+      // Opening a folder as a project (projects.mjs openProject): the folder is
+      // made when missing, a film.html already there is never touched, and the
+      // project joins the library list. The reply is unwrapped leniently so a
+      // ({project} | project) shape both work.
       const reply = await studioCall('POST', '/api/projects', { path: projectPath });
-      if (reply.status !== 200 || typeof reply.value?.project?.id !== 'string') throw new Error('Studio refused the project');
-      return { id: reply.value.project.id, path: reply.value.project.path };
+      if (reply.status !== 200) throw new Error(`Studio refused the project (HTTP ${reply.status})`);
+      const project = reply.value?.project ?? reply.value;
+      const id = project?.id ?? project?.projectId;
+      if (typeof id !== 'string' || !id) throw new Error('Studio returned no project id');
+      return { id, path: typeof project.path === 'string' ? project.path : projectPath };
     },
     bootstrapData() {
       if (desktop) {
