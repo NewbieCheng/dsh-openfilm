@@ -721,8 +721,9 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
     diagnostics: () => ({ ...diag, mode: officialShell ? 'official' : 'dsh' }),
     async listProjects() {
       const reply = await studioCall('GET', '/api/projects');
-      if (reply.status !== 200 || !Array.isArray(reply.value?.projects)) throw new Error('Studio project list unavailable');
-      return reply.value.projects.map(project => ({ id: String(project.id), path: String(project.path) }));
+      const items = Array.isArray(reply.value) ? reply.value : reply.value?.projects;
+      if (reply.status !== 200 || !Array.isArray(items)) throw new Error('Studio project list unavailable');
+      return items.map(project => ({ id: String(project.id), path: String(project.path) }));
     },
     async createProject(projectPath) {
       if (typeof projectPath !== 'string' || !projectPath) throw new Error('A project path is required');
