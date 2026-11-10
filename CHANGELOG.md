@@ -1,5 +1,18 @@
 # 更新记录
 
+## 0.5.0
+
+**统一运行日志：崩溃与异常都能事后查**
+
+- 新增 `src/plugin-log.mjs`：JSON Lines、**脱敏**、**轮转**（512 KB，保留 1 个旧文件）、内存里保留最近 200 条。
+- 落点：`%TEMP%\dsh-openfilm\plugin.log`。上游 5xx 的原始响应体仍在 `%TEMP%\dsh-openfilm-errors.jsonl`。
+- 记录什么：`host-start`（版本/端口/模式）、`studio-warm`/`studio-warm-failed`（含耗时）、`host-stop`（存活时长）、`ticket-minted`/`ticket-redeemed`、`upstream-5xx`（方法/路径/状态）、`upstream-error`（连接失败原因）、以及页面侧事件 `page-recovery-shown`/`page-restart-click`。
+- 不记录什么：密钥、票据、cookie、会话 ID、项目绝对路径与名称——这些字段一律替换成 `[redacted]` 或 10 位摘要+长度。
+- `POST /api/no996-openfilm/diagnose` 现在带回 `log.file` 与最近 12 条（`log.tail`），面板静默时贴出来的那段 JSON 就自带历史。
+- 页面侧事件只接受 4 个固定枚举，经 `official-rpc` 的 `client:log` 通道上报，不接收任意文本。
+
+**测试**：125 项 / 124 通过 / 1 跳过。
+
 ## 0.4.12
 
 **点「重新启动工作台」后白屏**
