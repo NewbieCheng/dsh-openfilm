@@ -184,7 +184,7 @@
 
   // src/studio-entry.js
   window.__ModuleLoader__.load({
-    id: "dsh-openfilm",
+    id: "@no996/dsh-openfilm",
     factory(require2) {
       const React = require2("react");
       const h = React.createElement;

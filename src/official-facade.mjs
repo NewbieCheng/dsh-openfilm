@@ -120,6 +120,9 @@ function officialFacadeFactory(bridge) {
     list: async () => [],
     ack: async () => ({ ok: true }),
     probe: async (agent) => ({ ok: true, id: agent }),
+    running: async () => [],
+    adopt: async () => ({ ok: true }),
+    close: async () => ({ ok: true }),
     onEvent: (listener) => {
       if (typeof listener !== 'function') return () => {};
       agentListeners.add(listener);
@@ -145,7 +148,7 @@ function officialFacadeFactory(bridge) {
         const option = await rpc('agent:models', { projectId: id });
         if (option && option.id === 'model' && Array.isArray(option.options)) configOptions = [option];
       } catch { configOptions = []; }
-      return { ok: true, key, info: { sessionId: key, agentInfo: { name: 'DeepSeek Harness' }, authMethods: [], mcp: false, models: null, modes: null, configOptions } };
+      return { ok: true, key, info: { sessionId: key, resumed: false, agentInfo: { name: 'DeepSeek Harness' }, authMethods: [], mcp: false, models: null, modes: null, configOptions } };
     },
     cancel: async (key) => {
       const id = agentKeys.get(key);
