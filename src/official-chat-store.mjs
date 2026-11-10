@@ -123,6 +123,12 @@ export async function openOfficialChatStore(ctx, { z, requireVerifiedProject } =
       if (data.revision !== copy.expectedRevision || data.revision === Number.MAX_SAFE_INTEGER) throw failure('OFFICIAL_CHAT_CONFLICT', 'Chat changed in another view; reload before saving');
       data.sessions = copy.sessions;
       data.last = copy.last;
+      // Deleting a conversation deletes its messages too: any stored turn that
+      // names a session no longer in the list is dropped, not just hidden.
+      const kept = new Set(copy.sessions.map(s => s.id));
+      if (data.turns.some(t => typeof t?.turn?.sessionId === 'string' && !kept.has(t.turn.sessionId))) {
+        data.turns = data.turns.filter(t => typeof t?.turn?.sessionId !== 'string' || kept.has(t.turn.sessionId));
+      }
       data.revision += 1;
       await put(key, projectId, path, data);
       return data.revision;
