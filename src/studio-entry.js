@@ -13,8 +13,8 @@ window.__ModuleLoader__.load({
       studioLoading: 'Starting OpenFilm Studio…',
       studioFailed: 'Unable to start OpenFilm Studio.',
       studioRetry: 'Try again',
-      studioTitle: 'OpenFilm Studio', templates: 'Templates', templateCreate: 'Create project', templateBusy: 'Creating…', templateError: 'Unable to load the templates.', templateUncertain: 'The project may have been created. Open existing projects to check before trying again.',
-      presetReady: 'Video editing mode: loaded', presetMissing: 'Video editing mode: not loaded —', templateHomeTitle: 'Start a video', templateHomeDescription: 'Choose a template to create a project, or open an existing project.', openExisting: 'Open existing projects',
+      studioTitle: 'OpenFilm Studio',
+      presetReady: 'Video editing mode: loaded', presetMissing: 'Video editing mode: not loaded —',
       archiveBanner: 'This project conversation is archived; its messages stay hidden until restored.', archiveRestore: 'Restore conversation', archiveRebind: 'Start a new conversation',
     };
     const zh = {
@@ -22,8 +22,8 @@ window.__ModuleLoader__.load({
       studioLoading: '正在启动 OpenFilm 工作台…',
       studioFailed: '无法启动 OpenFilm 工作台。',
       studioRetry: '重试',
-      studioTitle: 'OpenFilm 工作台', templates: '模板', templateCreate: '使用模板创建项目', templateBusy: '正在创建…', templateError: '无法加载模板。', templateUncertain: '项目可能已经创建，请先打开已有项目检查，避免重复创建。',
-      presetReady: '视频剪辑模式：已加载', presetMissing: '视频剪辑模式：未加载 —', templateHomeTitle: '开始视频创作', templateHomeDescription: '选择模板创建项目，或打开已有项目。', openExisting: '打开已有项目',
+      studioTitle: 'OpenFilm 工作台',
+      presetReady: '视频剪辑模式：已加载', presetMissing: '视频剪辑模式：未加载 —',
       archiveBanner: '这个项目的会话已归档，恢复前不显示历史消息。', archiveRestore: '恢复会话', archiveRebind: '新建会话',
     };
     const Panel = createStudioPanel(React);
@@ -85,12 +85,6 @@ window.__ModuleLoader__.load({
       if (typeof data?.editorOrigin !== 'string') throw new Error('Invalid Studio response');
       return data;
     };
-    const templateRequest = async body => {
-      const surface = `${window.location.protocol}//${window.location.host}`;
-      const response = await fetch('/api/no996-openfilm/templates', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-no996-surface': surface }, body: JSON.stringify(body) });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.json();
-    };
     function PanelIcon({ size }) {
       return h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true },
         h('rect', { x: 3, y: 5, width: 18, height: 14, rx: 3, stroke: 'currentColor', strokeWidth: 1.7 }),
@@ -105,7 +99,7 @@ window.__ModuleLoader__.load({
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PANEL, order: 21, locale: NS, label: () => t('panel') }, PanelIcon));
         // `shell.overlay` is rendered for the whole frame lifetime, so the panel
         // it hosts survives page switches instead of reloading Studio each time.
-        ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'no996-openfilm-panel', order: 0, locale: NS, inject: () => ({ startStudio, templateRequest }) }, PanelKeepAlive));
+        ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'no996-openfilm-panel', order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
       },
     };
   },

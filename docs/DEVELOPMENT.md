@@ -251,7 +251,7 @@ plugin_manager install_bundle target=F:/Dev/Desktop-Projects/dsh-openfilm
 
 ## 10. 测试
 
-- `node --test tests/*.test.mjs`，当前 **115 / 114 pass / 1 skip**（跳过项需 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
+- `node --test tests/*.test.mjs`，当前 **116 / 115 pass / 1 skip**（跳过项需 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
 - 原则：只用 mock 与 `mkdtemp`；`OPENFILM_HOME` 指临时目录；不允许真实模型调用。
 - 覆盖重点：分片翻译与顺序、事件流就绪与中断、错误分类与失败归因、模板复制/限额/链接拒绝、时间线未知时长、草稿原子性与冲突拒绝、面板导航与不确定创建。
 - 真实项目注册测试会调用官方 `openfilm` 服务端 `openProject`，仍用临时 home。

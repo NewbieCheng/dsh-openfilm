@@ -11,7 +11,7 @@
 
 把官方 **OpenFilm 0.3.1** 视频工作台封装成可分发的 **DSH 插件**：Host 侧拉起官方 Studio 并做反向代理，浏览器侧用 `shell.overlay` 常驻一个 iframe 面板显示官方界面，右侧官方对话经 Host RPC 桥到 DSH 会话（模型、审批、会话都是 DSH 的）。
 
-当前版本 `0.4.1`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
+当前版本 `0.4.2`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
 
 ---
 
@@ -38,7 +38,10 @@
 | 官方对话桥 | `src/official-agent-service.mjs`、`official-agent-events.mjs`、`official-chat-rpc.mjs`、`official-approvals.mjs`、`official-event-hub.mjs`、`official-event-stream.mjs`、`official-chat-store.mjs`、`official-facade.mjs`、`official-model-catalog.mjs` | DSH 会话 ↔ 官方 ACP 事件 |
 | 模板 | `src/official-templates.mjs`、`src/template-bridge.mjs`、`vendor/templates/*` | 列举、复制、官方 `openProject` 注册；HTTP 桥鉴权 |
 | 草稿工具 | `src/draft-tool.mjs`、`film-draft.mjs`、`film-operations.mjs`、`film-source.mjs`、`film-summary.mjs`、`timeline-*.mjs`、`draft-session.mjs` | 解析 `film.html`、生成摘要、内存内 move/trim/split |
-| 客户端源码 | `src/studio-entry.js`、`studio-panel.mjs`、`panel-keepalive.mjs` | 注册 `main`(占位) / `sidebar.panellist`(图标) / `shell.overlay`(真面板) |
+| 客户端源码 | `src/studio-entry.js`、`studio-panel.mjs`、`panel-keepalive.mjs` | 注册 `main`(占位) / `sidebar.panellist`(图标) / `shell.overlay`(真面板)。**面板没有模板首页**，打开就是官方 Studio |
+| 官方界面注入 | `src/shell-extras.mjs` | 往官方 shell 页面叠一个模板下拉 + 隐藏「视频复刻」卡片；只加 DOM 覆盖层，上游文件不动 |
+| 归档 | `src/workspace-archive.mjs`、`src/archive-bridge.mjs` | DSH 归档集合的唯一 Host 视图 + `/api/no996-openfilm/archive` |
+| 事件流 | `src/official-event-stream.mjs`、`official-event-hub.mjs` | SSE 写出与按项目 fan-out；**背压只排队不关闭**（0.4.2 修） |
 | 客户端产物 | `client.js` | **由 `npm run build` 生成，禁止手改** |
 | 官方 shell | `vendor/official-shell/{manifest.json,ui,source}` | 上游桌面 shell 构建产物 + 哈希清单（不是本仓源码） |
 | 测试 | `tests/*.test.mjs` | `node --test`，纯 Node，无浏览器 |
@@ -51,7 +54,7 @@
 
 ```sh
 npm run build                      # 只在改了客户端源码时需要
-node --test tests/*.test.mjs       # 期望 115 tests / 114 pass / 1 skip
+node --test tests/*.test.mjs       # 期望 116 tests / 115 pass / 1 skip
 ```
 
 顺序：**先判断改的是哪一层 → 改 `src/` 源码 → build（如需）→ 跑测试 → 按 §4 让变更生效 → 在真实 GUI 里确认。**
@@ -78,6 +81,7 @@ node --test tests/*.test.mjs       # 期望 115 tests / 114 pass / 1 skip
 | `vendor/templates/**`（`manifest.json`、`film.html`、页面） | 否 | **下一次请求即生效**（`listTemplates` 每次都读盘）；面板首页的列表要刷新页面重新 mount 才重列 | 无 |
 | `vendor/official-shell/ui/**` | **是**，且必须用 `scripts/build-official-shell.mjs` 重生成 `manifest.json` | 重启 Studio（= 重载插件/重启 Host） | 未保存编辑丢失。**手改 ui 而不更新 manifest 会直接 `OFFICIAL_SHELL_UNAVAILABLE`**（启动时逐个文件校验 sha256） |
 | `cordis.patch.yml` | 否 | 重新 `install_bundle` 或重启 Host | 已存在的会话不会被迁移或改写 |
+| `src/shell-extras.mjs`（注入到官方页面的 UI/隐藏规则） | 否，但**必须重启 Host**（代理启动时读取） | 重启 Host → 刷新页面 | 页面会重载，未保存编辑丢失 |
 | `locale/*.json` | 否 | 刷新页面（Host 读取） | 无 |
 
 ### 4.3 关于 DSH 的 HMR
@@ -129,7 +133,7 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 
 ## 7. 测试规则
 
-- `node --test tests/*.test.mjs`；当前 **115 tests / 114 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
+- `node --test tests/*.test.mjs`；当前 **116 tests / 115 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
 - 只允许模拟对象与 `mkdtemp` 临时目录；`OPENFILM_HOME` 指到临时目录，绝不碰用户库。
 - 真实项目注册验证可以跑官方 `openfilm` 服务端 `openProject`，但必须用临时 home。
 - 新增行为必须带测试；本仓的历史 bug 大多是"逻辑没问题但顺序/形状假设错"，测试是唯一便宜的判断手段。
@@ -151,7 +155,7 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 1. **官方输入框表现只读**：能力协商位不全（未开工）。
 2. **默认权限不是完全访问**：`SessionCreateRequest` 没有权限字段，需建会话后用会话级接口设置（未开工）。
 3. **思考/工具卡片还没在真机 GUI 里看到过**：0.4.0/0.4.1 只用真实帧夹具在单元测试里验证；下一次发送要确认卡片出现。
-4. **模板拆素材 + 首页改造**（新需求，未开工）：三模板拆成可检索素材单元；首页直进对话；"内置模板"移到对话下拉；隐藏"视频复刻"入口。
+4. **模板拆素材**（未开工）：把三个模板拆成可检索/可组装的素材单元。首页直进对话、模板下拉、隐藏「视频复刻」已在 0.4.2 完成。
 
 > 0.4.x 已修并从清单移除：归档会话导致的 `OFFICIAL_AGENT_NOT_STARTED`、工具调用不显示、思考无内容、归档与 DSH 侧边栏不同步、注入指令被当并发输入、预设自报误报未注册（真机已确认 `registered:true, ok:true`）。
 

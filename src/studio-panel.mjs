@@ -1,41 +1,33 @@
 /** The video panel: the official OpenFilm desktop shell, full width.
  *
  * The official shell carries its own Studio, its own chat column and its own
- * resizer, so this panel renders nothing beside it. The earlier embedded DSH
- * conversation and its project-session mapping were removed: they duplicated
- * the official chat and their two-phase registry could dead-end in a state the
- * page could not recover from.
+ * resizer, so this panel renders nothing beside it. Templates are offered from
+ * inside that shell (injected picker) instead of a separate home page: one
+ * surface, no "choose a template" detour before the editor.
  */
+
+/** Shared project-URL guard. The injected template picker and the standalone
+ * templates page both build `/projects/<id>`, so the rule lives in one place. */
 export function templateProjectUrl(editorOrigin, projectId) {
   if (typeof projectId !== 'string' || !/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw new Error('Invalid project');
   return `${new URL(editorOrigin).origin}/projects/${projectId}`;
 }
-
 export function createStudioPanel(React) {
   const h = React.createElement;
-  return function StudioPanel({ t, startStudio, templateRequest }) {
+  return function StudioPanel({ t, startStudio }) {
     const [state, setState] = React.useState({ status: 'loading' });
     const [attempt, setAttempt] = React.useState(0);
     const [silent, setSilent] = React.useState(false);
     const [diag, setDiag] = React.useState(null);
     const [boot, setBoot] = React.useState(null);
-    const [templates, setTemplates] = React.useState([]);
-    const [view, setView] = React.useState('home');
-    const [templateError, setTemplateError] = React.useState(false);
-    const [creationUncertain, setCreationUncertain] = React.useState(false);
     const [preset, setPreset] = React.useState(null);
-    const [creating, setCreating] = React.useState(false);
     // Archive state of the project whose editor is open. It is read from the
     // Host, which owns DSH's durable archive set; this panel keeps no copy.
     const [projectId, setProjectId] = React.useState(null);
     const [archive, setArchive] = React.useState(null);
     const [archiveBusy, setArchiveBusy] = React.useState(false);
-    const containerRef = React.useRef(null);
     const iframeRef = React.useRef(null);
     const heardRef = React.useRef(false);
-    const creatingRef = React.useRef(false);
-    const viewRef = React.useRef(view);
-    viewRef.current = view;
 
     React.useEffect(() => {
       let live = true;
@@ -47,14 +39,6 @@ export function createStudioPanel(React) {
         .catch(() => {});
       return () => { live = false; };
     }, []);
-
-    React.useEffect(() => {
-      let live = true;
-      Promise.resolve().then(() => templateRequest({ action: 'list' })).then(result => {
-        if (live && Array.isArray(result?.templates)) setTemplates(result.templates.filter(item => item && typeof item.id === 'string' && typeof item.title === 'string'));
-      }).catch(() => { if (live) setTemplateError(true); });
-      return () => { live = false; };
-    }, [templateRequest]);
 
     React.useEffect(() => {
       const controller = new AbortController();
@@ -88,12 +72,15 @@ export function createStudioPanel(React) {
           heardRef.current = true;
           setBoot({ hasNative: data.hasNative === true, rendered: data.rendered === true });
         }
-        if (viewRef.current === 'editor' && data && typeof data === 'object' && data.type === 'no996-openfilm:project' && data.version === 1 && typeof data.projectId === 'string') {
+        if (data && typeof data === 'object' && data.type === 'no996-openfilm:project' && data.version === 1 && typeof data.projectId === 'string') {
           try {
             if (/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId)) {
               localStorage.setItem('no996.openfilm.lastProject', data.projectId);
               setProjectId(data.projectId);
-            } else localStorage.removeItem('no996.openfilm.lastProject');
+            } else {
+              localStorage.removeItem('no996.openfilm.lastProject');
+              setProjectId(null);
+            }
           } catch { /* private mode */ }
         }
       };
@@ -120,6 +107,7 @@ export function createStudioPanel(React) {
       if (!projectId || state.status !== 'ready') { setArchive(null); return undefined; }
       let live = true;
       const read = async () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
         try {
           const response = await fetch('/api/no996-openfilm/archive', {
             method: 'POST', credentials: 'same-origin',
@@ -131,7 +119,7 @@ export function createStudioPanel(React) {
         } catch { /* keep the last known state; the banner is not a source of truth */ }
       };
       read();
-      const timer = setInterval(read, 5000);
+      const timer = setInterval(read, 15000);
       return () => { live = false; clearInterval(timer); };
     }, [projectId, state.status]);
     const changeArchive = async action => {
@@ -148,43 +136,12 @@ export function createStudioPanel(React) {
       } catch { /* the next poll reconciles */ }
       finally { setArchiveBusy(false); }
     };
-    const createTemplate = async id => {
-      if (creatingRef.current || creationUncertain || !iframeRef.current || state.status !== 'ready') return;
-      const frame = iframeRef.current;
-      creatingRef.current = true;
-      setCreating(true);
-      setTemplateError(false);
-      try {
-        const result = await templateRequest({ action: 'create', templateId: id });
-        const url = templateProjectUrl(state.url, result?.projectId);
-        // Keep React's source of truth aligned while preserving the iframe node.
-        if (iframeRef.current === frame) {
-          setState(current => current.status === 'ready' ? { ...current, url } : current);
-          setView('editor');
-        }
-      } catch {
-        // A lost response can follow successful registration. Do not offer an
-        // immediate retry that may create a second project.
-        setCreationUncertain(true);
-        setTemplateError(true);
-      }
-      finally { creatingRef.current = false; setCreating(false); }
-    };
-    const openExisting = () => {
-      // The frame has already redeemed the desktop ticket. Restore a known
-      // project only in response to this explicit action; otherwise show Studio.
-      try {
-        const last = localStorage.getItem('no996.openfilm.lastProject');
-        if (typeof last === 'string' && /^[A-Za-z0-9_-]{6,40}$/.test(last)) {
-          const url = templateProjectUrl(state.url, last);
-          setState(current => current.status === 'ready' ? { ...current, url } : current);
-        }
-      } catch { /* Studio's own project list remains available */ }
-      setView('editor');
-    };
+
     let studio;
     if (state.status === 'loading') {
-      studio = h('div', { role: 'status', style: { padding: 24, color: 'var(--dsw-alias-label-secondary)' } }, t('studioLoading'));
+      studio = h('div', { role: 'status', style: { padding: 24, color: 'var(--dsw-alias-label-secondary)' } },
+        t('studioLoading'),
+        preset && !preset.ok ? h('p', { style: { margin: '8px 0 0', fontSize: 12, opacity: 0.8 } }, `${t('presetMissing')} ${String(preset.detail || '').slice(0, 120)}`) : null);
     } else if (state.status === 'error') {
       studio = h('section', { style: { padding: 24, color: 'var(--dsw-alias-label-primary)' } },
         h('p', { role: 'alert' }, t('studioFailed'), ' ', state.message),
@@ -193,35 +150,18 @@ export function createStudioPanel(React) {
       studio = h('section', { style: { padding: 24, color: 'var(--dsw-alias-label-primary)' } },
         h('p', { role: 'alert' }, t('studioFailed'), ' 官方界面 20 秒内没有回应。请把下面这段诊断文字发给我。'),
         h('pre', { style: { whiteSpace: 'pre-wrap', fontSize: 12, overflow: 'auto', maxHeight: '50vh', background: 'var(--dsw-alias-bg-layer-1, #0002)', padding: 8, borderRadius: 6 } },
-          JSON.stringify({ boot, diag: diag ?? { note: 'diagnose 尚未返回' } }, null, 1)),
+          JSON.stringify({ boot, preset, diag: diag ?? { note: 'diagnose 尚未返回' } }, null, 1)),
         h('button', { type: 'button', onClick: retry }, t('studioRetry')));
     } else {
       studio = h('iframe', {
         ref: iframeRef, title: t('studioTitle'), src: state.url,
-        'aria-hidden': view === 'home' ? true : undefined, tabIndex: view === 'home' ? -1 : undefined,
         sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-modals',
         allow: 'clipboard-read; clipboard-write',
         referrerPolicy: 'no-referrer',
-        style: { display: 'block', width: '100%', height: '100%', border: 0, background: 'var(--dsw-alias-bg-base)', visibility: view === 'home' ? 'hidden' : 'visible' },
+        style: { display: 'block', width: '100%', height: '100%', border: 0, background: 'var(--dsw-alias-bg-base)' },
       });
     }
-    const ready = state.status === 'ready' && !!boot && !silent;
-    const home = h('main', { style: { position: 'absolute', inset: 0, overflow: 'auto', padding: 'clamp(24px, 5vw, 64px)', color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-base)' } },
-      h('div', { style: { maxWidth: 960, margin: '0 auto' } },
-        h('h1', { style: { margin: '0 0 8px', fontSize: 28 } }, t('templateHomeTitle')),
-        h('p', { style: { margin: '0 0 28px', color: 'var(--dsw-alias-label-secondary)' } }, t('templateHomeDescription')),
-        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))', gap: 12 } },
-          ...templates.map(item => h('button', { key: item.id, type: 'button', disabled: creating || creationUncertain || !ready, onClick: () => createTemplate(item.id), style: { textAlign: 'left', minHeight: 150, padding: 20, border: '1px solid var(--dsw-alias-separator, #8886)', borderRadius: 8, background: 'var(--dsw-alias-bg-layer-1, transparent)', color: 'inherit', cursor: 'pointer' } },
-            h('strong', { style: { display: 'block', fontSize: 17, marginBottom: 8 } }, item.title),
-            h('span', { style: { display: 'block', color: 'var(--dsw-alias-label-secondary)', marginBottom: 20 } }, item.description || ''),
-            h('span', null, creating ? t('templateBusy') : t('templateCreate'))))),
-        templateError ? h('p', { role: 'alert' }, t(creationUncertain ? 'templateUncertain' : 'templateError')) : null,
-        h('button', { type: 'button', disabled: creating || !ready, onClick: openExisting, style: { marginTop: 28 } }, t('openExisting')),
-        // Preset status: a silent activation failure would otherwise show up much
-        // later as a chat that cannot send.
-        preset ? h('p', { role: 'status', style: { marginTop: 12, fontSize: 12, opacity: 0.75 } },
-          preset.ok ? t('presetReady') : `${t('presetMissing')} ${String(preset.detail || '').slice(0, 120)}`) : null,
-        !ready ? h('div', { style: { marginTop: 16 } }, state.status === 'ready' && !silent ? t('studioLoading') : studio) : null));
+
     const archived = archive?.available !== false && archive?.archived === true;
     const banner = archived
       ? h('div', {
@@ -237,9 +177,8 @@ export function createStudioPanel(React) {
       h('button', { type: 'button', disabled: archiveBusy, onClick: () => changeArchive('unarchive') }, t('archiveRestore')),
       h('button', { type: 'button', disabled: archiveBusy, onClick: () => changeArchive('rebind') }, t('archiveRebind')))
       : null;
-    return h('div', { ref: containerRef, style: { position: 'relative', width: '100%', height: '100%', minWidth: 0, minHeight: 0 } },
-      state.status === 'ready' && !silent ? studio : view === 'editor' ? studio : null,
-      view === 'home' ? home : null,
+    return h('div', { style: { position: 'relative', width: '100%', height: '100%', minWidth: 0, minHeight: 0 } },
+      studio,
       banner);
   };
 }

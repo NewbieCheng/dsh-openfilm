@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, request } from 'node:http';
 import { officialFacadeSource } from './official-facade.mjs';
+import { shellUiInjection } from './shell-extras.mjs';
 
 // Proxy for the pinned OpenFilm 0.3.1 protocol. It does not provide process
 // isolation. Unrecognized or unsafe representations fail closed.
@@ -400,7 +401,7 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
   });
   report(true);
 })();
-</script><style>[data-app-menu]>[role="menuitem"]:not(:first-child),[data-community-menu]{display:none!important}</style>`;
+</script>${officialShell && officialPage ? shellUiInjection : ''}<style>[data-app-menu]>[role="menuitem"]:not(:first-child),[data-community-menu]{display:none!important}</style>`;
               value = value.replace(/<head(?:\s[^>]*)?>/i, match => match + host);
               if (value.includes('__no996Diag')) diag.injected += 1;
               else diag.refusals += 1;
