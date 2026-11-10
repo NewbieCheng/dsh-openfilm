@@ -1,4 +1,10 @@
 import { createStudioRuntime } from './studio-runtime.mjs';
+import { installTemplate, listTemplates } from './official-templates.mjs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
+
+const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.url));
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
 import { createDshAskAgent } from './dsh-ai.mjs';
 import { openProjectConversations } from './project-conversation.mjs';
@@ -71,6 +77,20 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     if (channel === 'agent:cancel') {
       if (!agentService) throw new Error('Agent bridge unavailable');
       return agentService.cancel(payload?.projectId);
+    }
+    if (channel === 'template:list') {
+      return { templates: await listTemplates(templatesRoot) };
+    }
+    if (channel === 'template:create') {
+      const proxy = await lastProxy;
+      if (!proxy || typeof proxy.createProject !== 'function') throw Object.assign(new Error('Studio is not ready'), { code: 'TEMPLATE_UNAVAILABLE' });
+      const chosen = (await listTemplates(templatesRoot)).find(item => item.id === payload?.templateId);
+      if (!chosen) throw Object.assign(new Error('Unknown template'), { code: 'TEMPLATE_INPUT' });
+      // New films live beside the user's existing ones; with no project yet, a
+      // folder under the home directory keeps the same one-project-one-folder shape.
+      const projects = await proxy.listProjects().catch(() => []);
+      const parentDir = projects.length ? dirname(projects[0].path) : join(homedir(), 'OpenFilm');
+      return installTemplate({ root: templatesRoot, id: chosen.id, parentDir, createProject: target => proxy.createProject(target), titleFor: () => chosen.title });
     }
     return createOfficialChatRpc(store, agentService)(channel, payload);
   };

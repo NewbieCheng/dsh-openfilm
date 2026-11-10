@@ -400,10 +400,53 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
   });
   report(true);
 })();
-// Placement stays as the official desktop has it (chat left of Studio). Studio
-// reserves that space on the left through --host-panel-width; forcing the
-// column to the right leaves an empty band where Studio already reserved space.
-// The standalone debug page can still request a side, for experiments only.</script><style>[data-app-menu]>[role="menuitem"]:not(:first-child),[data-community-menu]{display:none!important}</style>`;
+// Starter templates on the chat home: read-only metadata from the Host, one click
+// to copy the template into a new project and open it. Nothing here touches the
+// official React tree except an absolutely positioned strip inside the chat
+// column, removed on project pages.
+(function(){
+  var strip=null, busy=false;
+  function remove(){ if(strip&&strip.parentNode)strip.parentNode.removeChild(strip); strip=null; }
+  function card(t){
+    var el=document.createElement('button');
+    el.type='button';
+    el.textContent=t.title;
+    el.title=t.description||t.title;
+    el.style.cssText='flex:0 0 auto;padding:8px 12px;border-radius:10px;border:1px solid #ffffff26;background:#ffffff0f;color:inherit;font-size:13px;cursor:pointer';
+    el.onclick=function(){
+      if(busy)return; busy=true; el.textContent='创建中…';
+      fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'template:create',payload:{templateId:t.id}})})
+        .then(function(r){return r.json()})
+        .then(function(d){ if(d&&d.projectId){ location.href='/projects/'+d.projectId; return } throw new Error('无法创建项目') })
+        .catch(function(e){ busy=false; el.textContent=t.title; show((e&&e.message)||String(e)) });
+    };
+    return el;
+  }
+  function show(message){ try{ window.__no996ShowError&&window.__no996ShowError('[模板] '+message) }catch(e){} }
+  function render(list){
+    var chat=document.getElementById('of-chat');
+    if(!chat||location.pathname!=='/')return remove();
+    if(strip&&strip.parentNode===chat)return;
+    remove();
+    strip=document.createElement('div');
+    strip.id='no996-templates';
+    strip.style.cssText='position:absolute;left:24px;right:24px;top:72px;display:flex;gap:8px;flex-wrap:wrap;z-index:5';
+    var label=document.createElement('span');
+    label.textContent='从模板开始：';
+    label.style.cssText='align-self:center;font-size:12px;opacity:.6';
+    strip.appendChild(label);
+    list.forEach(function(t){ strip.appendChild(card(t)) });
+    chat.appendChild(strip);
+  }
+  function load(){
+    fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'template:list',payload:{}})})
+      .then(function(r){return r.json()})
+      .then(function(d){ if(d&&Array.isArray(d.templates)&&d.templates.length) render(d.templates) })
+      .catch(function(){})
+  }
+  setTimeout(load,2500);
+  setInterval(function(){ if(location.pathname!=='/'){ remove(); return } load() },8000);
+})();</script><style>[data-app-menu]>[role="menuitem"]:not(:first-child),[data-community-menu]{display:none!important}</style>`;
               value = value.replace(/<head(?:\s[^>]*)?>/i, match => match + host);
               if (value.includes('__no996Diag')) diag.injected += 1;
               else diag.refusals += 1;
@@ -454,7 +497,10 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
         const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
         if (!value || typeof value !== 'object' || Array.isArray(value) ||
             Object.keys(value).length !== 2 || typeof value.channel !== 'string' || !Object.hasOwn(value, 'payload')) return fail(res, 400);
-        if (await authorizeOfficialProject(req, value.payload?.projectId) !== true) return fail(res);
+        // Template channels carry no project yet (create makes one); they still
+        // pass the same origin, cookie and same-site checks above.
+        const needsProject = value.channel !== 'template:list' && value.channel !== 'template:create';
+        if (needsProject && await authorizeOfficialProject(req, value.payload?.projectId) !== true) return fail(res);
         const result = await officialRpc(value.channel, value.payload);
         if (closed || res.destroyed || res.writableEnded) return;
         const body = Buffer.from(JSON.stringify(result));
@@ -625,9 +671,42 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
     await Promise.all([shutdown(editor), shutdown(film)]);
     throw new Error('Studio proxy could not start');
   }
+  // Two Studio calls the template installer needs. They stay inside this module
+  // so the Studio key never leaves it.
+  function studioCall(method, path, body) {
+    return new Promise((resolve, reject) => {
+      const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
+      const req = request({ hostname: editorUpstream.hostname, port: editorUpstream.port, method, path,
+        headers: { host: editorUpstream.host, 'x-studio-key': key, 'accept-encoding': 'identity', origin: editorUpstream.origin,
+          ...(payload ? { 'content-type': 'application/json', 'content-length': payload.length } : {}) } }, (reply) => {
+        const chunks = [];
+        reply.on('data', chunk => { if (chunks.length < 512) chunks.push(chunk); });
+        reply.on('end', () => {
+          let value;
+          try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { value = undefined; }
+          resolve({ status: reply.statusCode, value });
+        });
+      });
+      req.on('error', () => reject(new Error('Studio request failed')));
+      if (payload) req.write(payload);
+      req.end();
+    });
+  }
+
   return Object.freeze({
     editorOrigin,
     diagnostics: () => ({ ...diag, mode: officialShell ? 'official' : 'dsh' }),
+    async listProjects() {
+      const reply = await studioCall('GET', '/api/projects');
+      if (reply.status !== 200 || !Array.isArray(reply.value?.projects)) throw new Error('Studio project list unavailable');
+      return reply.value.projects.map(project => ({ id: String(project.id), path: String(project.path) }));
+    },
+    async createProject(projectPath) {
+      if (typeof projectPath !== 'string' || !projectPath) throw new Error('A project path is required');
+      const reply = await studioCall('POST', '/api/projects', { path: projectPath });
+      if (reply.status !== 200 || typeof reply.value?.project?.id !== 'string') throw new Error('Studio refused the project');
+      return { id: reply.value.project.id, path: reply.value.project.path };
+    },
     bootstrapData() {
       if (desktop) {
         prune(tickets);
