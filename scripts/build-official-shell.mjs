@@ -35,7 +35,15 @@ function main() {
   // place (ModelPopover.tsx) instead of in a panel beside it.
   // Any other tracked change is still refused, and the diff is recorded into the
   // snapshot as patch.diff so the fork stays reviewable and re-appliable.
-  const PATCHED = ['apps/desktop/chat/src/lib/agent-menu-rows.ts', 'apps/desktop/chat/src/components/ModelPopover.tsx'];
+  const PATCHED = [
+    'apps/desktop/chat/src/lib/agent-menu-rows.ts',
+    'apps/desktop/chat/src/components/ModelPopover.tsx',
+    'apps/desktop/chat/src/i18n/locales/en-US.ts',
+    'apps/desktop/chat/src/i18n/locales/es.ts',
+    'apps/desktop/chat/src/i18n/locales/ja.ts',
+    'apps/desktop/chat/src/i18n/locales/ko.ts',
+    'apps/desktop/chat/src/i18n/locales/zh-CN.ts',
+  ];
   const dirty = git(checkout, 'status', '--porcelain', '--untracked-files=no').toString('utf8')
     .split('\n').map(line => line.replace(/\r$/, '')).filter(Boolean).map(line => line.slice(3).trim());
   const unexpected = dirty.filter(path => !PATCHED.includes(path));

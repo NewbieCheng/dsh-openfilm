@@ -36,10 +36,16 @@ test('the shell snapshot declares its one upstream patch, or none at all', () =>
     assert.equal(existsSync(patchFile), false, 'a patch.diff without manifest.patch is an unrecorded fork');
     return;
   }
-  assert.deepEqual([...manifest.patch.files].sort(), ['apps/desktop/chat/src/components/ModelPopover.tsx', 'apps/desktop/chat/src/lib/agent-menu-rows.ts']);
+  assert.ok(Array.isArray(manifest.patch.files) && manifest.patch.files.length > 0, 'the patch must name the files it changes');
+  // The two code edits are the fork; the locale files only carry the search strings.
+  for (const required of ['apps/desktop/chat/src/components/ModelPopover.tsx', 'apps/desktop/chat/src/lib/agent-menu-rows.ts']) {
+    assert.ok(manifest.patch.files.includes(required), 'the patch must include ' + required);
+  }
   assert.equal(existsSync(patchFile), true, 'manifest.patch must ship as patch.diff');
   const diff = readFileSync(patchFile, 'utf8');
   assert.match(diff, /^diff --git /m);
+  for (const file of manifest.patch.files) assert.ok(diff.includes('b/' + file), 'patch.diff must carry ' + file);
   assert.match(diff, /category === 'permission'/, 'the recorded diff must include the permission row');
   assert.match(diff, /data-agent-option-level/, 'and the one-level menu');
+  assert.match(diff, /data-agent-search/, 'and its search box');
 });
