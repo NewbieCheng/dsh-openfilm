@@ -33,7 +33,7 @@ function officialFacadeFactory(bridge) {
 
   // Only these fixed RPC and event channels may reach the supplied bridge.
   // The Host must independently authorize project IDs and validate all payloads.
-  const rpcAllow = new Set(['chat:load', 'chat:save-sessions', 'chat:save-turn', 'chat:archive', 'chat:unarchive', 'chat:archive-state', 'editor:link', 'client:log', 'agent:prompt', 'agent:cancel', 'agent:models', 'agent:select-model', 'agent:thinking', 'agent:select-thinking', 'agent:answer-permission', 'agent:trace']);
+  const rpcAllow = new Set(['chat:load', 'chat:log', 'chat:save-sessions', 'chat:save-turn', 'chat:archive', 'chat:unarchive', 'chat:archive-state', 'editor:link', 'client:log', 'agent:prompt', 'agent:cancel', 'agent:models', 'agent:select-model', 'agent:thinking', 'agent:select-thinking', 'agent:answer-permission', 'agent:trace']);
   const eventAllow = new Set(['desktop:full-screen', 'desktop:toggle-chat', 'desktop:open-settings']);
   const rpc = async (channel, payload) => {
     if (!rpcAllow.has(channel) || typeof bridge.invoke !== 'function') throw unavailable(channel);
@@ -369,7 +369,15 @@ function officialFacadeFactory(bridge) {
     return result;
   };
   const chat = {
-    ...methods('chat', ['log', 'reveal', 'saveRefImage', 'describePaths', 'unsaved', 'snapshot', 'changes', 'undo']),
+    ...methods('chat', ['reveal', 'saveRefImage', 'describePaths', 'unsaved', 'snapshot', 'changes', 'undo']),
+    // The trace tab: what this turn called and what came back, one event a line.
+    // A turn the Host never watched has no log, which the tab draws as "nothing".
+    log: async (project, turnId) => {
+      const id = await projectId(project);
+      if (typeof turnId !== 'string' || !turnId) return null;
+      const result = await rpc('chat:log', { projectId: id, turnId });
+      return result && typeof result === 'object' && Array.isArray(result.events) ? result : null;
+    },
     load: async (project) => {
       const id = await projectId(project);
       await (writes.get(id) || Promise.resolve()).catch(() => {});

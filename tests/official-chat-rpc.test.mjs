@@ -13,9 +13,10 @@ function store() {
   };
 }
 
-function rpc({ archived = false, available = true, fail } = {}) {
+function rpc({ archived = false, available = true, fail, turnLog } = {}) {
   const fake = store();
   const dispatch = createOfficialChatRpc(fake, null, {
+    ...(turnLog ? { turnLog } : {}),
     state: async projectId => {
       if (fail) throw new Error('unavailable');
       return { projectId, archived, available, sessionId: 'session-a' };
@@ -67,4 +68,24 @@ test('untrusted payloads and broken state never expose details', async () => {
   await assert.rejects(dispatch('chat:archive', { projectId: 'project1', sessionId: 'session-b' }), { code: 'OFFICIAL_CHAT_UNAVAILABLE' });
   const broken = rpc({ fail: true });
   await assert.rejects(broken.dispatch('chat:load', { projectId: 'project1' }), { code: 'OFFICIAL_CHAT_UNAVAILABLE' });
+});
+// The panel's trace tab reads a turn's log through this channel. It used to be
+// refused outright (the tab existed but could never show a line).
+test('a turn log comes back for a turn the Host watched, and nothing otherwise', async () => {
+  const events = [
+    { t: 1, kind: 'tool_call', title: 'openfilm_film', rawInput: { view: 'summary' } },
+    { t: 2, kind: 'agent_message_chunk', content: { text: '你好' } },
+  ];
+  const seen = [];
+  const watched = rpc({ turnLog: async (projectId, turnId) => { seen.push([projectId, turnId]); return turnId === 'local:1' ? { file: 'dsh-turn', cut: false, whole: true, events, calls: [], callsWhole: true, callsCut: false, at: { events: 2, calls: 0, callsFile: 0 } } : null; } });
+  const log = await watched.dispatch('chat:log', { projectId: 'film123', turnId: 'local:1' });
+  assert.equal(log.events.length, 2);
+  assert.equal(log.whole, true);
+  assert.deepEqual(seen[0], ['film123', 'local:1']);
+  assert.equal(await watched.dispatch('chat:log', { projectId: 'film123', turnId: 'local:9' }), null);
+});
+
+test('without a turn log the channel stays refused rather than inventing one', async () => {
+  const { dispatch } = rpc();
+  await assert.rejects(() => dispatch('chat:log', { projectId: 'film123', turnId: 'local:1' }));
 });

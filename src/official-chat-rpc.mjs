@@ -22,6 +22,9 @@ export function createOfficialChatRpc(store, agent, options = {}) {
   const state = typeof options.state === 'function' ? options.state : null;
   const archive = typeof options.archive === 'function' ? options.archive : null;
   const unarchive = typeof options.unarchive === 'function' ? options.unarchive : null;
+  // A turn's own log, as the panel's trace tab reads it. Absent when the Host
+  // keeps no such record: the channel then stays refused, as before.
+  const turnLog = typeof options.turnLog === 'function' ? options.turnLog : null;
   const inspect = async projectId => {
     if (!state) return { archived: false, available: false };
     const value = await state(projectId);
@@ -32,6 +35,16 @@ export function createOfficialChatRpc(store, agent, options = {}) {
     try {
       if (!payload || typeof payload.projectId !== 'string' || !PROJECT_ID.test(payload.projectId)) throw failure();
       if (channel === 'chat:archive-state' && exact(payload, ['projectId'])) return await inspect(payload.projectId);
+      // The panel's trace tab asks for a turn's log: one event per line, with what
+      // the turn called. Without this the tab exists but can never show anything.
+      if (channel === 'chat:log' && exact(payload, ['projectId', 'turnId'])) {
+        if (!turnLog) throw failure();
+        if (typeof payload.turnId !== 'string' || !payload.turnId || payload.turnId.length > 120) throw failure();
+        const log = await turnLog(payload.projectId, payload.turnId);
+        if (log === null || log === undefined) return null;
+        if (typeof log !== 'object' || !Array.isArray(log.events)) throw failure();
+        return log;
+      }
       if (channel === 'chat:load' && exact(payload, ['projectId'])) {
         const loaded = await store.load(payload.projectId);
         const current = await inspect(payload.projectId);

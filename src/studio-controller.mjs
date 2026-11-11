@@ -245,6 +245,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       state: archiveState,
       archive: async projectId => { const current = await archiveState(projectId); await archive.archive(current.sessionId, { stopActivity: true }); },
       unarchive: async projectId => { const current = await archiveState(projectId); await archive.unarchive(current.sessionId); },
+      // The trace tab's reading: what this turn called and what came back.
+      turnLog: turnLogOf,
     })(channel, payload);
   };
   // Stage 1 trust model: the editor origin is the official OpenFilm window for
@@ -310,12 +312,44 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   const isProjectAgent = agent => Boolean(agent && conversations && !disposed && ctx.agents.get(agent.id) === agent && conversations.boundConversation(agent.id)?.available);
   // One project-scoped event fan-out feeds the official chat's stream.
   const eventHub = createOfficialEventHub();
+  // Every envelope that goes to the panel is also kept, per project and turn, as
+  // the trace tab's reading: the tab renders one line per event, so what the turn
+  // called (tool name, arguments, result) is finally visible instead of only the
+  // chat's three-word action rows. Bounded: a long turn keeps its last events.
+  const TURN_LOG_TURNS = 4;
+  const TURN_LOG_EVENTS = 2000;
+  const turnLogs = new Map();
+  const recordTurnEvent = (projectId, event) => {
+    if (typeof projectId !== 'string' || !projectId || !event || typeof event !== 'object') return;
+    const turnId = typeof event.key === 'string' ? event.key : '';
+    if (!turnId) return;
+    const update = event.update && typeof event.update === 'object' ? event.update : {};
+    let turns = turnLogs.get(projectId);
+    if (!turns) turnLogs.set(projectId, turns = new Map());
+    let events = turns.get(turnId);
+    if (!events) {
+      turns.set(turnId, events = []);
+      while (turns.size > TURN_LOG_TURNS) turns.delete(turns.keys().next().value);
+    }
+    const kind = typeof update.sessionUpdate === 'string' ? update.sessionUpdate
+      : event.kind === 'done' ? 'done' : 'update';
+    events.push({ t: Date.now(), kind, ...update });
+    if (events.length > TURN_LOG_EVENTS) events.splice(0, events.length - TURN_LOG_EVENTS);
+    while (turnLogs.size > 8) turnLogs.delete(turnLogs.keys().next().value);
+  };
+  const turnLogOf = (projectId, turnId) => {
+    const events = turnLogs.get(projectId)?.get(turnId);
+    if (!events) return null;
+    // `whole` says these events are the log's, so the viewer replaces rather than appends.
+    return { file: 'dsh-turn', cut: false, whole: true, events: [...events], calls: [], callsWhole: true, callsCut: false, at: { events: events.length, calls: 0, callsFile: 0 } };
+  };
   // Approval questions travel the same stream as transcript updates. `publish`
   // reports whether a live transport accepted the write, which is exactly the
   // coordinator's delivery contract (acceptance, not proof of rendering).
   const deliverToPanel = (projectId, event) => {
     const delivered = eventHub.publish(projectId, event);
     bridgeTrace.emit(projectId, event, delivered);
+    recordTurnEvent(projectId, event);
     return delivered;
   };
   const approvals = createOfficialApprovals({ deliver: deliverToPanel });
