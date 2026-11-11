@@ -32,6 +32,60 @@ index 9c7041b..4b98b79 100644
                  />
                  <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
                    {/* the first message well below the session bar, as a chat app opens a conversation; the last well above
+diff --git a/apps/desktop/chat/src/components/AgentActivityRow.tsx b/apps/desktop/chat/src/components/AgentActivityRow.tsx
+index 69c82b6..b479684 100644
+--- a/apps/desktop/chat/src/components/AgentActivityRow.tsx
++++ b/apps/desktop/chat/src/components/AgentActivityRow.tsx
+@@ -181,32 +181,36 @@ export function formatWorkDuration(ms: number): string {
+ }
+ 
+ /**
+- * The agent thought for a while (only a local Codex / Claude Code reports this).
++ * The agent thought for a while and its reasoning is known.
+  *
+- * While thinking, one shimmering row; then "Thought for 6s", which opens to the agent's own reasoning in
+- * muted gray. That text is written for itself, so it starts closed, as Codex and Claude Code show it.
++ * dsh-openfilm: the reasoning is shown, not hidden — a bridging agent reports it, and a person watching
++ * a film get edited wants to see what the agent weighed. It starts open (a "thought for 16s" header with
++ * the text under it), and collapses to that header when the turn moves on: what was thought stays one
++ * click away without taking the screen after the fact.
+  */
+ function ThoughtRow({ item }: { item: AgentActivityItem }) {
+   const t = useT();
+-  const [open, setOpen] = React.useState(false);
+-  if (item.pending) {
+-    return <div className="py-1 text-[14px] leading-relaxed"><span className="text-sweep">{t('agent.thinking')}</span></div>;
+-  }
++  const [open, setOpen] = React.useState(true);
+   const ms = item.startedAt != null && item.endedAt != null ? item.endedAt - item.startedAt : null;
+-  const label = ms != null && ms >= 1000
+-    ? t('turnFrame.thought').replace('{t}', formatWorkDuration(ms))
+-    : t('turnFrame.thoughtShort');
+   const text = (item.text ?? '').trim();
+-  if (!text) return <div className="py-1 text-[14px] leading-relaxed text-[var(--text-faint)]">{label}</div>;
++  if (item.pending && !text) {
++    return <div className="py-1 text-[14px] leading-relaxed"><span className="text-sweep">{t('agent.thinking')}</span></div>;
++  }
++  const label = item.pending
++    ? t('agent.thinking')
++    : ms != null && ms >= 1000
++      ? t('turnFrame.thought').replace('{t}', formatWorkDuration(ms))
++      : t('turnFrame.thoughtShort');
++  if (!text) return <div data-thought="empty" className="py-1 text-[14px] leading-relaxed text-[var(--text-faint)]">{label}</div>;
+   return (
+-    <div className="min-w-0 py-1">
++    <div data-thought={item.id} className="min-w-0 py-1">
+       <button
+         type="button"
+         aria-expanded={open}
+         onClick={() => setOpen((value) => !value)}
+         className="flex items-center gap-1.5 text-[14px] leading-relaxed text-[var(--text-faint)] hover:text-[var(--text)]"
+       >
+-        {label}
++        {item.pending ? <span className="text-sweep">{label}</span> : label}
+         <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+       </button>
+       {open ? (
 diff --git a/apps/desktop/chat/src/components/ConversationSessionBar.tsx b/apps/desktop/chat/src/components/ConversationSessionBar.tsx
 index 102217b..7691503 100644
 --- a/apps/desktop/chat/src/components/ConversationSessionBar.tsx
@@ -95,7 +149,7 @@ index 102217b..7691503 100644
        )}
      </div>
 diff --git a/apps/desktop/chat/src/components/ModelPopover.tsx b/apps/desktop/chat/src/components/ModelPopover.tsx
-index 6800d48..f9bf9ff 100644
+index 6800d48..4c9f535 100644
 --- a/apps/desktop/chat/src/components/ModelPopover.tsx
 +++ b/apps/desktop/chat/src/components/ModelPopover.tsx
 @@ -4,16 +4,11 @@
@@ -118,7 +172,7 @@ index 6800d48..f9bf9ff 100644
  import { Check, ChevronDown, ChevronRight, KeyRound, Settings } from 'lucide-react';
  import { keepFocus, Popover } from './Popover';
  import { useT } from '@/i18n';
-@@ -23,19 +18,16 @@ import { BrandLogo } from '@/components/BrandLogo';
+@@ -23,19 +18,18 @@ import { BrandLogo } from '@/components/BrandLogo';
  import { POPOVER_CHROME } from '@/components/ComposerCard';
  import { desktopBridge, type LocalAgentId, type RosterAgent } from '@/lib/desktop-bridge';
  import { agentModelSummary, agentOptions, currentAgent, effectivePrefs, offeredChoices, offeredOption, optionLabel, optionValue, shownAgents, useLocalAgents } from '@/state/local-agent-store';
@@ -133,6 +187,8 @@ index 6800d48..f9bf9ff 100644
 -/** the narrowest the card gets in a narrow chat */
  const CARD_MIN_W = 150;
 -const SIDE_GAP = 2;
++/** the choices level gets the room a full model name needs */
++const CARD_MAX_W = 460;
  const EDGE = 8;
 -/** how long a side menu stays once the pointer leaves its row (to cross the gap into it) */
 -const SIDE_CLOSE_MS = 120;
@@ -142,7 +198,36 @@ index 6800d48..f9bf9ff 100644
  
  const ROW_BASE =
    'flex min-h-[28px] w-full items-center gap-2 rounded-[6px] px-2.5 text-[13px] font-normal tracking-normal text-left outline-none transition';
-@@ -94,30 +86,11 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -49,6 +43,28 @@ function rowChoices(agent: LocalAgentId, o: Option, chosen: unknown): NonNullabl
+   return offeredChoices(agent, o, chosen);
+ }
+ 
++/**
++ * The choices, split where their names group them.
++ *
++ * The Host names a model `<group> / <model>` (official-model-catalog.mjs), so a
++ * flat list repeats the group on every line and cuts the model name to fit. This
++ * turns that into what DSH's own menu shows: a heading per group, and each model
++ * named in full under it. A name with no separator is its own label.
++ */
++function groupChoices(choices: NonNullable<Option['options']>): Array<{
++  choice: NonNullable<Option['options']>[number]; group: string; label: string; heading: string | null;
++}> {
++  let last = '';
++  return choices.map((choice) => {
++    const at = choice.name.indexOf(' / ');
++    const group = at > 0 ? choice.name.slice(0, at) : '';
++    const label = at > 0 ? choice.name.slice(at + 3) : choice.name;
++    const heading = group && group !== last ? group : null;
++    if (heading) last = group;
++    return { choice, group, label, heading };
++  });
++}
++
+ /** Why the agent could not be started for its settings, as it said, on a few lines; none when it started and offered none. */
+ function failureReason(error: { text: string } | undefined): string | null {
+   if (!error || error.text === 'no options') return null;
+@@ -94,30 +110,11 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
  } = {}) {
    const t = useT();
    const [open, setOpen] = React.useState(false);
@@ -175,7 +260,20 @@ index 6800d48..f9bf9ff 100644
  
    const la = useLocalAgents();
    const { hydrate, refresh, ensureOptions } = la;
-@@ -169,81 +142,28 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -141,8 +138,10 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+   const summary = agentModelSummary(options, prefs);
+   const triggerModel = summary.model;
+   const triggerEffort = rows.some((o) => o.category === 'thought_level' && !o.fixed) ? summary.effort : null;
+-  const valueOf = (o: Option) => (o.fixed ? (optionLabel(options, o.id, optionValue(options, prefs, o.id)) ?? o.options![0]!.name)
+-    : (o.category === 'model' ? triggerModel : null) ?? optionLabel(options, o.id, optionValue(options, prefs, o.id)) ?? '');
++  /* the model row says the model alone too: the group is the heading one level down */
++  const modelOnly = (text: string) => (text.includes(' / ') ? text.slice(text.indexOf(' / ') + 3) : text);
++  const valueOf = (o: Option) => (o.fixed ? modelOnly(optionLabel(options, o.id, optionValue(options, prefs, o.id)) ?? o.options![0]!.name)
++    : (o.category === 'model' ? triggerModel : null) ?? modelOnly(optionLabel(options, o.id, optionValue(options, prefs, o.id)) ?? ''));
+   const rowLabel = (o: Option) => (o.category === 'model' ? t('composer.model') : o.category === 'thought_level' ? t('composer.effort') : isSpeed(o) ? t('composer.speed') : o.name);
+   const nameOf = (a: RosterAgent) => (a.id === 'byok' ? t('composer.agentOwnKey') : a.name);
+ 
+@@ -169,81 +168,28 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
    /* a fixed row's one value is already the one in use */
    const pickChoice = (o: Option, value: unknown) => { if (!o.fixed) { la.setPref(agent, o.id, value); onPref?.(agent, o.id, value); } };
  
@@ -278,7 +376,7 @@ index 6800d48..f9bf9ff 100644
  
    return (
      <>
-@@ -253,7 +173,6 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -253,7 +199,6 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
        placement={placement}
        align={align}
        bare
@@ -286,13 +384,22 @@ index 6800d48..f9bf9ff 100644
        trigger={
          <Tooltip label={t('composer.model')}>
            <button type="button" onMouseDown={keepFocus}
-@@ -270,8 +189,47 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -270,8 +215,64 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
          </Tooltip>
        }
      >
 -      <div ref={cardRef} style={{ ...POPOVER_CHROME, width: Math.min(shown.length > 1 ? CARD_W : CARD_W_ONE_AGENT, Math.max(CARD_MIN_W, Math.floor(room / 2))), padding: 4, transform: cardShift ? `translateX(-${cardShift}px)` : undefined }}>
 -        {shown.length === 0 && la.roster ? (
-+      <div ref={cardRef} style={{ ...POPOVER_CHROME, width: Math.min(shown.length > 1 ? CARD_W : CARD_W_ONE_AGENT, Math.max(CARD_MIN_W, Math.floor(window.innerWidth / 2))), padding: 4 }}>
++      <div ref={cardRef} style={{
++        ...POPOVER_CHROME,
++        /* The choices level sizes itself to its own text: 思考强度 is four short rows and
++           must not be drawn as wide as a model list. The cap is where a long model name
++           starts wrapping instead of widening the card. */
++        ...(choosing
++          ? { width: 'max-content', minWidth: CARD_W, maxWidth: Math.min(Math.floor(window.innerWidth * 0.72), CARD_MAX_W) }
++          : { width: Math.min(shown.length > 1 ? CARD_W : CARD_W_ONE_AGENT, Math.max(CARD_MIN_W, Math.floor(window.innerWidth / 2))) }),
++        padding: 4,
++      }}>
 +        {choosing ? (
 +          <>
 +            {/* one level at a time: the choices replace the rows; Escape steps back */}
@@ -314,19 +421,27 @@ index 6800d48..f9bf9ff 100644
 +              <div style={{ maxHeight: CHOICE_MAX_H, overflowY: 'auto' }}>
 +                {visibleChoices.length === 0 ? (
 +                  <p className="px-2.5 py-2 text-[12px] text-[var(--text-muted)]">{noMatch}</p>
-+                ) : visibleChoices.map((choice) => {
++                ) : groupChoices(visibleChoices).map(({ choice, group, label, heading }) => {
 +                  const selected = chosenValue(choosing) === choice.value;
 +                  return (
-+                    <button key={String(choice.value)} type="button" data-agent-choice={String(choice.value)}
-+                      disabled={choice.disabled} title={choice.disabled ? t('composer.modelUnavailableInfo') : undefined}
-+                      onMouseDown={keepFocus}
-+                      onClick={() => { pickChoice(choosing, choice.value); setSide(null); }}
-+                      className={`${ROW} disabled:cursor-default disabled:opacity-50`}>
-+                      {agent === 'openfilm' && choosing.category === 'model' ? <span className="flex w-4 shrink-0 justify-center text-[var(--text-muted)]"><AgentIcon id={String(choice.value).startsWith('anthropic/') ? 'claude' : String(choice.value).startsWith('openai/') ? 'codex' : 'deepseek'} size={14} /></span> : null}
-+                      <span className="min-w-0 flex-1 truncate text-[var(--text)]">{choice.name}</span>
-+                      {choice.disabled ? <span className="text-[11px] text-[var(--text-muted)]">{t('composer.modelUnavailable')}</span> : null}
-+                      <Check size={13} className={`ml-2 shrink-0 text-[var(--text)] ${selected ? '' : 'invisible'}`} />
-+                    </button>
++                    <React.Fragment key={String(choice.value)}>
++                      {/* dsh-openfilm: a long list is grouped by whose models they are, the way
++                          DSH's own menu is, so a name is short enough to read in full. */}
++                      {heading ? (
++                        <div data-agent-choice-group={heading} className="px-2.5 pb-0.5 pt-2 text-[11px] font-medium text-[var(--text-faint)]">{heading}</div>
++                      ) : null}
++                      <button type="button" data-agent-choice={String(choice.value)}
++                        disabled={choice.disabled} title={choice.disabled ? t('composer.modelUnavailableInfo') : choice.name}
++                        onMouseDown={keepFocus}
++                        onClick={() => { pickChoice(choosing, choice.value); setSide(null); }}
++                        className={`${ROW} items-start py-1 disabled:cursor-default disabled:opacity-50`}>
++                        {agent === 'openfilm' && choosing.category === 'model' ? <span className="mt-0.5 flex w-4 shrink-0 justify-center text-[var(--text-muted)]"><AgentIcon id={String(choice.value).startsWith('anthropic/') ? 'claude' : String(choice.value).startsWith('openai/') ? 'codex' : 'deepseek'} size={14} /></span> : null}
++                        {/* The whole name, wrapped rather than cut: a model named in full is the point of this level. */}
++                        <span className="min-w-0 flex-1 whitespace-normal break-words text-[var(--text)] leading-snug">{label}</span>
++                        {choice.disabled ? <span className="shrink-0 text-[11px] text-[var(--text-muted)]">{t('composer.modelUnavailable')}</span> : null}
++                        <Check size={13} className={`mt-0.5 ml-2 shrink-0 text-[var(--text)] ${selected ? '' : 'invisible'}`} />
++                      </button>
++                    </React.Fragment>
 +                  );
 +                })}
 +              </div>
@@ -336,7 +451,7 @@ index 6800d48..f9bf9ff 100644
            <div className="px-2.5 py-2 text-[12.5px] leading-relaxed text-[var(--text-muted)]">
              {t('composer.agentNoneShown')}{' '}
              <button type="button" onMouseDown={keepFocus} onClick={openSettings} className="text-[var(--text)] underline underline-offset-2">{t('composer.openSettings')}</button>
-@@ -282,7 +240,7 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -282,7 +283,7 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
              <div className="flex items-center gap-2 pb-0.5 pl-2.5 pr-0.5 pt-0.5">
                <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-faint)]">{shown.length > 1 ? t('composer.agentSection') : current ? nameOf(current) : t('composer.agentSection')}</span>
                <Tooltip label={t('composer.openSettings')}>
@@ -345,7 +460,7 @@ index 6800d48..f9bf9ff 100644
                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-[var(--text-faint)] outline-none transition hover:bg-[var(--bg-hover)] hover:text-[var(--text)] focus-visible:bg-[var(--bg-hover)]">
                    <Settings size={13} />
                  </button>
-@@ -293,7 +251,7 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -293,7 +294,7 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
                  {shown.map((a) => {
                    const status = statusOf(a);
                    return (
@@ -354,7 +469,7 @@ index 6800d48..f9bf9ff 100644
                        <span className={`flex w-4 shrink-0 justify-center ${status ? 'text-[var(--text-faint)]' : 'text-[var(--text)]'}`}><ChatAgentIcon id={a.id} /></span>
                        <span className={`min-w-0 flex-1 truncate ${status ? 'text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>{nameOf(a)}</span>
                        {agent === a.id && !status ? <Check size={13} className="shrink-0 text-[var(--text)]" />
-@@ -325,8 +283,8 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -325,8 +326,8 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
                <React.Fragment key={o.id}>
                  {i > 0 ? <div className="mx-1 my-0.5 h-px bg-[var(--border)]" /> : null}
                  <button type="button" data-agent-option={o.id} ref={(el) => { rowRefs.current[o.id] = el; }} aria-haspopup="menu" aria-expanded={side === o.id}
@@ -365,7 +480,7 @@ index 6800d48..f9bf9ff 100644
                    className={`${ROW_BASE} ${side === o.id ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'}`}>
                    <span className="shrink-0 text-[var(--text)]">{rowLabel(o)}</span>
                    <span className="min-w-0 flex-1 truncate text-right text-[var(--text-muted)]">{valueOf(o)}</span>
-@@ -338,7 +296,6 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -338,7 +339,6 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
          )}
        </div>
      </Popover>
@@ -500,6 +615,81 @@ index 603a205..728944a 100644
  }
  
  /**
+diff --git a/apps/desktop/chat/src/lib/agent-transcript.ts b/apps/desktop/chat/src/lib/agent-transcript.ts
+index 48d05f4..a5d56fe 100644
+--- a/apps/desktop/chat/src/lib/agent-transcript.ts
++++ b/apps/desktop/chat/src/lib/agent-transcript.ts
+@@ -83,6 +83,28 @@ export function reduceTranscript(
+   items: TranscriptItem[],
+   event: PublicGenerationEvent,
+   now: number = Date.now(),
++): TranscriptItem[] {
++  const next = reduceTranscriptEvent(items, event, now);
++  /* Anything but thinking means the turn moved on: a thought row that was streaming stops here, so it
++     reports how long it thought instead of shimmering until the turn ends. */
++  return event.type === 'agent-thinking' ? next : closeThoughts(next, now);
++}
++
++/** A thought row still streaming when the turn moves on is finished, and knows when. */
++function closeThoughts(items: TranscriptItem[], now: number): TranscriptItem[] {
++  let changed = false;
++  const next = items.map((item) => {
++    if (item.kind !== 'thought' || !item.pending) return item;
++    changed = true;
++    return { ...item, pending: false, endedAt: item.endedAt ?? now };
++  });
++  return changed ? next : items;
++}
++
++function reduceTranscriptEvent(
++  items: TranscriptItem[],
++  event: PublicGenerationEvent,
++  now: number = Date.now(),
+ ): TranscriptItem[] {
+   switch (event.type) {
+     case 'agent-text': {
+@@ -147,9 +169,38 @@ export function reduceTranscript(
+       return next;
+     }
+ 
+-    /* Thinking only drives the status line underneath. Drafts are not sent and vanish when done: not in the conversation, not in the summary. */
+-    case 'agent-thinking':
+-      return items;
++    /**
++     * dsh-openfilm: thinking is kept as a row of its own.
++     *
++     * It used to only drive the status line underneath, which is all a built-in agent's reasoning could
++     * do — it never sent any. Our bridging agent does send it, so a turn that thought for 16s should say
++     * so and open to the reasoning; the row closes as soon as the turn moves on (see below).
++     */
++    case 'agent-thinking': {
++      const id = `thought:${event.partId ?? event.turnNo}`;
++      const at = items.findIndex((item) => item.id === id);
++      const text = event.text ? mergeStreamText(items[at]?.text ?? '', event.text) : items[at]?.text;
++      const pending = event.done !== true;
++      if (at >= 0) {
++        const next = [...items];
++        next[at] = {
++          ...next[at]!,
++          ...(text !== undefined ? { text } : {}),
++          pending,
++          ...(pending ? {} : { endedAt: now }),
++        };
++        return next;
++      }
++      if (text === undefined) return items;
++      return [...items, {
++        id,
++        kind: 'thought',
++        text,
++        turnNo: event.turnNo,
++        pending,
++        startedAt: now,
++      }];
++    }
+ 
+     /* The agent's question settled (answered / skipped / timed out): write it back to its row, so the conversation
+        reads "asked what · answered what". The question's id is not the tool call's callId, so match the latest
 diff --git a/apps/desktop/chat/src/lib/chat-store.ts b/apps/desktop/chat/src/lib/chat-store.ts
 index 9134f7a..7eb8990 100644
 --- a/apps/desktop/chat/src/lib/chat-store.ts
@@ -526,3 +716,66 @@ index 9134f7a..7eb8990 100644
  export const lastSession = (project: string): string | null => record(project).last;
  export function setLastSession(project: string, id: string) {
    const chat = record(project);
+diff --git a/apps/desktop/chat/src/lib/local-agent-run.ts b/apps/desktop/chat/src/lib/local-agent-run.ts
+index 0ef8753..54f5bbc 100644
+--- a/apps/desktop/chat/src/lib/local-agent-run.ts
++++ b/apps/desktop/chat/src/lib/local-agent-run.ts
+@@ -230,8 +230,16 @@ export function acpUpdateToEvent(
+       if (content?.type !== 'text' || !content.text) return null;
+       return { type: 'agent-text', turnNo: ctx.turnNo, partId: `${ctx.turnNo}:${ctx.part}`, text: content.text };
+     }
+-    case 'agent_thought_chunk':
+-      return { type: 'agent-thinking' };
++    /* dsh-openfilm: the bridging agent does report its reasoning, so carry the text through instead of
++     * dropping it — the transcript turns it into a "thought for 6s" block the person can open. */
++    case 'agent_thought_chunk': {
++      const content = update.content as { type?: string; text?: string } | undefined;
++      const text = content?.type === 'text' && content.text ? content.text : undefined;
++      return {
++        type: 'agent-thinking', turnNo: ctx.turnNo, partId: `thought:${ctx.turnNo}:${ctx.part}`,
++        ...(text ? { text } : {}),
++      };
++    }
+     case 'tool_call': {
+       const activity = localToolActivity(
+         update.title as string | undefined,
+diff --git a/apps/desktop/chat/src/state/local-agent-store.ts b/apps/desktop/chat/src/state/local-agent-store.ts
+index a3c7f97..9250f69 100644
+--- a/apps/desktop/chat/src/state/local-agent-store.ts
++++ b/apps/desktop/chat/src/state/local-agent-store.ts
+@@ -365,7 +365,9 @@ export function agentModelSummary(
+     const value = optionValue(options, prefs, modelOpt.id);
+     const choice = modelOpt.options?.find((o) => o.value === value);
+     const raw = value === 'default' && choice?.description ? choice.description : optionLabel(options, modelOpt.id, value);
+-    model = raw ? (raw.split('·')[0]!.replace(/\s*\([^)]*\)/g, '').trim() || raw) : null;
++    /* dsh-openfilm: the Host names a model <group> / <model>; the button says the model, the menu says the group */
++    const named = raw && raw.includes(' / ') ? raw.slice(raw.indexOf(' / ') + 3) : raw;
++    model = named ? (named.split('·')[0]!.replace(/\s*\([^)]*\)/g, '').trim() || named) : null;
+   }
+   const effortValue = effortOpt ? optionValue(options, prefs, effortOpt.id) : undefined;
+   const effort = effortOpt && effortValue !== 'default' ? optionLabel(options, effortOpt.id, effortValue) : null;
+diff --git a/packages/shared/src/contract.ts b/packages/shared/src/contract.ts
+index 340ad66..24e1c30 100644
+--- a/packages/shared/src/contract.ts
++++ b/packages/shared/src/contract.ts
+@@ -190,10 +190,19 @@ export const publicGenerationEventSchema = z.discriminatedUnion('type', [
+     done: z.boolean().optional(),
+     text: z.string().max(TRANSCRIPT_TEXT_MAX),
+   }),
+-  /** The model is thinking (no text); `done: true` ends it. Not kept in the history. */
++  /**
++   * The model is thinking; `done: true` ends it.
++   *
++   * `text` carries the reasoning itself when the agent sends it (an agent on the user's machine, or a
++   * bridging agent that reports its reasoning), so the panel can show a "thought for 6s" block that
++   * opens to it. Without text it only drives the status line underneath.
++   */
+   z.object({
+     type: z.literal('agent-thinking'),
++    turnNo: z.number().int().nonnegative().optional(),
++    partId: z.string().optional(),
+     done: z.boolean().optional(),
++    text: z.string().max(TRANSCRIPT_TEXT_MAX).optional(),
+   }),
+   /** One thing the agent did: a closed-set action and a short visible text (search words, a description). */
+   z.object({

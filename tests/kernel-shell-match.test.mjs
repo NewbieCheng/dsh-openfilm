@@ -48,4 +48,18 @@ test('the shell snapshot declares its one upstream patch, or none at all', () =>
   assert.match(diff, /category === 'permission'/, 'the recorded diff must include the permission row');
   assert.match(diff, /data-agent-option-level/, 'and the one-level menu');
   assert.match(diff, /data-agent-search/, 'and its search box');
+  assert.match(diff, /data-agent-choice-group/, 'and the model menu grouped by provider');
+  assert.match(diff, /data-session-delete/, 'and a conversation that can be deleted');
+  // The panel shows what the agent thought: the bridge passes the reasoning text through, the
+  // transcript keeps a thought row, and the row renders. All four links must stay in the patch.
+  for (const file of [
+    'apps/desktop/chat/src/lib/agent-transcript.ts',
+    'apps/desktop/chat/src/lib/local-agent-run.ts',
+    'apps/desktop/chat/src/components/AgentActivityRow.tsx',
+    'packages/shared/src/contract.ts',
+  ]) {
+    assert.ok(manifest.patch.files.includes(file), 'the patch must include ' + file);
+  }
+  assert.match(diff, /data-thought/, 'the thought block must be rendered');
+  assert.match(diff, /agent_thought_chunk/, 'and fed from the agent thought chunks');
 });

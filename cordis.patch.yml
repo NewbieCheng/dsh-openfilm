@@ -1,6 +1,14 @@
 - insert:
     - id: dsh-openfilm
       name: 'dsh-openfilm'
+    # OpenFilm's editing session: a whitelist, not a denylist. Only the plugins below are mounted, so
+    # only their tools exist for the agent — anything else (codegraph, subagents, goals, Office, image
+    # generation) is absent by construction. Third-party tools are deliberately not mentioned here at
+    # all: someone else installing a plugin must never collide with this preset.
+    #
+    # Reading is the point (read/read_image/glob/grep), editing goes through edit/write or the
+    # openfilm_* tools, and running is pwsh/bash for the bundled OpenFilm CLI (plus openfilm_cli for
+    # doctor/look/render without a shell). web_search/web_fetch stay: references are part of the work.
     - id: preset-openfilm-video-editing
       name: '@deepseek-ai/dsh-agent-preset'
       config:
@@ -22,8 +30,17 @@
             disabled: !!js process.platform !== 'win32'
           - id: tool-jobs
             name: '@deepseek-ai/dsh-tool-jobs'
+          # Skills are wanted — a design style is one dropped folder — but only the ones reachable from
+          # the roots below. `dsh-openfilm/skills` is mirrored into <dshHome>/skills by
+          # `node scripts/install-skills.mjs`; a person can add their own beside it and the catalog
+          # refreshes without a restart (the provider watches its roots).
+          - id: skill-registry
+            name: '@deepseek-ai/dsh-skill'
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              includeDefaultRoots: true
+              watch: true
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
           - id: tool-todo

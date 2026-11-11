@@ -36,7 +36,7 @@
 要点：
 
 - **Studio 上游只 bind 临时端口，且 key 不出 Host 进程**；浏览器只能看到代理端口 47822。
-- **界面快照带两处本地改动**：`agent-menu-rows.ts` 让 composer 菜单多画一行 `permission`（权限预设）；`components/ModelPopover.tsx` 把"右侧弹出面板"改成"点进去一层、Esc 返回、选项列表限高可滚动、模型可搜索"；`components/ConversationSessionBar.tsx` + `App.tsx` + `lib/chat-store.ts` 给对话列表加了两步确认的删除（外加 5 个语言包里的搜索/删除文案）。打包脚本只允许这一处 tracked 改动，diff 存为 `vendor/official-shell/patch.diff`，`manifest.json` 记 `patch.files`；升级内核/界面后要按 `patch.diff` 重新打一次，否则那一行会消失（脚本会因为对不上而拒绝打包，不会静默丢掉）。
+- **界面快照带两处本地改动**：`agent-menu-rows.ts` 让 composer 菜单多画一行 `permission`（权限预设）；`components/ModelPopover.tsx` 把"右侧弹出面板"改成"点进去一层、Esc 返回、选项列表限高可滚动、模型可搜索"；`components/ConversationSessionBar.tsx` + `App.tsx` + `lib/chat-store.ts` 给对话列表加了两步确认的删除；`lib/local-agent-run.ts` + `lib/agent-transcript.ts` + `components/AgentActivityRow.tsx` + `packages/shared/src/contract.ts` 让面板把 agent 的思考显示成可折叠的「思考 Ns」块（外加 5 个语言包里的搜索/删除文案）。打包脚本只允许这一处 tracked 改动，diff 存为 `vendor/official-shell/patch.diff`，`manifest.json` 记 `patch.files`；升级内核/界面后要按 `patch.diff` 重新打一次，否则那一行会消失（脚本会因为对不上而拒绝打包，不会静默丢掉）。
 - **官方界面默认用上游桌面 shell**（`vendor/official-shell/ui`）。设 `NO996_OPENFILM_DSH_CHAT=1` 退回"官方 Studio + 内嵌 DSH 对话列"。
 - 面板挂在 `shell.overlay` 而不是 `main`，是为了**切页不重载 iframe**（`main` 只放一个上报选中状态的占位 div）。
 

@@ -1,5 +1,31 @@
 # 更新记录
 
+## 0.8.0
+
+### 面板里看得见思考（第四处上游改动）
+
+- 上游转录层原来把思考丢掉：`agent-transcript.ts` 里 `case 'agent-thinking': return items;`（注释写着「只驱动下面的状态行」），`local-agent-run.ts` 里 `agent_thought_chunk` 直接被压成 `{ type: 'agent-thinking' }`，文本丢了。
+- 现在整条链路都通了：`packages/shared/src/contract.ts` 给 `agent-thinking` 加可选 `turnNo` / `partId` / `text`；`local-agent-run.ts` 把推理文本带出来；`agent-transcript.ts` 合成 `kind:'thought'` 的行，并在下一个非思考事件到来时收尾（算出「思考了几秒」）；`AgentActivityRow.tsx` 的 `ThoughtRow` 默认展开、带 `data-thought`，流式中显示"正在思考…"。
+- 工具调用保持"包装"形态：相邻动作仍折叠成一张摘要卡（`已检查影片 ×2 · 写文件`），点开才是逐条。
+- 测试：`tests/kernel-shell-match.test.mjs` 断言补丁里四处链路齐全、`data-thought` 与 `agent_thought_chunk` 都在。
+
+### 预设工具白名单（只装原生 + 我们的影片工具）
+
+- `cordis.patch.yml` 明确成一份白名单：`dsh-tool-fs`（`read`/`read_image`/`write`/`edit`）、`dsh-tool-fs-search`（`glob`/`grep`）、`dsh-tool-pwsh`/`dsh-tool-bash`、`dsh-tool-jobs`、`dsh-tool-web`（`web_search`/`web_fetch` 保留）、`dsh-tool-todo`、`dsh-tool-skill` + `dsh-skill-filesystem`，其余原生插件不装，第三方工具**一律不提及**（别人装什么都与这个预设无关）。
+- 工具面从 29+ 收敛到 23 个：原生 13 + 影片 10（`openfilm_film` / `frame` / `get` / `clip` / `assets` / `library` / `export` / `cli` / `guide` / `draft`）。
+- `openfilm_cli` 仍只放行 `doctor` / `look` / `render` 三个动词；`pwsh`/`bash` 保留，用来跑内核 CLI 的其余场景。
+
+### 随包发一个视频技能
+
+- 新增 `skills/openfilm-editing/SKILL.md`：镜头与节奏、转场用法、字幕断句、声音响度、导出档位、风格清单、红线。命令与文件格式仍以 `openfilm_guide` 为准，技能只补「怎么剪好看」。
+- 新增 `scripts/install-skills.mjs`：把 `skills/` 镜像到 `<DSH_HOME>/skills`（`--print` 预演、`--force` 覆盖、默认不碰你手改过的副本）。`dsh-skill-filesystem` 会 watch 这个根，所以**加完技能不用重启**。
+- 以后要加「设计风格」类技能：往 `skills/` 放一个 `<名字>/SKILL.md`（frontmatter 要有 `name`、`description`），跑一次脚本即可。
+- 测试：新增 `tests/install-skills.test.mjs`（三例：安装 + 不覆盖手改 + 缺 frontmatter 拒装）。
+
+### 数字
+
+- 全库测试 **344 项，343 通过 / 1 跳过 / 0 失败**；上游 `tsc -p chat` 通过；界面快照补丁现在 **15 个文件**（`patch.diff` / `manifest.patch.files` 一一对应）。
+
 ## 0.7.7
 
 ### 会话可以删除了（第三处上游改动）
