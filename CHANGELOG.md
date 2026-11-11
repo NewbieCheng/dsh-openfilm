@@ -1,5 +1,15 @@
 # 更新记录
 
+## 0.7.3
+
+### 一个项目 = 一个工作区 = 一条对话
+
+- **工作区归属**：项目打开时先 `workspaceController.create({ path })`（对已存在的目录幂等），会话用 `workspaceId` 建（`workspaceId` 与 `cwd` 互斥），并补一次 `attachSession`。之前只给会话 `cwd`、不注册工作区，DSH 侧边栏就把它们全放在「无工作区 / 未分组」下面。
+- **重开不再新建会话**：`sessionExists()` 原来用 `path.resolve(item.cwd) !== projectPath` 比较，Windows 上同一目录大小写不同（`F:\Dev\X` vs `f:\dev\x`）就判成"不是这个项目的"，于是每次打开都造一条新的空会话——那些「新建会话」就是这么来的。现在按平台归一化后再比，并且工作区成员身份也算归属证明。
+- **会话有名字**：新建后 `sessionController.rename({ sessionId, title })` 用项目文件夹名命名；已有标题（包括人自己改的）不动，重开时只补空标题。
+- 以上三步都是尽力而为：没有 `workspaceController` 的 profile 仍然能打开项目，只是分组退化成 DSH 原来的样子。
+- 测试：新增 `tests/project-conversation.test.mjs` 7 项（工作区注册/命名、重开复用、大小写、无控制器退化、工作区视图形态、外来会话不认领）。
+
 ## 0.7.2
 
 ### 权限搬进了模型菜单（唯一一处上游改动）

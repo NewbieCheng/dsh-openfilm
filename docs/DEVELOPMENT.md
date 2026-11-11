@@ -77,6 +77,7 @@
 | 桌面端打开 | `GET /__dsh/open#<ticket>` → `POST /__dsh/session {ticket}` → `GET /` | 票据一次性、60 秒有效、绑定 `127.0.0.2` |
 | 归档状态 | 面板 → `POST /api/no996-openfilm/archive {action:'state', projectId}` | 浏览器 peer + 本机 Host/Origin + 1 KiB + 只认项目 ID |
 | 归档/恢复 | 同路由 `archive`/`unarchive`/`rebind` | Host 解析绑定会话后调 `workspaceController`，页面拿不到 Session ID |
+| 工作区归属 | 项目打开时 `workspaceController.create({path})`，会话用 `workspaceId` 建（或 `attachSession`） | 一个项目 = 一个 Workspace = 一条会话；没有工作区的会话会落在 DSH 侧边栏「无工作区/未分组」里 |
 | 对话历史 | 官方 shell → `chat:load` / `chat:save-*` / `chat:archive*` | 归档项目：历史返回空 + `archived:true`，写入回 `OFFICIAL_CHAT_ARCHIVED` |
 
 **失败语义**：503 只带固定错误码（`DSH_ORIGIN_REJECTED` / `DSH_SESSION_REQUIRED` / `DSH_BROWSER_REQUIRED` / `STUDIO_DISPOSED` / `OUTCOME_UNKNOWN` 等），不回原始错误、凭据或私有路径。

@@ -6,6 +6,23 @@ const error = (code, message) => Object.assign(new Error(message), { code });
 const ID = /^[A-Za-z0-9_-]{6,40}$/;
 
 /**
+ * Whether two paths name the same directory.
+ *
+ * `path.resolve` alone is not enough on Windows: it keeps the case it was given,
+ * while the same folder can come back as `F:\Dev\X` from the project lookup and
+ * `f:\dev\x` from a Session record. A case mismatch used to read as "this Session
+ * is not the project's", so every open created another empty conversation — the
+ * stray "新建会话" under 无工作区.
+ */
+function samePath(left, right) {
+  const normal = value => {
+    const resolved = path.resolve(value);
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+  return normal(left) === normal(right);
+}
+
+/**
  * One DSH Session per OpenFilm project, resolved without a two-phase registry.
  *
  * The DSH Session remains the single source of truth: this module only keeps a
@@ -43,7 +60,7 @@ export async function openProjectConversations(ctx, { z, archived } = {}) {
     live.set(sessionId, { projectId, path: projectPath, available: true, archived: extra.archived === true });
   }
 
-  async function sessionExists(sessionId, projectPath) {
+  async function sessionExists(sessionId, projectPath, workspaceId) {
     // 'archived': confirmed present but hidden from grouping surfaces; 'live':
     // present and usable; false: confirmed absent or foreign; undefined: catalog
     // could not be read. An unreadable catalog must not spawn a duplicate
@@ -54,16 +71,25 @@ export async function openProjectConversations(ctx, { z, archived } = {}) {
       if (!items) return undefined;
       const item = items.find(candidate => candidate?.sessionId === sessionId);
       if (!item || item.agentAvailable === false || item.origin === 'subagent') return false;
-      // An unreadable cwd cannot prove this Session belongs to the project.
-      if (typeof item.cwd !== 'string' || path.resolve(item.cwd) !== projectPath) return false;
-      return isArchived(sessionId) === true ? 'archived' : 'live';
+      // Membership is proof too: a Session created inside the project's Workspace
+      // may report the Workspace rather than a cwd.
+      const inWorkspace = Boolean(workspaceId) && item.workspaceId === workspaceId;
+      const inFolder = typeof item.cwd === 'string' && samePath(item.cwd, projectPath);
+      if (!inWorkspace && !inFolder) return false;
+      return { state: isArchived(sessionId) === true ? 'archived' : 'live', title: typeof item.title === 'string' ? item.title.trim() : '' };
     } catch { return undefined; }
   }
 
-  async function createSession(canonical) {
+  async function createSession(canonical, workspace) {
     let sessionId;
+    // A Session that joins the project's Workspace is grouped under that folder;
+    // one that only owns a cwd has no group, which is the stray "新建会话" under
+    // 无工作区. `workspaceId` and `cwd` are exclusive by contract.
+    const request = workspace?.id
+      ? { workspaceId: workspace.id, agentPreset: 'openfilm-video-editing' }
+      : { cwd: canonical, agentPreset: 'openfilm-video-editing' };
     try {
-      ({ sessionId } = await ctx.sessionController.create({ cwd: canonical, agentPreset: 'openfilm-video-editing' }));
+      ({ sessionId } = await ctx.sessionController.create(request));
     } catch {
       throw error('PROJECT_CONVERSATION_CREATE', 'A conversation for this project could not be created');
     }
@@ -71,6 +97,51 @@ export async function openProjectConversations(ctx, { z, archived } = {}) {
       throw error('PROJECT_CONVERSATION_CREATE', 'Session creation returned no ID');
     }
     return sessionId;
+  }
+
+  /**
+   * Resolve the Workspace that covers the project's folder.
+   *
+   * `workspace/create` is idempotent over an existing directory, so calling it on
+   * every open is cheap and also repairs a Workspace someone deleted. Its result
+   * is the live Workspace (id, path, title, sessionIds, attachSession), which the
+   * Session then joins. Best-effort: without the controller the project still
+   * opens — it just stays where DSH would put it on its own.
+   */
+  async function ensureWorkspace(canonical) {
+    const controller = typeof ctx?.get === 'function' ? ctx.get('workspaceController') : undefined;
+    if (!controller || typeof controller.create !== 'function') return undefined;
+    try {
+      const created = await controller.create({ path: canonical });
+      if (!created || typeof created !== 'object') return undefined;
+      // The service answers either the live Workspace (`id`, `attachSession`) or a
+      // plain view of it (`workspaceId`); both name the same registration.
+      const id = typeof created.id === 'string' ? created.id
+        : typeof created.workspaceId === 'string' ? created.workspaceId : undefined;
+      return { id, attachSession: created.attachSession, workspace: created };
+    } catch { return undefined; }
+  }
+
+  /** Name the conversation after its project folder, once, when it has no title. */
+  async function titleSession(sessionId, canonical) {
+    const controller = ctx?.sessionController;
+    if (!controller || typeof controller.rename !== 'function') return false;
+    const title = path.basename(canonical) || 'OpenFilm';
+    try { await controller.rename({ sessionId, title }); return true; } catch { return false; }
+  }
+
+  /**
+   * Make sure a Session is a member of the Workspace.
+   *
+   * `session/create` joins the Workspace when it is given `workspaceId`, but a
+   * Session bound before that (or created while the registry was unavailable)
+   * has to be attached, otherwise it never leaves the ungrouped pile. Both paths
+   * are attempted and both are best-effort: membership is presentation, and a
+   * failure must not stop the person from working.
+   */
+  async function joinWorkspace(workspace, sessionId) {
+    if (!workspace || typeof workspace.attachSession !== 'function') return false;
+    try { await workspace.attachSession(sessionId); return true; } catch { return false; }
   }
 
   async function store(projectId, canonical, sessionId) {
@@ -96,14 +167,21 @@ export async function openProjectConversations(ctx, { z, archived } = {}) {
       if (closing) throw error('PROJECT_CONVERSATION_CLOSED', 'Project conversations are closed');
       let kept;
       try { kept = table.get(projectId); } catch { kept = undefined; }
-      if (kept && kept.projectId === projectId && kept.path === canonical && typeof kept.sessionId === 'string') {
-        const exists = await sessionExists(kept.sessionId, canonical);
-        if (exists !== false) {
-          remember(projectId, canonical, kept.sessionId, { archived: exists === 'archived' });
+      const workspace = await ensureWorkspace(canonical);
+      if (kept && kept.projectId === projectId && typeof kept.sessionId === 'string' && samePath(kept.path, canonical)) {
+        const found = await sessionExists(kept.sessionId, canonical, workspace?.id);
+        if (found !== false) {
+          remember(projectId, canonical, kept.sessionId, { archived: found?.state === 'archived' });
+          // A Session bound before Workspaces were registered still needs to join
+          // one, or it stays in the ungrouped pile forever.
+          await joinWorkspace(workspace, kept.sessionId);
+          if (found && !found.title) await titleSession(kept.sessionId, canonical);
           return kept.sessionId;
         }
       }
-      const sessionId = await createSession(canonical);
+      const sessionId = await createSession(canonical, workspace);
+      await joinWorkspace(workspace, sessionId);
+      await titleSession(sessionId, canonical);
       await store(projectId, canonical, sessionId);
       return sessionId;
     });
@@ -118,7 +196,10 @@ export async function openProjectConversations(ctx, { z, archived } = {}) {
     const previous = inFlight.get(projectId);
     const operation = (previous ? previous.catch(() => {}) : Promise.resolve()).then(async () => {
       if (closing) throw error('PROJECT_CONVERSATION_CLOSED', 'Project conversations are closed');
-      const sessionId = await createSession(canonical);
+      const workspace = await ensureWorkspace(canonical);
+      const sessionId = await createSession(canonical, workspace);
+      await joinWorkspace(workspace, sessionId);
+      await titleSession(sessionId, canonical);
       await store(projectId, canonical, sessionId);
       return sessionId;
     });
