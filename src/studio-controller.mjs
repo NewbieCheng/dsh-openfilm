@@ -671,20 +671,32 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     },
   });
   log.info('host-start', { version: HOST_VERSION, officialShell, editorPort: Number(process.env.NO996_OPENFILM_EDITOR_PORT || 47822) });
-  // Warm the editor port once at assembly. Otherwise the proxy only exists after
-  // the first bootstrap, so opening http://<host>:47822 directly (or pasting the
+  // Warm the editor port at assembly. Otherwise the proxy only exists after the
+  // first bootstrap, so opening http://<host>:47822 directly (or pasting the
   // address from the docs) reads as a dead port even though the plugin is fine.
-  // Failures are ignored on purpose: the panel still bootstraps lazily.
+  // A failed first attempt is retried: a plugin reload can arrive while the
+  // previous Studio child is still releasing its ports, and that failure is
+  // instant and transient. Failures stay non-fatal: the panel bootstraps lazily.
   void (async () => {
-    try {
+    const delays = [1000, 3000, 8000];
+    for (let attempt = 1; attempt <= delays.length + 1; attempt += 1) {
       const started = Date.now();
-      await runtime.ensureStarted();
-      if (!disposed && upstream) await proxyFor(webOrigin);
-      log.info('studio-warm', { ms: Date.now() - started });
-    } catch (error) {
-      // A code, never the message: upstream messages may carry keys or paths.
-      const code = String(error?.code || 'OTHER');
-      log.warn('studio-warm-failed', { code, message: String(error?.message || error) });
+      try {
+        await runtime.ensureStarted();
+        if (!disposed && upstream) await proxyFor(webOrigin);
+        log.info('studio-warm', { ms: Date.now() - started, attempt });
+        return;
+      } catch (error) {
+        // A code, never the message: upstream messages may carry keys or paths.
+        const code = String(error?.code || 'OTHER');
+        log.warn('studio-warm-failed', { code, attempt, message: String(error?.message || error) });
+        if (disposed || attempt > delays.length) return;
+        await new Promise(resolve => {
+          const timer = setTimeout(resolve, delays[attempt - 1]);
+          // Never keep the Host process alive just to retry a warm-up.
+          if (typeof timer.unref === 'function') timer.unref();
+        });
+      }
     }
   })();
   return async () => {
