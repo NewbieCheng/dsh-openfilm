@@ -21,6 +21,8 @@
 
 **修复（插件真正加载后暴露）**：`assets/shell-ui.js` 里新加的 `permissionGate` IIFE 前面漏了分号，前一条语句以 `})()` 结尾，被 ASI 连成 `})(…)` 调用链，页面抛 `(intermediate value)… is not a function`，整段注入脚本失效。已补 `;`，并新增 `tests/shell-ui-asi.test.mjs`：用假 DOM **真正执行**注入脚本、检查"括号开头接在调用链后"的静态形态、并用同一份 harness 复现原报错作为反向控制。页面脚本按 mtime 读盘，改完强刷即可，无需重启。
 
+**内核升级：openfilm 0.3.1 → 0.3.2**（2026-11-09 上游发布）。逐块比对后确认是**增量**：`server.mjs` 新增 `duplicate` 项目、文件变更后 `notifyReferences`、复合片段的 `wave`；`pageframes.mjs` 新增 `compoundSound`（`pageFrame` 签名不变）；`exports.mjs` 增加剪映/CapCut 草稿与 HEVC alpha，`ExportAsk` 字段未删；`get.mjs` 仅改 typedef；`websocket.mjs` / `http.mjs` 零变化（我们的代理帧假设仍成立）；`bin/openfilm.mjs` 与 `library-search.mjs` 逐字节相同。**界面快照 `vendor/official-shell` 仍是 0.3.1**：重建它需要上游 git checkout 到固定 commit，且会改 DOM/CSS，需真机验收后再动。
+
 验证：323 项测试，322 通过、1 跳过（真实 GUI 验收清单见 `docs/TEST-CHECKLIST.md`，最后统一跑一次）。
 ## 0.6.1
 

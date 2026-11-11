@@ -19,7 +19,7 @@ function recordFailure(method, path, status, body) {
   } catch { /* diagnostics must never affect the response */ }
 }
 
-// Proxy for the pinned OpenFilm 0.3.1 protocol. It does not provide process
+// Proxy for the pinned OpenFilm 0.3.2 protocol (0.3.1 shell snapshot). It does not provide process
 // isolation. Unrecognized or unsafe representations fail closed.
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const MAX_FRAME = 1024 * 1024;

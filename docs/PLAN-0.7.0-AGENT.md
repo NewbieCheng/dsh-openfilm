@@ -1,6 +1,6 @@
 # 0.7.0 规划 v2：完全访问 + CLI 取舍 + 右侧对话成为唯一入口
 
-> 基线：插件 `0.6.1` / 官方 `openfilm@0.3.1`。上一版（v1）只讲了"呈现层坏了、能力层缺了"，**没有回答你真正要的三件事**：
+> 基线：插件 `0.6.1` / 官方 `openfilm@0.3.2`（本轮由 0.3.1 升级，见 §14）。上一版（v1）只讲了"呈现层坏了、能力层缺了"，**没有回答你真正要的三件事**：
 > ① 进去就一次授权"完全访问"；② CLI 到底要不要、要不要打包；③ 右侧对话就是唯一的剪辑入口。
 > 本版把这三件定成主轴，其余围绕它排期。**先看计划，不动代码。**
 
@@ -292,3 +292,24 @@ CLI 通过 `~/.openfilm/run.json` 找 Studio（`studio/client.mjs`），字段�
 **测试**：`node --test tests/*.test.mjs` → 307 项，306 通过、1 跳过、0 失败。
 
 **仍未由自动化覆盖、留给真机的三件事**：①事件是否真的到达页面（`/diagnose.bridge.panel.seen` 与 `accepted` 的差值）；②审批卡在官方壳里是否被真正渲染（`notice` 是保底可见路径）；③导出后文件是否真的可播。
+
+---
+
+## 14. 内核升级：openfilm 0.3.1 → 0.3.2
+
+上游在 2026-11-09 发布了 0.3.2（我们此前 pin 的是 11-08 的 0.3.1）。按"只动内核、不动界面快照"的方式升级：
+
+| 面 | 结论 | 依据 |
+|---|---|---|
+| `studio/server/websocket.mjs`、`http.mjs` | **零改动** | `diff` 无差异；我们代理的"不分片 JSON 帧 + ping 控制"假设仍成立 |
+| `bin/openfilm.mjs`、`src/library-search.mjs` | **逐字节相同** | `openfilm_cli` 的三个动词与库搜索行为不变 |
+| `studio/server/server.mjs` | 增量：项目 `duplicate`、文件变更 `notifyReferences`、复合片段 `wave`；`canvasWriteRoute` 多收一个 `project.path` | 我们用的 `GET /api/projects/:id`、`/files` GET/PUT、`/media?what=`、`/exports`、`/api/get*` 路由签名未变 |
+| `pageframes.mjs` | 新增 `compoundSound` 导出，`pageFrame` 签名不变 | `openfilm_frame` 的 `what=frame|poster|probe` 不受影响 |
+| `exports.mjs` | 新增剪映/CapCut 草稿、HEVC alpha、媒体引用收集；`ExportAsk` 既有字段未删 | `openfilm_export` 用白名单拷字段，新字段自然忽略 |
+| `get.mjs` | 只改 `AskAgent` typedef（多了 model/images） | `openfilm_get` 调用面不变 |
+| `studio/ui/dist` | 重建过（打包哈希变了） | **不影响我们**：面板服务的是 `vendor/official-shell` 快照，不是 `node_modules` 的 UI |
+| `vendor/official-shell` | **保持 0.3.1** | 重建需上游 git checkout 到 `a85a80a…` 且要预构建产物；改的是 DOM/CSS，必须真机验收后再做 |
+
+落点：`package.json` 依赖改为 `openfilm-0.3.2.tgz`，`src/studio-runtime.mjs` 的版本比对与 `/api/health` 校验自动跟到 0.3.2；`assets/shell-ui.js` 关于页面的兜底版本号同步；全库 323 项测试（322 通过 / 1 跳过）在 0.3.2 下通过，其中 `template-registration.test.mjs` 会真正拉起随包 Studio。
+
+**留给真机的确认**：面板仍由 0.3.1 界面 + 0.3.2 服务端组成，需按 `docs/TEST-CHECKLIST.md` 跑一遍确认无协议错配（重点：预览播放、画帧、导出）。

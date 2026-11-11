@@ -1,4 +1,4 @@
-// Real registration check against the shipped openfilm 0.3.1 Studio server.
+// Real registration check against the shipped openfilm 0.3.2 Studio server.
 // Everything happens under a temporary OPENFILM_HOME; no user library, no server,
 // no model. `openProject` is the exact function Studio's POST /api/projects calls.
 import test from 'node:test';

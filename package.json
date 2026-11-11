@@ -21,7 +21,7 @@
     "esbuild": "0.24.2"
   },
   "dependencies": {
-    "openfilm": "https://registry.npmjs.org/openfilm/-/openfilm-0.3.1.tgz",
+    "openfilm": "https://registry.npmjs.org/openfilm/-/openfilm-0.3.2.tgz",
     "zod": "3.25.76"
   },
   "engines": {
