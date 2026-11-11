@@ -31,6 +31,8 @@
 - **权限胶囊不再压在画面上**：从底部居中（压着时间轴）挪到右下角，仍在聊天列一侧，随时可改回工作区。
 - **屏蔽「已更新 / 有哪些新内容」弹窗**：上游用 Studio prefs 的 `seenVersion` 控制（`components/WhatsNew.tsx`），只要它落后于当前版本就弹。Host 启动后把该值写到 `9999.0.0` 并记 `whats-new-suppressed`，之后任何一次插件升级都不再弹；这是唯一一处会写 Studio 自身偏好设置的改动。
 - **「轨迹」不再空着**：面板每轮回复下有一个「轨迹」入口，它读 `app.chat.log` —— 而我们一直把这个通道 `denied`，所以点开什么都没有。现在 Host 把发给面板的每个事件按 `project + turn` 记下来（每轮留最后 2000 条，每项目留最近 4 轮），`chat:log` 按 TurnLog 的契约返回，于是这一轮调了哪些工具、参数是什么、返回了什么，都能逐条看到。
+- **归档会话时的 `[HTTP 503] /__dsh/official-rpc`**：桥的并发闸门是 4 个在途请求；归档会让面板同时发起 `chat:load`、`agent:permission`、`localAgents.start`（内部还有 `agent:models` + `agent:thinking`）、`client:log`，一下就撞上闸门。闸门放到 6，撞上时记 `official-rpc-busy`；RPC 失败现在也记 `official-rpc-failed {channel, code}`，并把通道名放进 503 body —— 页面那条红条从 `[HTTP 503] /__dsh/official-rpc` 变成 `[HTTP 503] /__dsh/official-rpc - OFFICIAL_RPC_FAILED (chat:load)`，能直接看出是哪个通道。
+
 
 
 

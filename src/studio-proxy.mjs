@@ -402,7 +402,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
                 'addEventListener("error",function(e){var m=e.message||"unknown";if(/ResizeObserver loop/.test(m))return;show("[JS] "+m+" @ "+(e.filename||"")+":"+(e.lineno||0));});' +
                 'addEventListener("unhandledrejection",function(e){var r=e.reason;var m=(r&&r.message)||String(r);var s=(r&&r.stack)||"";var at=String(s).split("\\n").filter(function(l){return l.indexOf("at ")>=0}).slice(0,3).join(" | ");show("[Promise] "+m+(at?"\\n"+at:""));});' +
                 'var ce=console.error;console.error=function(){try{if(n<4){for(var i=0;i<arguments.length;i++){var a=arguments[i];if(a instanceof Error){show("[React] "+(a.message||a.name));break;}}}}catch(e){}return ce.apply(console,arguments);};' +
-                'var f=globalThis.fetch;if(f)globalThis.fetch=function(u,o){return f.apply(this,arguments).then(function(r){try{var s=String(u);if((r.status>=500||(r.status===404&&s.indexOf("/api/projects")>=0))&&n<4){var base="[HTTP "+r.status+"] "+s.slice(0,180);if(r.status>=500){r.clone().text().then(function(t){var why="";try{var j=JSON.parse(t);if(j&&typeof j.error==="string"&&j.error)why=" - "+j.error.slice(0,240);}catch(e){}show(base+why);}).catch(function(){show(base);});}else show(base);}}catch(e){}return r;},function(e){try{if(n<4)show("[网络] "+String(u).slice(0,180)+" "+((e&&e.message)||e));}catch(_){}throw e;});};' +
+                'var f=globalThis.fetch;if(f)globalThis.fetch=function(u,o){return f.apply(this,arguments).then(function(r){try{var s=String(u);if((r.status>=500||(r.status===404&&s.indexOf("/api/projects")>=0))&&n<4){var base="[HTTP "+r.status+"] "+s.slice(0,180);if(r.status>=500){r.clone().text().then(function(t){var why="";try{var j=JSON.parse(t);if(j&&typeof j.error==="string"&&j.error)why=" - "+j.error.slice(0,240);}catch(e){why=t?(" - "+String(t).slice(0,240)):"";}show(base+why);}).catch(function(){show(base);});}else show(base);}}catch(e){}return r;},function(e){try{if(n<4)show("[网络] "+String(u).slice(0,180)+" "+((e&&e.message)||e));}catch(_){}throw e;});};' +
                 'setTimeout(function(){try{parent.postMessage({type:"no996-openfilm:boot",version:1,hasNative:!!globalThis.openfilmNative,rendered:!!(document.getElementById("root")||{}).firstElementChild},' + "'*'" + ')}catch(e){}},1500);' +
                 'setTimeout(function(){var r=document.getElementById("root");if(r&&!r.firstElementChild)show("界面 10 秒后仍未渲染（#root 为空）");},10000);' +
                 '})()</script>' : '';
@@ -505,8 +505,14 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
     }
     // Bound aggregate buffered request data before reading a body; limiting
     // each request alone still allows many concurrent 9 MiB allocations.
-    if (officialRequests >= 4) { fail(res, 503); return true; }
+    // Named rather than silent: a burst that trips this must be recognizable in
+    // the log, not look like a general Studio failure. Archiving a session starts
+    // several reads at once, which is what surfaced this cap.
+    if (officialRequests >= 6) { say.warn('official-rpc-busy', { inFlight: officialRequests }); fail(res, 503); return true; }
     officialRequests += 1;
+    // Which channel a failure belongs to: read from the body once it parses, and
+    // reported in the 503 so the page names the culprit rather than the endpoint.
+    let pendingChannel = '';
     void (async () => {
       try {
         const chunks = [];
@@ -524,6 +530,7 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
         // `client:log` is here too: it is a page-side diagnostic line about this
         // page itself, it carries no project id, and gating it on a project made
         // the page's own logging fail with an empty 403 body.
+        pendingChannel = value.channel;
         const needsProject = value.channel !== 'template:list' && value.channel !== 'template:create'
           && value.channel !== 'environment:check' && value.channel !== 'client:log';
         if (needsProject && await authorizeOfficialProject(req, value.payload?.projectId) !== true) return fail(res);
@@ -540,9 +547,13 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
         const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,40}$/.test(error.code) ? error.code : 'OFFICIAL_RPC_FAILED';
         const match = code === 'OFFICIAL_AGENT_TURN_FAILED' && typeof error?.message === 'string'
           ? /^Turn ended without completion \((aborted|blocked|error|max-tokens|interrupted|forked|unknown)\)$/.exec(error.message) : null;
+        // Which channel failed, so a 503 in the page names the culprit instead of
+        // pointing at the endpoint. Only a channel-shaped name is ever logged.
+        const channel = /^[a-z][a-z0-9:._-]{1,48}$/.test(String(pendingChannel)) ? String(pendingChannel) : 'unknown';
+        say.warn('official-rpc-failed', { channel, code });
         if (!res.destroyed && !res.writableEnded) {
           res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
-          res.end(match ? `${code}: ${match[1]}` : code);
+          res.end(match ? `${code}: ${match[1]} (${channel})` : `${code} (${channel})`);
         }
       } finally {
         officialRequests -= 1;
