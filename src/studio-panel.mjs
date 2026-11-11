@@ -12,11 +12,12 @@ export function templateProjectUrl(editorOrigin, projectId) {
   if (typeof projectId !== 'string' || !/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw new Error('Invalid project');
   return `${new URL(editorOrigin).origin}/projects/${projectId}`;
 }
-const HOST_HTTP = typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol);
+
 
 export function createStudioPanel(React) {
   const h = React.createElement;
   return function StudioPanel({ t, startStudio }) {
+    const HOST_HTTP = typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol);
     const [state, setState] = React.useState({ status: 'loading' });
     const [attempt, setAttempt] = React.useState(0);
     const [silent, setSilent] = React.useState(false);
@@ -35,6 +36,7 @@ export function createStudioPanel(React) {
     const autoRetriedRef = React.useRef(false);
     const iframeRef = React.useRef(null);
     const heardRef = React.useRef(false);
+    const watchNavigationRef = React.useRef(null);
 
     React.useEffect(() => {
       // A custom-scheme page (dsh-app://app) cannot reach /api/... at all; the
@@ -89,12 +91,31 @@ export function createStudioPanel(React) {
     React.useEffect(() => {
       if (state.status !== 'ready') return undefined;
       const editorOrigin = new URL(state.url).origin;
+      let timer;
+      const watchNavigation = () => {
+        heardRef.current = false;
+        setBoot(null);
+        setSilent(false);
+        clearTimeout(timer);
+        timer = setTimeout(() => { if (!heardRef.current) setSilent(true); }, 20000);
+      };
+      watchNavigationRef.current = watchNavigation;
+      watchNavigation();
       const receive = event => {
         if (event.origin !== editorOrigin || event.source !== iframeRef.current?.contentWindow) return;
         const data = event.data;
         if (data && typeof data === 'object' && data.type === 'no996-openfilm:boot' && data.version === 1) {
-          heardRef.current = true;
+          if (data.rendered === true) {
+            heardRef.current = true;
+            setSilent(false);
+            clearTimeout(timer);
+          }
           setBoot({ hasNative: data.hasNative === true, rendered: data.rendered === true });
+        }
+        if (data && typeof data === 'object' && data.type === 'no996-openfilm:restart' && data.version === 1) {
+          setSilent(false);
+          setHealth(null);
+          setAttempt(value => value + 1);
         }
         if (data && typeof data === 'object' && data.type === 'no996-openfilm:project' && data.version === 1 && typeof data.projectId === 'string') {
           try {
@@ -110,8 +131,8 @@ export function createStudioPanel(React) {
       };
       window.addEventListener('message', receive);
       // A frame that never boots cannot report its own failure; surface silence.
-      const timer = setTimeout(() => { if (!heardRef.current) setSilent(true); }, 20000);
-      return () => { clearTimeout(timer); window.removeEventListener('message', receive); };
+
+      return () => { clearTimeout(timer); watchNavigationRef.current = null; window.removeEventListener('message', receive); };
     }, [state.status, state.url, attempt]);
 
     React.useEffect(() => {
@@ -129,7 +150,7 @@ export function createStudioPanel(React) {
     // re-bootstrap per outage, then a visible manual control: a dead iframe must
     // never be the only thing the person sees.
     React.useEffect(() => {
-      if (state.status !== 'ready') return undefined;
+      if (!HOST_HTTP || state.status !== 'ready') return undefined;
       let live = true;
       let misses = 0;
       const check = async () => {
@@ -199,21 +220,25 @@ export function createStudioPanel(React) {
       studio = h('section', { style: { padding: 24, color: 'var(--dsw-alias-label-primary)' } },
         h('p', { role: 'alert' }, t('studioFailed'), ' ', state.message),
         h('button', { type: 'button', onClick: retry }, t('studioRetry')));
-    } else if (silent) {
-      studio = h('section', { style: { padding: 24, color: 'var(--dsw-alias-label-primary)' } },
-        h('p', { role: 'alert' }, t('studioFailed'), ' 官方界面 20 秒内没有回应。请把下面这段诊断文字发给我。'),
-        h('pre', { style: { whiteSpace: 'pre-wrap', fontSize: 12, overflow: 'auto', maxHeight: '50vh', background: 'var(--dsw-alias-bg-layer-1, #0002)', padding: 8, borderRadius: 6 } },
-          JSON.stringify({ boot, preset, diag: diag ?? { note: 'diagnose 尚未返回' } }, null, 1)),
-        h('button', { type: 'button', onClick: retry }, t('studioRetry')));
     } else {
       studio = h('iframe', {
         ref: iframeRef, title: t('studioTitle'), src: state.url,
+        onLoad: () => watchNavigationRef.current?.(),
         sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-modals',
         allow: 'clipboard-read; clipboard-write',
         referrerPolicy: 'no-referrer',
         style: { display: 'block', width: '100%', height: '100%', border: 0, background: 'var(--dsw-alias-bg-base)' },
       });
     }
+
+    // Do not unmount a slow frame: it may recover with unsaved content intact.
+    const silentOverlay = state.status === 'ready' && silent ? h('section', {
+      style: { position: 'absolute', inset: 0, zIndex: 35, padding: 24, overflow: 'auto', background: 'var(--dsw-alias-bg-base, #18181b)', color: 'var(--dsw-alias-label-primary)' },
+    },
+    h('p', { role: 'alert' }, t('studioFailed'), ' 官方界面 20 秒内没有回应。重试会重新加载界面，未保存的内容可能丢失。'),
+    h('pre', { style: { whiteSpace: 'pre-wrap', fontSize: 12, overflow: 'auto', maxHeight: '50vh' } },
+      JSON.stringify({ boot, preset, diag: diag ?? { note: '诊断不可用或尚未返回' } }, null, 1)),
+    h('button', { type: 'button', onClick: retry }, t('studioRetry'))) : null;
 
     const archived = archive?.available !== false && archive?.archived === true;
     const banner = archived
@@ -255,6 +280,7 @@ export function createStudioPanel(React) {
       : null;
     return h('div', { style: { position: 'relative', width: '100%', height: '100%', minWidth: 0, minHeight: 0 } },
       studio,
+      silentOverlay,
       banner,
       stoppedOverlay);
   };

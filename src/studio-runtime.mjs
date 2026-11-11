@@ -30,6 +30,17 @@ export async function loadPinnedStudio() {
   }
 }
 
+async function studioHealthy(instance) {
+  try {
+    if (typeof instance.filmOrigin !== 'string' || !instance.filmOrigin) return false;
+    const response = await fetch(`http://127.0.0.1:${instance.port}/api/health`, { signal: AbortSignal.timeout(2000), redirect: 'error' });
+    if (!response.ok) return false;
+    const health = await response.json();
+    return health.product === 'openfilm-studio' && health.version === OPENFILM_VERSION
+      && health.app === true && health.filmOrigin === instance.filmOrigin;
+  } catch { return false; }
+}
+
 /**
  * Host-only lifecycle, not a Client API or a UI gateway. loadStudio is an
  * injectable async function returning the upstream startStudio function.
@@ -38,9 +49,11 @@ export async function loadPinnedStudio() {
  * Optional attach(instance) is a trusted Host-only hook: it can see secrets and
  * must never log or expose them. It may return an async or sync disposer. If it
  * throws, it must clean up any resources it created before throwing.
- * Creation does not start anything. ensureStarted() resolves to non-secret
- * status only; close() waits for an in-flight start. Both can be called again
- * after a successful close or a failed start.
+ * Creation does not start anything. ensureStarted() checks a cached instance and
+ * replaces it after a failed health check; health() only checks and reports it.
+ * Both return non-secret status; status() is the last observed state. close()
+ * waits for an in-flight start. Both can be called again after a successful
+ * close or a failed start.
  *
  * Upstream puts its key in Studio URLs and API responses; its server must not
  * be exposed to a Client until a separately designed security bridge handles
@@ -48,8 +61,9 @@ export async function loadPinnedStudio() {
  * disabled, upstream itself may read/write its normal HOME and make network
  * requests. This wrapper never changes HOME or writes there itself.
  */
-export function createStudioRuntime({ loadStudio = loadPinnedStudio, attach, askAgent, editorDir, resolveEditorDir, port = 0 } = {}) {
+export function createStudioRuntime({ loadStudio = loadPinnedStudio, attach, askAgent, editorDir, resolveEditorDir, port = 0, checkHealth = studioHealthy } = {}) {
   if (typeof loadStudio !== 'function') throw new TypeError('loadStudio must be a function');
+  if (typeof checkHealth !== 'function') throw new TypeError('checkHealth must be a function');
   if (attach !== undefined && typeof attach !== 'function') throw new TypeError('attach must be a function');
   if (askAgent !== undefined && typeof askAgent !== 'function') throw new TypeError('askAgent must be a function');
   if (editorDir !== undefined && (typeof editorDir !== 'string' || !isAbsolute(editorDir))) throw new TypeError('editorDir must be an absolute path');
@@ -59,6 +73,7 @@ export function createStudioRuntime({ loadStudio = loadPinnedStudio, attach, ask
   let instance = null;
   let disposer = null;
   let ready = false;
+  let stale = false;
   let starting = null;
   let closing = null;
   const status = () => Object.freeze({ running: ready, port: ready ? instance.port : null });
@@ -66,9 +81,16 @@ export function createStudioRuntime({ loadStudio = loadPinnedStudio, attach, ask
   function ensureStarted() {
     if (closing) return closing.then(() => ensureStarted());
     if (starting) return starting;
-    if (ready) return Promise.resolve(status());
-    if (instance || disposer) return Promise.reject(failure('STUDIO_CLOSE', 'OpenFilm Studio cleanup is required before restart'));
     starting = Promise.resolve().then(async () => {
+      if (ready) {
+        await health();
+        if (ready) return status();
+      }
+      if (stale) {
+        stale = false;
+        await cleanup();
+      }
+      if (instance || disposer) throw failure('STUDIO_CLOSE', 'OpenFilm Studio cleanup is required before restart');
       try {
         const startStudio = await loadStudio();
         if (typeof startStudio !== 'function') throw new Error();
@@ -92,11 +114,34 @@ export function createStudioRuntime({ loadStudio = loadPinnedStudio, attach, ask
       } catch {
         // Never propagate upstream errors: they may contain a key or keyed URL.
         throw failure('STUDIO_START', 'OpenFilm Studio could not start');
-      } finally {
-        starting = null;
       }
-    });
+    }).finally(() => { starting = null; });
     return starting;
+  }
+
+  async function health() {
+    const checked = instance;
+    if (!ready || !checked || closing) return status();
+    let healthy = false;
+    try { healthy = await checkHealth(checked); } catch { /* do not expose probe errors */ }
+    if (!healthy && instance === checked && ready) {
+      ready = false;
+      stale = true;
+    }
+    return status();
+  }
+
+  async function cleanup() {
+    let failed = false;
+    if (disposer) {
+      try { await disposer(); disposer = null; }
+      catch { failed = true; }
+    }
+    if (instance) {
+      try { await instance.close(); instance = null; }
+      catch { failed = true; }
+    }
+    if (failed) throw failure('STUDIO_CLOSE', 'OpenFilm Studio could not close');
   }
 
   function close() {
@@ -105,17 +150,9 @@ export function createStudioRuntime({ loadStudio = loadPinnedStudio, attach, ask
       try {
         if (starting) await starting.catch(() => {});
         ready = false;
-        let failed = false;
-        if (disposer) {
-          try { await disposer(); disposer = null; }
-          catch { failed = true; }
-        }
+        stale = false;
         // Always attempt both cleanups, even if the proxy disposer fails.
-        if (instance) {
-          try { await instance.close(); instance = null; }
-          catch { failed = true; }
-        }
-        if (failed) throw failure('STUDIO_CLOSE', 'OpenFilm Studio could not close');
+        await cleanup();
       } finally {
         closing = null;
       }
@@ -123,5 +160,5 @@ export function createStudioRuntime({ loadStudio = loadPinnedStudio, attach, ask
     return closing;
   }
 
-  return Object.freeze({ ensureStarted, close, status });
+  return Object.freeze({ ensureStarted, close, status, health });
 }

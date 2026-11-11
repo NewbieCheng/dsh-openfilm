@@ -11,7 +11,7 @@
 
 把官方 **OpenFilm 0.3.1** 视频工作台封装成可分发的 **DSH 插件**：Host 侧拉起官方 Studio 并做反向代理，浏览器侧用 `shell.overlay` 常驻一个 iframe 面板显示官方界面，右侧官方对话经 Host RPC 桥到 DSH 会话（模型、审批、会话都是 DSH 的）。
 
-当前版本 `0.6.0`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
+当前版本 `0.6.1`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
 
 ---
 
@@ -60,7 +60,7 @@
 npm run build                      # 只在改了客户端源码时需要
 npm run templates:build            # 改了 vendor/templates/_kit 或 shots/*.json 时必须
 npm run templates:check            # 只校验页面与源是否一致
-node --test tests/*.test.mjs       # 期望 186 tests / 185 pass / 1 skip
+node --test tests/*.test.mjs       # 最近一次 193 tests / 192 pass / 1 skip
 ```
 
 顺序：**先判断改的是哪一层 → 改 `src/` 源码 → build（如需）→ 跑测试 → 按 §4 让变更生效 → 在真实 GUI 里确认。**
@@ -73,14 +73,14 @@ node --test tests/*.test.mjs       # 期望 186 tests / 185 pass / 1 skip
 
 ### 4.1 结论
 
-- **本插件不是热加载的**（仓库里没有 watcher，`npm run build` 是一次性打包），但**插件可以热插拔**：
-  `plugin_manager set_plugin enabled=false` → `enabled=true`（target `include:dsh-openfilm`）会让加载器**重新求值 Host 模块**，新代码立即生效，不需要退出 DSH 应用。
+- **本插件默认不是自动热加载的**（`npm run build` 是一次性打包；`npm run dev` 才启动 watcher），部分环境支持热插拔：
+  `plugin_manager set_plugin enabled=false` → `enabled=true`（target `include:dsh-openfilm`）可能触发 Host 重新装配；以管理器返回的 `application`/`nextStep` 为准，不能一概保证立即生效。
   > 实测（2026-11-10）：进程 21:34 启动，22:16 热插拔后，新加的启动标记代码立即写出了 `%TEMP%\dsh-openfilm-host.json`。这条推翻了我此前“必须重启应用”的说法。
 - **但浏览器里还是旧页面**：Host 重载只换服务端；iframe 里的 HTML、以及 `client.js`，都要**刷新页面**才换。
 - **注入 UI 是例外，几乎不用重载**：`assets/shell-ui.js` 在每次页面渲染时读盘（mtime 缓存），**保存 + 刷新页面**即可，不需要 build、不需要重载插件。三档热更新的做法见 `docs/HOT-RELOAD.md`。
 - **重载前先 `touch index.js src/*.mjs`**（`npm run dev` 会自动做）：加载器只重新求值 mtime 变了的模块，未被 touch 的引入方会继续用旧 import——症状就是"改了没生效"。
 - **不用重新安装。** profile 里 `~/.dsh/profiles/desktop/node_modules/dsh-openfilm` 是指向本工作目录的**链接**（实测 `readlink` → `F:\Dev\Desktop-Projects\dsh-openfilm`）。磁盘上的文件就是"已安装"的文件。
-- **只有 DSH 自身升级、加载器异常、或端口被占死时**才需要退出应用重开。
+- 管理器返回 `restart-required` 时须告知用户完整重启 DSH；即使日志出现新的 `host-start`/`studio-warm`，也只证明 Host 重建，不能证明全部插件状态或 GUI 已应用。
 
 ### 4.1.1 三件套，按顺序做
 
@@ -154,7 +154,7 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 | 真实帧 | `%TEMP%\dsh-openfilm-frames.jsonl` | 0.3.4 起每轮写，文本截断 200 字符，用于对齐真实分片/事件名 |
 | 调试地址 | `POST /api/no996-openfilm/debug-url` | 可粘进右侧浏览器的稳定入口 |
 | Host 构建标记 | `%TEMP%\dsh-openfilm-host.json` | `{version,pid,startedAt}`；重载插件后 `startedAt` 必须更新，否则说明你看到的还是旧代码 |
-| 运行日志 | `%TEMP%\dsh-openfilm\plugin.log` | JSON Lines，512 KB 轮转；`host-start`/`studio-warm`/`host-stop`/`ticket-*`/`upstream-5xx`/`upstream-error`/`page-*`；密钥与路径自动脱敏。**排查崩溃先读这个**，`diagnose` 也会带回最近 12 条 |
+| 运行日志 | `%TEMP%\dsh-openfilm\plugin.log` | JSON Lines，512 KB 轮转；`host-start`/`studio-warm`/`host-stop`/`studio-health`/`bootstrap-*`/`ticket-*`/`upstream-5xx`/`upstream-error`/`page-*`；密钥与路径自动脱敏。**排查崩溃先读这个**，`diagnose` 也会带回最近 12 条 |
 | 上游 5xx 原文 | `%TEMP%\dsh-openfilm-errors.jsonl` | 上游返回 5xx 时的响应体（截 800 字符），用于解释「删除失败」这类没有文案的错误 |
 | 归档通道 | `POST /api/no996-openfilm/archive` | `{action:'state'\|'archive'\|'unarchive'\|'rebind', projectId}`，只认项目 ID |
 
@@ -164,7 +164,7 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 
 ## 7. 测试规则
 
-- `node --test tests/*.test.mjs`；当前 **186 tests / 185 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
+- `node --test tests/*.test.mjs`；最近一次 **193 tests / 192 pass / 1 skip**（跳过项需要 `DSH_PINNED_SOURCE` 指向只读 DSH 源码）。
 - 只允许模拟对象与 `mkdtemp` 临时目录；`OPENFILM_HOME` 指到临时目录，绝不碰用户库。
 - 真实项目注册验证可以跑官方 `openfilm` 服务端 `openProject`，但必须用临时 home。
 - 新增行为必须带测试；本仓的历史 bug 大多是"逻辑没问题但顺序/形状假设错"，测试是唯一便宜的判断手段。
@@ -211,6 +211,8 @@ DSH 的客户端插件热替换只在**用 `pnpm run dev:web` 从同一个 DSH c
 - **把 404 当终态**：插件重载有几百毫秒路由空窗，落在窗口里的请求会 404 并被面板记成错误。现在：`404/503` 先静默重试两次（0.5.3）。
 - **模板页面引用模板目录之外的文件**：模板安装是整目录复制，`../../_kit/…` 在仓库里能跑、复制进项目就 404。现在：共享样式由构建合并成 `<模板>/assets/kit.css`，并有测试扫 `href`/`src`（0.6.0）。
 - **手写 `at` 与 `#t=`**：镜头墙的时间轴与镜头自己的时长一旦不一致，影片照播、内容错位。现在：`film.html` 由 `shots/*.json` 生成（0.6.0）。
+- **服务断线后点击重启却白屏**：不要把调试地址跳转当成真正重启；面板应重新 bootstrap、上游应实际健康探测并在失联时清理旧实例/代理，重载可能使旧 iframe 凭证失效。iframe 后续导航也需重新计时，不能只检查首次启动。当前已有代码和模拟测试，**尚未完成真实 GUI 断线恢复验证**；排障细节见 `docs/NOTES.md`。
+- **重载结果与实际日志不能混为一谈**：2026-11-11 管理器两次返回 `restart-required`，但同时观测到新的 `host-start`/`studio-warm`。必须同时报告这两项，不能由启动标记推断所有变更已应用；应按管理器提示完整重启 DSH 并在真实 GUI 验证。
 - **日志字段名撞脱敏规则**：`path`/`session`/`cookie` 这类键会被写成 `[redacted]` 或哈希，日志看着"有了"其实没用。写日志时换名字（`route`/`authed`），或先跑一次 `redact()` 看输出（0.5.1 / 0.5.8）。
 
 ---

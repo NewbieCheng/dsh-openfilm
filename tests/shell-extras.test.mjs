@@ -19,9 +19,27 @@ test('the injected shell UI is one balanced script that parses as JavaScript', (
   new Function(body);
 });
 
+test('picker lists templates beside the disabled original suggestion', () => {
+  assert.match(body, /card\.parentElement\.insertBefore\(wrap,card\)/);
+  assert.match(body, /trigger\.textContent='选择模板'/);
+  assert.match(body, /aria-expanded/);
+  assert.match(body, /button,\[role="button"\],a,div,span,p/);
+  assert.match(body, /aria-disabled/);
+  assert.match(body, /stopImmediatePropagation/);
+  assert.doesNotMatch(body, /card\.style\.display='none'/);
+  assert.match(body, /items\.forEach/);
+  assert.match(body, /aria-checked/);
+  assert.match(body, /cancel\.textContent='取消'/);
+  assert.match(body, /function positionMenu\(\)/);
+  assert.match(body, /flexDirection='row'/);
+  assert.doesNotMatch(body, /rpc\('editor:link'/);
+  assert.match(body, /wrap\.style\.display='none';\s*location\.href/);
+  assert.doesNotMatch(body, /wrap\.style\.cssText='position:fixed/);
+});
+
 test('the picker only talks over the fixed bridge channels', () => {
   const channels = [...body.matchAll(/rpc\('([^']+)'/g)].map(match => match[1]);
-  assert.deepEqual([...new Set(channels)].sort(), ['client:log', 'editor:link', 'template:create', 'template:list']);
+  assert.deepEqual([...new Set(channels)].sort(), ['client:log', 'template:create', 'template:list']);
   // No project path or session identity may be constructed in the page.
   assert.doesNotMatch(body, /sessionId|projectPath|\/api\/no996-openfilm/);
 });
@@ -31,7 +49,9 @@ test('a dead Studio is answered inside the page, not with an app-restart hint', 
   // Our own control must be present, must poll, and must lead to the console.
   assert.match(body, /no996-stopped/);
   assert.match(body, /重新启动工作台/);
-  assert.match(body, /http:\/\/127\.0\.0\.1:47821\/editor/);
+  assert.doesNotMatch(body, /http:\/\/127\.0\.0\.1:47821\/editor/);
+  assert.match(body, /no996-openfilm:restart/);
+  assert.match(body, /window\.parent\.postMessage/);
   assert.match(body, /\/api\/version/);
   assert.match(body, /misses>=2/);
 });

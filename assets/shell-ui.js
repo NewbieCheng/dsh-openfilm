@@ -13,41 +13,81 @@
   }
   var wrap=document.createElement('div');
   wrap.id='no996-template-picker';
-  wrap.style.cssText='position:fixed;z-index:2147483000;display:none;left:0;top:0;width:0;height:0';
+  wrap.style.cssText='display:none;position:relative;box-sizing:border-box;min-width:0;flex:1 1 0';
   var box=document.createElement('div');
-  box.style.cssText='display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:9px;background:rgba(24,24,27,.92);border:1px solid rgba(255,255,255,.14);box-shadow:0 6px 20px rgba(0,0,0,.35);font:12px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif;color:#e9e9ee;box-sizing:border-box';
-  var label=document.createElement('span');
-  label.textContent='模板';
-  label.style.cssText='opacity:.65;padding-left:4px;white-space:nowrap;letter-spacing:.02em';
-  var select=document.createElement('select');
-  select.setAttribute('aria-label','选择模板');
-  select.style.cssText='flex:1 1 auto;min-width:0;background:#1f1f23;color:#e9e9ee;border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:3px 6px;font:12px system-ui,sans-serif;outline:none;cursor:pointer';
-  var open=document.createElement('button');
-  open.type='button';
-  open.textContent='↗';
-  open.title='在新窗口打开（一次性 token）';
-  open.style.cssText='flex:0 0 auto;background:transparent;color:#c9c9d1;border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:3px 8px;font:12px system-ui,sans-serif;cursor:pointer';
+  box.style.cssText='display:none;position:fixed;z-index:2147483000;max-height:calc(100vh - 24px);overflow:auto;padding:16px;border-radius:14px;background:#242426;border:1px solid #45454b;box-shadow:0 14px 32px rgba(0,0,0,.42);font:12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#e9e9ee;box-sizing:border-box';
+  var title=document.createElement('div');
+  title.textContent='选择一个模板';
+  title.style.cssText='font-size:14px;font-weight:600;color:#f3f3f5;margin:0 0 3px';
+  var hint=document.createElement('div');
+  hint.textContent='从现有模板开始，创建后可以继续编辑';
+  hint.style.cssText='font-size:12px;line-height:1.5;color:#a3a3ad;margin-bottom:10px';
+  var choices=document.createElement('div');
+  choices.setAttribute('role','radiogroup');
+  choices.setAttribute('aria-label','选择模板');
+  choices.style.cssText='display:grid;gap:5px';
+  var selected='';
+  var cancel=document.createElement('button');
+  cancel.type='button';cancel.textContent='取消';
+  cancel.style.cssText='padding:7px 13px;border:1px solid #55555d;border-radius:7px;background:transparent;color:#d7d7de;font:12px system-ui,sans-serif;cursor:pointer';
   var button=document.createElement('button');
   button.type='button';
   button.textContent='新建项目';
   button.style.cssText='flex:0 0 auto;background:#3b82f6;color:#fff;border:0;border-radius:6px;padding:4px 10px;font:12px system-ui,sans-serif;cursor:pointer;white-space:nowrap';
-  box.appendChild(label);box.appendChild(select);box.appendChild(button);box.appendChild(open);
-  wrap.appendChild(box);
-  try{document.documentElement.appendChild(wrap);}catch(e){return;}
+  var footer=document.createElement('div');
+  footer.style.cssText='display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:12px';
+  footer.appendChild(cancel);footer.appendChild(button);
+  box.appendChild(title);box.appendChild(hint);box.appendChild(choices);box.appendChild(footer);
+  var trigger=document.createElement('button');
+  trigger.type='button';
+  trigger.textContent='选择模板';
+  trigger.setAttribute('aria-expanded','false');
+  trigger.style.cssText='display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:68px;padding:12px 10px;border:1px solid rgba(255,255,255,.10);border-radius:20px;background:#202022;color:#e9e9ee;font:14px system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap;cursor:pointer';
+  function positionMenu(){
+    if(box.style.display!=='block')return;
+    var anchor=trigger.getBoundingClientRect();
+    var width=Math.min(360,Math.max(0,innerWidth-24));
+    box.style.width=width+'px';
+    box.style.left=Math.max(12,Math.min(anchor.left,innerWidth-width-12))+'px';
+    var height=box.getBoundingClientRect().height;
+    var below=anchor.bottom+8;
+    box.style.top=Math.max(12,Math.min(below,innerHeight-height-12))+'px';
+  }
+  function closeMenu(){box.style.display='none';trigger.setAttribute('aria-expanded','false');}
+  trigger.addEventListener('click',function(){
+    if(box.style.display==='block'){closeMenu();return;}
+    box.style.display='block';trigger.setAttribute('aria-expanded','true');positionMenu();
+  });
+  cancel.addEventListener('click',function(){closeMenu();trigger.focus();});
+  document.addEventListener('keydown',function(event){if(event.key==='Escape'&&box.style.display==='block'){closeMenu();trigger.focus();}});
+  addEventListener('resize',positionMenu);
+  addEventListener('scroll',positionMenu,true);
+  wrap.appendChild(trigger);wrap.appendChild(box);
+  // Insert into the upstream suggestion-card layout when that card exists.
 
   var list=null,busy=false;
   function fill(items){
-    select.innerHTML='';
-    for(var i=0;i<items.length;i++){
-      var option=document.createElement('option');
-      option.value=items[i].id;
-      option.textContent=items[i].title||items[i].id;
-      select.appendChild(option);
-    }
-    if(!items.length){
-      var empty=document.createElement('option');
-      empty.value='';empty.textContent='没有可用模板';select.appendChild(empty);
-    }
+    choices.textContent='';
+    if(!items.some(function(item){return item.id===selected;}))selected=items.length?items[0].id:'';
+    items.forEach(function(item){
+      var option=document.createElement('button');
+      option.type='button';option.setAttribute('role','radio');
+      option.setAttribute('aria-checked',String(item.id===selected));
+      option.style.cssText='display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 10px;border:1px solid '+(item.id===selected?'#6c96da':'transparent')+';border-radius:8px;background:'+(item.id===selected?'#303c50':'#303032')+';color:#ededf0;cursor:pointer;font:inherit';
+      var icons={'paper-texture':['▤','#d4ba91'],'replica-film':['▣','#8fb6d3'],'sketchnote':['✎','#d8b8a6']};
+      var icon=document.createElement('span'),mark=icons[item.id]||['▧','#afb9cb'];
+      icon.textContent=mark[0];icon.setAttribute('aria-hidden','true');
+      icon.style.cssText='display:grid;place-items:center;flex:0 0 34px;height:34px;border-radius:8px;background:#17191d;color:'+mark[1]+';font-size:19px';
+      var copy=document.createElement('span');copy.style.cssText='display:block;min-width:0';
+      var name=document.createElement('span');name.textContent=item.title||item.id;
+      name.style.cssText='display:block;font-size:13px;font-weight:600';copy.appendChild(name);
+      if(item.description){var desc=document.createElement('span');desc.textContent=item.description;desc.style.cssText='display:block;color:#adadb5;font-size:11px;line-height:1.45;margin-top:3px';copy.appendChild(desc);}
+      option.appendChild(icon);option.appendChild(copy);
+      option.addEventListener('click',function(){selected=item.id;fill(items);});
+      choices.appendChild(option);
+    });
+    button.disabled=!selected||busy;
+    if(!items.length){var empty=document.createElement('div');empty.textContent='没有可用模板，请稍后重试';empty.style.cssText='color:#bcbcc4;padding:12px 4px';choices.appendChild(empty);}
   }
   function load(){
     if(list)return Promise.resolve(list);
@@ -59,31 +99,16 @@
   function reset(){
     busy=false;button.disabled=false;button.textContent='新建项目';
   }
-  open.addEventListener('click',function(){
-    open.disabled=true;
-    rpc('editor:link',{}).then(function(value){
-      var url=value&&value.url;
-      // Prefix checks only. This snippet is produced from a template literal, so
-      // regex escapes would be collapsed before the page ever parses it.
-      var ok=typeof url==='string'&&(url.indexOf('http://127.0.0.1:')===0||url.indexOf('http://127.0.0.2:')===0||url.indexOf('http://localhost:')===0)&&url.indexOf('/__dsh/open#')>0;
-      if(!ok)throw new Error('bad link');
-      // The ticket is one-use and short-lived, so also put it on the clipboard:
-      // a popup blocker after an await is common, and the person can paste it.
-      try{ if(navigator.clipboard) navigator.clipboard.writeText(url).catch(function(){}); }catch(e){}
-      open.title=url;
-      var win=window.open(url,'_blank','noopener');
-      if(!win){ open.textContent='已复制'; setTimeout(function(){ open.textContent='↗'; },2000); }
-    }).catch(function(){ open.title='链接不可用'; }).then(function(){ setTimeout(function(){ open.disabled=false; },800); });
-  });
   button.addEventListener('click',function(){
     if(busy)return;
-    var id=select.value;
+    var id=selected;
     if(!id)return;
     busy=true;button.disabled=true;button.textContent='创建中…';
     rpc('template:create',{templateId:id}).then(function(value){
       var projectId=value&&value.projectId;
       if(typeof projectId!=='string'||!/^[A-Za-z0-9_-]{6,40}$/.test(projectId))throw new Error('bad project');
       try{if(value.prompt)localStorage.setItem('no996.openfilm.templatePrompt',String(value.prompt).slice(0,600));}catch(e){}
+      wrap.style.display='none';
       location.href='/projects/'+projectId;
     }).catch(function(){
       button.textContent='创建失败，重试';button.disabled=false;busy=false;
@@ -206,21 +231,28 @@
   };
   function place(){
     try{
-      var mode=anchorMode();
-      var placed=false;
-      if(mode==='heading')placed=placeUnderHeading()||placeHeader();
-      else if(mode==='header')placed=placeHeader();
-      if(!placed)placeTopRight();
-      wrap.setAttribute('data-no996-anchor',mode);
-      globalThis.__no996PickerState={mode:mode,bar:rectInfo(wrap)};
+      var card=findReplicaCard();
+      if(!card||!card.parentElement){wrap.style.display='none';return;}
+      if(wrap.parentElement!==card.parentElement||wrap.nextElementSibling!==card)card.parentElement.insertBefore(wrap,card);
+      // These are sibling suggestion cards; keep them side by side even in a narrow chat.
+      card.parentElement.style.display='flex';
+      card.parentElement.style.flexDirection='row';
+      card.parentElement.style.alignItems='stretch';
+      card.parentElement.style.gap='8px';
+      card.style.flex='1 1 0';card.style.minWidth='0';
+      wrap.style.display='block';
+      positionMenu();
+      wrap.setAttribute('data-no996-anchor','card');
+      globalThis.__no996PickerState={mode:'card',bar:rectInfo(wrap)};
     }catch(e){}
   }
-  // The upstream suggestion card ("视频复刻") is hidden, never removed from the
-  // bundle: the pinned build stays untouched and a future shell simply re-shows
-  // it if the text changes.
-  function hideReplica(){
+  // Keep the upstream suggestion visible, but disable its interaction without changing its implementation.
+  var replicaCard=null;
+  function findReplicaCard(){
+    if(replicaCard&&replicaCard.isConnected)return replicaCard;
+    replicaCard=null;
     try{
-      var nodes=document.querySelectorAll('button,[role="button"],a,div');
+      var nodes=document.querySelectorAll('button,[role="button"],a,div,span,p');
       for(var i=0;i<nodes.length;i++){
         var el=nodes[i];
         if(el.closest&&el.closest('#no996-template-picker'))continue;
@@ -231,14 +263,23 @@
             var rect=card.getBoundingClientRect();
             if(rect.width>140&&rect.height>48)break;
           }
-          if(card&&card!==document.body&&!card.hasAttribute('data-no996-hidden')){
-            card.setAttribute('data-no996-hidden','1');
-            card.style.display='none';
+          if(card&&card!==document.body&&card.parentElement){
+            replicaCard=card;
+            // Keep the upstream card and its React logic intact, but intercept interaction.
+            card.setAttribute('data-no996-disabled','1');
+            card.setAttribute('aria-disabled','true');
+            card.style.opacity='0.45';card.style.cursor='not-allowed';
+            card.title='视频复刻暂不可用';
+            card.addEventListener('click',function(event){event.preventDefault();event.stopImmediatePropagation();},true);
+            card.addEventListener('keydown',function(event){if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopImmediatePropagation();}},true);
+            return card;
           }
         }
       }
     }catch(e){}
+    return null;
   }
+  function hideReplica(){ findReplicaCard(); place(); }
   var hideTimer=null;
   function scheduleHide(){
     if(hideTimer)return;
@@ -255,16 +296,27 @@
 
   // The page is all a person can see when the Host's Studio goes away, and the
   // upstream overlay tells them to restart an application that is not involved.
-  // Watch the service ourselves and offer the one action that works: the fixed
-  // loopback console, which re-mints a session and comes back on its own.
+  // Ask the embedding panel to bootstrap again; never navigate to a fixed port.
+  // The proxy's one-shot boot can precede a slow render or the iframe load.
+  // Report readiness after load and keep checking until the shell has rendered.
+  function reportReady(){
+    if(window.parent===window)return;
+    var root=document.getElementById('root');
+    if(!root||!root.firstElementChild)return;
+    window.parent.postMessage({type:'no996-openfilm:boot',version:1,hasNative:!!globalThis.openfilmNative,rendered:true},'*');
+    clearInterval(readyTimer);
+  }
+  var readyTimer;
+  function startReady(){ readyTimer=setInterval(reportReady,1000); setTimeout(reportReady,0); }
+  if(document.readyState==='complete') startReady();
+  else window.addEventListener('load',startReady,{once:true});
   var stop=document.createElement('div');
   stop.id='no996-stopped';
   stop.style.cssText='position:fixed;inset:0;z-index:2147483001;display:none;align-items:center;justify-content:center;background:rgba(10,10,12,.88);font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;color:#e9e9ee';
   stop.innerHTML='<div style="max-width:400px;padding:24px;border-radius:12px;background:#232326;border:1px solid rgba(255,255,255,.14);text-align:center;box-shadow:0 16px 48px rgba(0,0,0,.6)">'
     +'<div style="font-weight:600;font-size:15px;margin-bottom:8px">工作台已停止运行</div>'
-    +'<div style="opacity:.75;font-size:12px;line-height:1.7;margin-bottom:18px">视频编辑服务已断开（会话过期或服务重启）。点下面的按钮即可恢复，项目和素材都不会丢。</div>'
-    +'<a id="no996-restart" href="http://127.0.0.1:47821/editor" style="display:inline-block;padding:9px 20px;border-radius:8px;background:#3b82f6;color:#fff;text-decoration:none;font-size:13px">重新启动工作台</a>'
-    +'<div style="opacity:.45;font-size:11px;margin-top:14px">换一台机器访问时，把地址换成该机器的 127.0.0.1:47821/editor</div>'
+    +'<div style="opacity:.75;font-size:12px;line-height:1.7;margin-bottom:18px">视频编辑服务已断开。重新启动会重新加载界面，未保存的内容可能丢失。</div>'
+    +'<button id="no996-restart" type="button" style="display:inline-block;padding:9px 20px;border:0;border-radius:8px;background:#3b82f6;color:#fff;font-size:13px;cursor:pointer">重新启动工作台</button>'
     +'</div>';
   try{ document.documentElement.appendChild(stop); }catch(e){}
   var reported=false;
@@ -272,7 +324,11 @@
     try{ rpc('client:log',{event:event}).catch(function(){}); }catch(e){}
   }
   var restartLink=stop.querySelector('#no996-restart');
-  if(restartLink) restartLink.addEventListener('click',function(){ report('restart-click'); });
+  if(restartLink) restartLink.addEventListener('click',function(){
+    report('restart-click');
+    if(window.parent!==window) window.parent.postMessage({type:'no996-openfilm:restart',version:1},'*');
+    else restartLink.textContent='请返回视频面板重试';
+  });
   var misses=0;
   function probe(){
     var done=false;

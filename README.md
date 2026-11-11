@@ -10,57 +10,20 @@ OpenFilm 视频创作作为 DSH 插件：整页官方 Studio 0.3.1 + 官方对�
 
 > **不是热加载**：改客户端源码要 `npm run build` + 刷新页面；改 Host 源码要重启 DSH；改 `vendor/templates` 下一次请求即生效。详见 `AGENTS.md` §4。
 
-## 下载方式
+## 下载与更新（0.6.1）
 
-**方式一（推荐）：直接拿打包好的插件包**
+从 [GitHub Releases](https://github.com/NewbieCheng/dsh-openfilm/releases) 下载 `dsh-openfilm-0.6.1.tgz`，在 DSH 插件管理器中安装该包，或通过管理器的 `install_bundle` 指定本地包路径。更新前请保存尚未保存的编辑，完成后按管理器提示重启 DSH 或刷新页面。
 
-```
-dist/dsh-openfilm-0.1.16.tgz
-```
+发布包包含 OpenFilm 0.3.1、运行依赖、官方界面和模板，无需另外手动安装 OpenFilm；下载发布包本身仍需联网。宿主需提供兼容的 DSH 和 Node.js 22.2 或更高版本。Windows 已进行本机自动化测试；macOS/Linux 尚未完成实机 GUI 验证。浏览器渲染和视频导出不在本次验证范围。
 
-下载后在你的 DSH 工作区安装：
+**关于自动检查更新**：DSH 插件管理器的版本检查目前只支持从 npm 仓库安装的插件；GitHub 安装包和本地链接不会自动按 GitHub Releases 检查新版本。本项目目前尚未发布到 npm，需手动从 Releases 获取新包更新。
 
-```sh
-pnpm add /path/to/dsh-openfilm-0.1.16.tgz
-# 或 npm i /path/to/dsh-openfilm-0.1.16.tgz
-```
-
-**方式二：克隆源码**
-
-```sh
-git clone https://github.com/NewbieCheng/dsh-openfilm.git
-cd dsh-openfilm && pnpm install
-```
-
-两种方式装好后，都在 DSH profile 里挂上插件：
-
-```yaml
-- insert:
-    - id: dsh-openfilm
-      name: 'dsh-openfilm'
-```
-
-重启 DSH，侧边栏出现「视频创作」。
-```sh
-git clone https://github.com/NewbieCheng/dsh-openfilm.git
-cd dsh-openfilm
-pnpm install
-```
-
-然后在你的 DSH profile patch 里挂上这个包（`cordis.patch.yml` 已给出 `insert` 形式）：
-
-```yaml
-- insert:
-    - id: dsh-openfilm
-      name: 'dsh-openfilm'
-```
-
-重启 DSH 后，侧边栏出现「视频创作」。
+开发者也可以克隆源码并安装依赖，然后由插件管理器安装工作区目录；源码安装会通过包管理器获取依赖，与预先打包的离线安装包不同。
 
 ## 需要什么
 
 - DSH 内核（含 `session-controller`、`storageDomain`、`webServer`）
-- Node.js 20+
+- Node.js 22.2+（与 OpenFilm 0.3.1 的运行时要求一致）
 - 首次打开会启动官方 Studio（随包内置构建产物，端口固定 47822/47821）
 
 ## 能力与边界

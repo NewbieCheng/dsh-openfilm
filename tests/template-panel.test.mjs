@@ -10,6 +10,56 @@ test('client loader id matches the independent package name', async () => {
   assert.equal(id, pkg.name);
 });
 
+test('desktop does not poll the inaccessible relative Host diagnose route', async () => {
+  browser({ location: { protocol: 'dsh-app:', host: 'app', hostname: 'app' } });
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; throw new Error('unexpected request'); };
+  const panel = mount(createStudioPanel, { t: key => key, startStudio: async () => ({ editorOrigin: 'http://127.0.0.2:47822', ticket: 'a'.repeat(32) }) });
+  try {
+    panel.render(); await new Promise(resolve => setImmediate(resolve));
+    panel.render(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls, 0);
+    assert.equal(find(panel.render(), 'div').filter(node => node.props.role === 'alert').length, 0);
+  } finally { panel.close(); globalThis.fetch = realFetch; cleanup(); }
+});
+
+test('restart messages require the current frame and origin; navigation rearms white-screen warning', async () => {
+  let receive;
+  browser({ addEventListener: (type, fn) => { if (type === 'message') receive = fn; }, removeEventListener() {} });
+  const realFetch = globalThis.fetch, realTimeout = globalThis.setTimeout, realClear = globalThis.clearTimeout;
+  let watchdog;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ studio: { running: true } }) });
+  globalThis.setTimeout = (fn, ms, ...args) => ms === 20000 ? (watchdog = fn, 123456) : realTimeout(fn, ms, ...args);
+  globalThis.clearTimeout = id => { if (id !== 123456) realClear(id); };
+  let calls = 0;
+  const panel = mount(createStudioPanel, { t: key => key, startStudio: async () => { calls++; return { editorOrigin: 'http://127.0.0.1:47822' }; } });
+  try {
+    panel.render(); await new Promise(resolve => setImmediate(resolve));
+    let tree = panel.render();
+    const frame = find(tree, 'iframe')[0], source = {};
+    frame.props.ref.current = { contentWindow: source };
+    const send = (origin, sender, data) => receive({ origin, source: sender, data });
+    const origin = 'http://127.0.0.1:47822';
+    send(origin, source, { type: 'no996-openfilm:boot', version: 1, rendered: true });
+    panel.render();
+    frame.props.onLoad();
+    watchdog();
+    tree = panel.render();
+    assert.equal(find(tree, 'iframe').length, 1, 'warning must preserve the frame');
+    assert.match(text(tree), /20 秒内没有回应/);
+    send(origin, source, { type: 'no996-openfilm:boot', version: 1, rendered: true });
+    assert.doesNotMatch(text(panel.render()), /20 秒内没有回应/);
+    send('http://evil.example', source, { type: 'no996-openfilm:restart', version: 1 });
+    send(origin, {}, { type: 'no996-openfilm:restart', version: 1 });
+    panel.render(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls, 1);
+    send(origin, source, { type: 'no996-openfilm:restart', version: 1 });
+    panel.render(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls, 2);
+  } finally { panel.close(); globalThis.fetch = realFetch; globalThis.setTimeout = realTimeout; globalThis.clearTimeout = realClear; cleanup(); }
+});
+
 // Minimal hook harness exercises the actual panel component without a browser or model.
 function mount(Panel, props) {
   const hooks = [], effects = []; let cursor = 0, tree;

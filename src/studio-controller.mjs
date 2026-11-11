@@ -52,6 +52,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   }
   let upstream;
   let disposed = false;
+  let lastHealthRunning;
   // The one live view of DSH's durable archive set. Optional: a profile without
   // the Workspace registry reports `available: false` instead of guessing.
   const archive = createArchiveWatcher(ctx);
@@ -307,9 +308,14 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         const found = roster.find(item => item?.id === 'openfilm-video-editing');
         preset = found ? { id: 'openfilm-video-editing', ok: !found.error && !found.failure, detail: String(found.error ?? found.failure ?? 'ok').slice(0, 200) } : { id: 'openfilm-video-editing', ok: false, detail: 'not registered' };
       } catch (error) { preset = { id: 'openfilm-video-editing', ok: false, detail: String(error?.message || error).slice(0, 200) }; }
+      const studio = await runtime.health();
+      if (studio.running !== lastHealthRunning) {
+        log.info('studio-health', { running: studio.running });
+        lastHealthRunning = studio.running;
+      }
       const body = JSON.stringify({
         mode: officialShell ? 'official' : 'dsh',
-        studio: runtime.status(),
+        studio,
         preset,
         proxy: proxy?.diagnostics?.() ?? null,
         // Whether this Host can see DSH's archive set, and how many Sessions it
@@ -366,6 +372,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       if (admission.peer.id !== ctx.connection.browserPeer.id) {
         res.writeHead(403).end('DSH_BROWSER_REQUIRED'); return;
       }
+      const bootStarted = Date.now();
+      let stage = 'validate';
       try {
         // Desktop serves its UI from a privileged app scheme and forwards this
         // already-authenticated call to the Host. It does not share DSH's
@@ -377,13 +385,20 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         if (!desktop && (browser.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(browser.hostname) || browser.port !== origin.port)) {
           res.writeHead(403).end('DSH_ORIGIN_REJECTED'); return;
         }
+        log.info('bootstrap-start', { desktop });
+        stage = 'studio';
         await runtime.ensureStarted();
-        if (disposed || !upstream) { res.writeHead(503).end(); return; }
+        if (disposed || !upstream) { log.warn('bootstrap-unavailable', { stage, disposed }); res.writeHead(503).end(); return; }
+        stage = 'proxy';
         const proxy = await proxyFor(desktop ? surface : browser.origin, desktop);
-        if (disposed) { res.writeHead(503).end(); return; }
+        if (disposed) { log.warn('bootstrap-unavailable', { stage, disposed }); res.writeHead(503).end(); return; }
+        stage = 'response';
         await proxy.bootstrap(res);
-      } catch {
-        // Upstream errors may contain bearer keys; never relay them.
+        log.info('bootstrap-finish', { status: res.statusCode, ms: Date.now() - bootStarted, desktop });
+      } catch (error) {
+        // Log only a bounded allowlisted error code: messages may contain bearer keys.
+        const code = ['STUDIO_START', 'STUDIO_CLOSE', 'STUDIO_DEPENDENCY'].includes(error?.code) ? error.code : 'OTHER';
+        log.warn('bootstrap-failed', { stage, code, ms: Date.now() - bootStarted });
         if (!res.headersSent) res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' });
         if (!res.writableEnded) res.end('Studio is unavailable');
       }

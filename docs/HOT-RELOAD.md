@@ -68,13 +68,13 @@ Host 模块由 DSH 的加载器按需重新求值。改完 `src/*.mjs` 后：
 2. `plugin_manager set_plugin enabled=true  target=include:dsh-openfilm`
 3. 浏览器 F5
 
-`npm run dev` 已经在文件改动时替你 touch 了整张模块图，所以第 1 步一定拿到新代码。
+`npm run dev` 在文件改动时会替你 touch 整张模块图；没有运行 watcher 时需手动 touch。管理器的每次操作都要检查返回的 `application` 和 `nextStep`，不能保证 disable/enable 一定立即应用。
 
 ### 为什么必须 touch（这是本仓最容易踩的坑）
 
 加载器会**只重新求值 mtime 变了的模块**。如果你只改了 `shell-extras.mjs`，而它的引入方 `studio-proxy.mjs` 没变，就会被缓存住——界面看起来"没生效"，其实是旧代码在跑。
 
-判断依据只有一个：`%TEMP%\dsh-openfilm-host.json` 里的 `version`/`startedAt`，以及 `%TEMP%\dsh-openfilm\plugin.log` 里的 `host-start`。**日志里没有新的 `host-start`，就是没重载。**
+检查 `%TEMP%\dsh-openfilm-host.json` 的 `version`/`startedAt` 和 `%TEMP%\dsh-openfilm\plugin.log` 的 `host-start`/`studio-warm`：它们能证明 Host 重建或未重建，但**不能单独证明所有客户端与插件状态已应用**。2026-11-11 曾出现 Host 已重建、管理器却返回 `restart-required`；此时必须如实报告，按 `nextStep` 完整重启 DSH，再刷新并在真实 GUI 验证。重启和刷新前提醒用户保存未保存的编辑。
 
 ---
 
@@ -105,7 +105,7 @@ DSH 的客户端插件热替换只在用 `pnpm run dev:web` 从同一个 DSH che
 
 ```sh
 npm run build                      # 正式产物（banner 与 dev 不同）
-node --test tests/*.test.mjs       # 当前 126 项 / 125 通过 / 1 跳过
+node --test tests/*.test.mjs       # 最近一次 192 项 / 191 通过 / 1 跳过
 ```
 
 然后按 `AGENTS.md` §4.1.1 重载一次，确认日志里 `host-start.version` 是新版本、`studio-warm` 没有失败。
