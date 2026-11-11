@@ -1,5 +1,15 @@
 # 更新记录
 
+## 0.7.7
+
+### 会话可以删除了（第三处上游改动）
+
+- 对话列表的每一行现在多一个垃圾桶按钮（`data-session-delete`），归档的行同样有：**两次点击才真的删**，第一次按钮变红并提示"再点一次删除"，4 秒不点自动复位；会话正在跑的时候按钮禁用。
+- 删除做的是真删除：`lib/chat-store.ts` 新增 `deleteChatSession()`，把会话从列表里去掉、同时把 `turns` 里属于它的每一轮一起丢掉，然后走原有的 `saveSessions` 写回；Host 侧 `official-chat-store.saveSessions` 本来就会剪掉"列表里已不存在的会话"的轮次，所以磁盘上也不会留下孤儿记录。
+- 删的是当前正在看的那条时，自动建一条新的空对话接上；`last` 指向它的话一并清空。
+- 顺带说明 DSH 侧的边界：`sessionController` 的服务清单里**没有 delete**（有 list/create/rename/fork/prompt/cancel/archive 那一套，删除会话只有 ACP 层的 `session/delete` 给 agent 用），所以"删掉 DSH 会话"这件事 DSH 本身不提供；我们删的是面板里这条对话及其全部轮次，DSH 那条按项目共享的会话不受影响。
+- 测试：新增 `tests/official-chat-store-delete.test.mjs`（保存后列表里没有的会话，其轮次被剪掉并落盘）。
+
 ## 0.7.6
 
 ### 搜索框真的能搜了；返回按钮删掉

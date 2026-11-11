@@ -38,6 +38,9 @@ function main() {
   const PATCHED = [
     'apps/desktop/chat/src/lib/agent-menu-rows.ts',
     'apps/desktop/chat/src/components/ModelPopover.tsx',
+    'apps/desktop/chat/src/components/ConversationSessionBar.tsx',
+    'apps/desktop/chat/src/App.tsx',
+    'apps/desktop/chat/src/lib/chat-store.ts',
     'apps/desktop/chat/src/i18n/locales/en-US.ts',
     'apps/desktop/chat/src/i18n/locales/es.ts',
     'apps/desktop/chat/src/i18n/locales/ja.ts',

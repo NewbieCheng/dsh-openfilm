@@ -1,3 +1,99 @@
+diff --git a/apps/desktop/chat/src/App.tsx b/apps/desktop/chat/src/App.tsx
+index 9c7041b..4b98b79 100644
+--- a/apps/desktop/chat/src/App.tsx
++++ b/apps/desktop/chat/src/App.tsx
+@@ -69,6 +69,7 @@ import { studioRefsFromTransfer, transferHasStudioRefs } from '@/lib/studio-tran
+ import { agentModelSummary, agentOptions, currentAgent, effectivePrefs, offeredOption, useLocalAgents } from '@/state/local-agent-store';
+ import { useLiveActivityFromStore } from '@/lib/live-activity';
+ import { loadLastSession, loadSessions, newSession, saveLastSession, saveSessions } from '@/lib/local-sessions';
++import { deleteChatSession } from '@/lib/chat-store';
+ import type { ProjectSessionItem } from '@/lib/project-sessions';
+ import { conversationAgent, conversationPrefs, keptPrefs } from '@/lib/conversation-agent';
+ import { AGENT_DEFINITIONS, isAgentId } from '../../src/agent-definitions.mjs';
+@@ -964,6 +965,13 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+   const onSelectSession = (id: string) => { setSessionId(id); composerRef.current?.focus(); };
+   const onRenameSession = (id: string, title: string) => editSession(id, { title });
+   const onPinSession = (id: string, pinned: boolean) => editSession(id, { pinned });
++  /* deleted for good: the record and every turn it held go, and a new conversation takes its place */
++  const onDeleteSession = (id: string) => {
++    if (running.has(id)) return;
++    deleteChatSession(projectKey, id);
++    setSessions((list) => list.filter((s) => s.id !== id));
++    if (id === sessionId) setSessionId(newSession().id);
++  };
+   /* the conversation shown, archived: a new one in its place */
+   const onArchiveSession = (id: string, archived: boolean) => {
+     if (archived && running.has(id)) return;
+@@ -1132,6 +1140,7 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+                   onRenameSession={onRenameSession}
+                   onPinSession={onPinSession}
+                   onArchiveSession={onArchiveSession}
++                  onDeleteSession={onDeleteSession}
+                 />
+                 <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                   {/* the first message well below the session bar, as a chat app opens a conversation; the last well above
+diff --git a/apps/desktop/chat/src/components/ConversationSessionBar.tsx b/apps/desktop/chat/src/components/ConversationSessionBar.tsx
+index 102217b..7691503 100644
+--- a/apps/desktop/chat/src/components/ConversationSessionBar.tsx
++++ b/apps/desktop/chat/src/components/ConversationSessionBar.tsx
+@@ -1,7 +1,7 @@
+ 'use client';
+ 
+ import React from 'react';
+-import { Archive, ArchiveRestore, ChevronDown, ChevronRight, MessageCircle, Pencil, Pin, PinOff, Plus, Search } from 'lucide-react';
++import { Archive, ArchiveRestore, ChevronDown, ChevronRight, MessageCircle, Pencil, Pin, PinOff, Plus, Search, Trash2 } from 'lucide-react';
+ import { limitTitleWidth, SESSION_TITLE_MAX_WIDTH } from '@openfilm/shared';
+ import { Popover, keepFocus } from './Popover';
+ import { Tooltip } from './Tooltip';
+@@ -17,6 +17,8 @@ interface SessionActions {
+   onRenameSession?: (id: string, title: string) => void;
+   onPinSession?: (id: string, pinned: boolean) => void;
+   onArchiveSession?: (id: string, archived: boolean) => void;
++  /** Delete a conversation for good: its record and every turn it holds. */
++  onDeleteSession?: (id: string) => void;
+ }
+ 
+ /** A title being renamed, in place: Enter or leaving keeps it, Esc lets it go (`onDone(null)`). */
+@@ -172,12 +174,20 @@ export function ConversationBar({
+ const ROW_BTN = menu.iconButton;
+ 
+ /** One conversation in the history: its title, a running one turning; each row has its own actions. */
+-function SessionRow({ item, label, active, turnId, unseen, onSelect, onRenameSession, onPinSession, onArchiveSession }: SessionActions & {
++function SessionRow({ item, label, active, turnId, unseen, onSelect, onRenameSession, onPinSession, onArchiveSession, onDeleteSession }: SessionActions & {
+   item: ProjectSessionItem; label: string; active: boolean; turnId: string | null; unseen?: 'done' | 'error'; onSelect: () => void;
+ }) {
+   const running = Boolean(turnId);
+   const t = useT();
+   const [renaming, setRenaming] = React.useState(false);
++  /* Deleting a conversation throws its turns away, so it takes two clicks: the second
++   * on the same row, within the time it takes to change one's mind. */
++  const [confirming, setConfirming] = React.useState(false);
++  React.useEffect(() => {
++    if (!confirming) return undefined;
++    const timer = window.setTimeout(() => setConfirming(false), 4000);
++    return () => window.clearTimeout(timer);
++  }, [confirming]);
+   const icon = item.pinned ? <Pin size={13} className={menu.rowIcon} /> : <MessageCircle size={13} className={menu.rowIcon} />;
+   return (
+     <div className={`group ${menu.row} ${active ? menu.active : ''} ${renaming ? menu.editing : ''}`}>
+@@ -221,6 +231,17 @@ function SessionRow({ item, label, active, turnId, unseen, onSelect, onRenameSes
+               </button>
+             </Tooltip>
+           ) : null}
++          {onDeleteSession ? (
++            <Tooltip label={t(confirming ? 'projectMenu.deleteConfirm' : 'projectMenu.delete')} side="bottom">
++              <button type="button" data-session-delete={item.id}
++                aria-label={t(confirming ? 'projectMenu.deleteConfirm' : 'projectMenu.delete')}
++                onMouseDown={keepFocus} disabled={running}
++                onClick={() => { if (!confirming) { setConfirming(true); return; } setConfirming(false); onDeleteSession(item.id); }}
++                className={`${ROW_BTN} ${confirming ? 'text-[var(--danger,#ef4444)]' : ''}`}>
++                <Trash2 size={13} />
++              </button>
++            </Tooltip>
++          ) : null}
+         </div>
+       )}
+     </div>
 diff --git a/apps/desktop/chat/src/components/ModelPopover.tsx b/apps/desktop/chat/src/components/ModelPopover.tsx
 index 6800d48..f9bf9ff 100644
 --- a/apps/desktop/chat/src/components/ModelPopover.tsx
@@ -278,7 +374,7 @@ index 6800d48..f9bf9ff 100644
    );
  }
 diff --git a/apps/desktop/chat/src/i18n/locales/en-US.ts b/apps/desktop/chat/src/i18n/locales/en-US.ts
-index b5a098a..5edea94 100644
+index b5a098a..0f33565 100644
 --- a/apps/desktop/chat/src/i18n/locales/en-US.ts
 +++ b/apps/desktop/chat/src/i18n/locales/en-US.ts
 @@ -130,6 +130,8 @@ export const enUS = {
@@ -290,8 +386,17 @@ index b5a098a..5edea94 100644
      contextFull: 'This conversation is getting long. A new one will work better.',
      contextFullNew: 'New conversation',
      agentLoading: 'Loading…',
+@@ -244,6 +246,8 @@ export const enUS = {
+     untitledSession: 'New chat',
+   },
+   projectMenu: {
++    delete: 'Delete',
++    deleteConfirm: 'Click again to delete',
+     archive: 'Archive',
+     archived: 'Archived',
+     asking: 'Waiting for you',
 diff --git a/apps/desktop/chat/src/i18n/locales/es.ts b/apps/desktop/chat/src/i18n/locales/es.ts
-index 12035f2..bce45c4 100644
+index 12035f2..9c42b0e 100644
 --- a/apps/desktop/chat/src/i18n/locales/es.ts
 +++ b/apps/desktop/chat/src/i18n/locales/es.ts
 @@ -130,6 +130,8 @@ export const es: Words = {
@@ -303,8 +408,17 @@ index 12035f2..bce45c4 100644
      contextFull: 'Esta conversación ya es larga. Una nueva funcionará mejor.',
      contextFullNew: 'Nueva conversación',
      agentLoading: 'Cargando…',
+@@ -243,6 +245,8 @@ export const es: Words = {
+     untitledSession: 'Nuevo chat',
+   },
+   projectMenu: {
++    delete: 'Eliminar',
++    deleteConfirm: 'Haz clic otra vez para eliminar',
+     archive: 'Archivar',
+     archived: 'Archivados',
+     asking: 'Esperando tu respuesta',
 diff --git a/apps/desktop/chat/src/i18n/locales/ja.ts b/apps/desktop/chat/src/i18n/locales/ja.ts
-index 771e3eb..4bb19ce 100644
+index 771e3eb..fee5c03 100644
 --- a/apps/desktop/chat/src/i18n/locales/ja.ts
 +++ b/apps/desktop/chat/src/i18n/locales/ja.ts
 @@ -130,6 +130,8 @@ export const ja: Words = {
@@ -316,8 +430,17 @@ index 771e3eb..4bb19ce 100644
      contextFull: 'この会話は長くなっています。新しい会話のほうがうまくいきます。',
      contextFullNew: '新しい会話',
      agentLoading: '読み込み中…',
+@@ -243,6 +245,8 @@ export const ja: Words = {
+     untitledSession: '新しいチャット',
+   },
+   projectMenu: {
++    delete: '削除',
++    deleteConfirm: 'もう一度クリックで削除',
+     archive: 'アーカイブ',
+     archived: 'アーカイブ済み',
+     asking: '回答待ち',
 diff --git a/apps/desktop/chat/src/i18n/locales/ko.ts b/apps/desktop/chat/src/i18n/locales/ko.ts
-index da3793f..7f07526 100644
+index da3793f..a9246a4 100644
 --- a/apps/desktop/chat/src/i18n/locales/ko.ts
 +++ b/apps/desktop/chat/src/i18n/locales/ko.ts
 @@ -126,6 +126,8 @@ export const ko: Words = {
@@ -329,8 +452,17 @@ index da3793f..7f07526 100644
      contextFull: '대화가 길어졌습니다. 새 대화를 시작하면 더 잘 됩니다.',
      contextFullNew: '새 대화',
      agentLoading: '불러오는 중…',
+@@ -239,6 +241,8 @@ export const ko: Words = {
+     untitledSession: '새 채팅',
+   },
+   projectMenu: {
++    delete: '삭제',
++    deleteConfirm: '한 번 더 클릭하면 삭제',
+     archive: '보관',
+     archived: '보관됨',
+     asking: '답변 대기 중',
 diff --git a/apps/desktop/chat/src/i18n/locales/zh-CN.ts b/apps/desktop/chat/src/i18n/locales/zh-CN.ts
-index eccacdb..8b83b3b 100644
+index eccacdb..5552356 100644
 --- a/apps/desktop/chat/src/i18n/locales/zh-CN.ts
 +++ b/apps/desktop/chat/src/i18n/locales/zh-CN.ts
 @@ -130,6 +130,8 @@ export const zhCN: Words = {
@@ -342,6 +474,15 @@ index eccacdb..8b83b3b 100644
      contextFull: '这段对话已经很长了，开个新对话效果更好。',
      contextFullNew: '新对话',
      agentLoading: '正在加载…',
+@@ -243,6 +245,8 @@ export const zhCN: Words = {
+     untitledSession: '新对话',
+   },
+   projectMenu: {
++    delete: '删除',
++    deleteConfirm: '再点一次删除',
+     archive: '归档',
+     archived: '已归档',
+     asking: '等你回答',
 diff --git a/apps/desktop/chat/src/lib/agent-menu-rows.ts b/apps/desktop/chat/src/lib/agent-menu-rows.ts
 index 603a205..728944a 100644
 --- a/apps/desktop/chat/src/lib/agent-menu-rows.ts
@@ -359,3 +500,29 @@ index 603a205..728944a 100644
  }
  
  /**
+diff --git a/apps/desktop/chat/src/lib/chat-store.ts b/apps/desktop/chat/src/lib/chat-store.ts
+index 9134f7a..7eb8990 100644
+--- a/apps/desktop/chat/src/lib/chat-store.ts
++++ b/apps/desktop/chat/src/lib/chat-store.ts
+@@ -88,6 +88,21 @@ export function setChatSessions(project: string, sessions: ProjectSessionItem[])
+   writeSessions(project);
+ }
+ 
++/**
++ * Delete one conversation for good: its record, and every turn it still held.
++ *
++ * Turns are dropped here as well as on the Host: the Host prunes them when the
++ * saved list no longer names their session, and the page must not keep drawing a
++ * conversation nobody can reach any more.
++ */
++export function deleteChatSession(project: string, id: string) {
++  const chat = record(project);
++  chat.sessions = chat.sessions.filter((s) => s.id !== id);
++  chat.turns = chat.turns.filter((entry) => entry.turn.sessionId !== id);
++  if (chat.last === id) chat.last = null;
++  writeSessions(project);
++}
++
+ export const lastSession = (project: string): string | null => record(project).last;
+ export function setLastSession(project: string, id: string) {
+   const chat = record(project);
