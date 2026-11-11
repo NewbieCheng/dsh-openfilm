@@ -23,7 +23,9 @@
 
 **内核升级：openfilm 0.3.1 → 0.3.2**（2026-11-09 上游发布）。逐块比对后确认是**增量**：`server.mjs` 新增 `duplicate` 项目、文件变更后 `notifyReferences`、复合片段的 `wave`；`pageframes.mjs` 新增 `compoundSound`（`pageFrame` 签名不变）；`exports.mjs` 增加剪映/CapCut 草稿与 HEVC alpha，`ExportAsk` 字段未删；`get.mjs` 仅改 typedef；`websocket.mjs` / `http.mjs` 零变化（我们的代理帧假设仍成立）；`bin/openfilm.mjs` 与 `library-search.mjs` 逐字节相同。**界面快照 `vendor/official-shell` 仍是 0.3.1**：重建它需要上游 git checkout 到固定 commit，且会改 DOM/CSS，需真机验收后再动。
 
-验证：323 项测试，322 通过、1 跳过（真实 GUI 验收清单见 `docs/TEST-CHECKLIST.md`，最后统一跑一次）。
+**修复（第二次加载即暴露）**：注入脚本在 `<head>` 里执行，此时 `document.body` 还是 `null`，`permissionGate` 的 `mount()` 直接 `body.appendChild` 抛 `Cannot read properties of null (reading 'appendChild')`，后续注入全部中断。改为「没有 body 就等 `DOMContentLoaded` 再挂载」，并给三处 `createTreeWalker(document.body…)` 加了 `||document.documentElement` 兜底；`tests/shell-ui-asi.test.mjs` 增加 head-only 场景（body=null 时不抛、收到 DOMContentLoaded 后正常挂载），并用「改回旧写法」的反向控制证明能复现原报错。
+
+验证：324 项测试，323 通过、1 跳过（真实 GUI 验收清单见 `docs/TEST-CHECKLIST.md`，最后统一跑一次）。
 ## 0.6.1
 
 - Studio 失联时探测实际服务状态，清理旧代理后支持重新启动；面板在后续页面导航无响应时提供诊断和重试。

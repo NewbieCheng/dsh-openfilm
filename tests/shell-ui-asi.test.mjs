@@ -35,19 +35,29 @@ function stubElement(tag = 'div') {
   return element;
 }
 
-function runInStubDom() {
+function runInStubDom({ headOnly = false } = {}) {
+  const listeners = new Map();
   const document = {
-    readyState: 'complete',
+    readyState: headOnly ? 'loading' : 'complete',
     documentElement: stubElement('html'),
     head: stubElement('head'),
-    body: stubElement('body'),
+    // headOnly: the script is injected in <head>, so body does not exist yet.
+    body: headOnly ? null : stubElement('body'),
     createElement: tag => stubElement(tag),
     createTextNode: text => ({ textContent: text }),
     createDocumentFragment: () => stubElement('fragment'),
     querySelector: () => null,
     querySelectorAll: () => [],
     getElementById: () => null,
-    addEventListener() {}, removeEventListener() {},
+    addEventListener(type, handler) {
+      const list = listeners.get(type) ?? [];
+      list.push(handler);
+      listeners.set(type, list);
+    },
+    removeEventListener(type, handler) {
+      const list = listeners.get(type);
+      if (list) listeners.set(type, list.filter(entry => entry !== handler));
+    },
     cookie: '',
   };
   const window = {
@@ -79,11 +89,27 @@ function runInStubDom() {
     'innerWidth', 'innerHeight', 'devicePixelRatio', 'scrollY', 'addEventListener', source);
   run(document, window, location, navigator, localStorage, fetch, getComputedStyle, MutationObserver,
     setInterval, setTimeout, requestAnimationFrame, innerWidth, innerHeight, devicePixelRatio, scrollY, () => {});
-  return { document, timers };
+  // `headOnly` pages fire this once the body exists; the real page does the same.
+  const fire = type => { for (const handler of listeners.get(type) ?? []) handler({ type }); };
+  return { document, timers, fire };
 }
 
 test('the injected script loads as a page script instead of throwing', () => {
   assert.doesNotThrow(runInStubDom);
+});
+
+// The script is injected inside <head>, so at execution time document.body is
+// null. Reading `body.appendChild` there threw "Cannot read properties of null"
+// and killed the rest of the injection; it must wait for the body instead.
+test('a page that has no body yet does not throw, and mounts once it does', () => {
+  // The page guard is global: clear it so this test really executes the file.
+  delete globalThis.__no996ShellUi;
+  const { document, fire } = runInStubDom({ headOnly: true });
+  assert.equal(document.body, null);
+  document.body = stubElement('body');
+  assert.doesNotThrow(() => fire('DOMContentLoaded'));
+  const ids = document.body.children.map(child => child.id ?? child.tagName);
+  assert.ok(ids.length > 0, `expected the overlay to be mounted, got ${JSON.stringify(ids)}`);
 });
 
 test('loading twice is a no-op rather than a second set of listeners', () => {

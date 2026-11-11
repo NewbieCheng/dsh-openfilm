@@ -214,7 +214,7 @@
   reload.addEventListener('mouseleave',function(){reload.style.background='transparent';});
   function findHeaderAnchor(){
     try{
-      var walker=document.createTreeWalker(document.body,4,null);
+      var walker=document.createTreeWalker(document.body||document.documentElement,4,null);
       var node;
       while((node=walker.nextNode())){
         if((node.nodeValue||'').trim()!=='剪辑')continue;
@@ -545,7 +545,7 @@
       if(labels.every(function(label){return extrasApplied[label]&&extrasApplied[label].isConnected;}))return;
       // Match the text node itself: these links carry a chevron icon beside the label,
       // so requiring a childless element would miss them.
-      var walker=document.createTreeWalker(document.body,4,null);
+      var walker=document.createTreeWalker(document.body||document.documentElement,4,null);
       var node;
       while((node=walker.nextNode())){
         if(labels.indexOf((node.nodeValue||'').trim())<0)continue;
@@ -572,7 +572,7 @@
   // from the line never reached the links.
   function tuneAbout(){
     try{
-      var walker=document.createTreeWalker(document.body,4,null);
+      var walker=document.createTreeWalker(document.body||document.documentElement,4,null);
       var node,footerRow=null;
       while((node=walker.nextNode())){
         var text=(node.nodeValue||'').trim();
@@ -737,8 +737,17 @@
   var later=button('先不决定',false,function(){ card.hidden=true; chip.hidden=false; });
   body.appendChild(title); body.appendChild(note);
   card.appendChild(body); card.appendChild(actions); card.appendChild(status);
+  // 注入点在 <head> 里：脚本执行时 document.body 还不存在。以前这里直接
+  // body.appendChild，页面报 "Cannot read properties of null (reading 'appendChild')"。
+  // 现在：没有 body 就等 DOMContentLoaded，绝不在 <html> 里乱塞节点。
+  function appendToBody(){
+    var host=document.body;
+    if(!host) return false;
+    if(!chip.isConnected){ host.appendChild(chip); host.appendChild(card); }
+    return true;
+  }
   function mount(){
-    if(!chip.isConnected){ document.body.appendChild(chip); document.body.appendChild(card); }
+    if(!appendToBody()){ document.addEventListener('DOMContentLoaded',mount,{once:true}); return; }
     chip.addEventListener('click',function(){ card.hidden=false; chip.hidden=true; });
   }
   var current=''; var rest=null; var asking='';
