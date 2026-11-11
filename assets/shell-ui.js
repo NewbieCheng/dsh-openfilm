@@ -593,7 +593,7 @@
       if(footerRow&&!document.querySelector('[data-no996-version]')){
         var tag=document.createElement('div');
         tag.setAttribute('data-no996-version','1');
-        tag.textContent='兼容 OpenFilm '+(globalThis.__no996OpenfilmVersion||'0.3.2');
+        tag.textContent='兼容 OpenFilm '+(globalThis.__no996OpenfilmVersion||'0.3.1');
         tag.style.cssText='margin-top:6px;text-align:left;font-size:11px;color:#8a8a93';
         footerRow.appendChild(tag);
       }
@@ -705,11 +705,19 @@
 // 前一个语句以 `})()` 结束、这一行以 `(` 开头：缺了这个分号，JS 会把两个
 // IIFE 连成 `})(…)` 的调用链，报 "(intermediate value)… is not a function"。
 ;(function permissionGate(){
+  // 响应不一定是 JSON：被拒的通道回的是空 body（content-length: 0），
+  // 直接 r.json() 会抛 "Unexpected end of JSON input"。空/坏 body 一律当成
+  // 一个带错误码的对象，调用方据此给出人话，而不是让页面挂掉。
   function call(channel,payload){
     return fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({channel:channel,payload:payload})})
-      .then(function(r){return r.json();});
+      .then(function(r){
+        return r.text().then(function(text){
+          if(!text){ return r.ok?{}:{error:'HTTP '+r.status}; }
+          try{ return JSON.parse(text); }catch(e){ return {error:'HTTP '+r.status}; }
+        });
+      });
   }
-  function log(event){ try{ call('client:log',{event:event}); }catch(e){} }
+  function log(event){ try{ call('client:log',{event:event}).catch(function(){}); }catch(e){} }
   function projectIdOf(){
     var m=/^\/projects\/([A-Za-z0-9_-]{6,40})\/?$/.exec(location.pathname||'');
     return m?m[1]:'';

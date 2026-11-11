@@ -1,7 +1,7 @@
 # 0.7.0 设计文档：让"一句话出片"真的成立
 
 > 这份是**设计**（为什么这样搭、各层契约是什么、失败怎么退化）；排期与验收在 `PLAN-0.7.0-AGENT.md`，最后由你一次性跑的在 `TEST-CHECKLIST.md`。
-> 版本：0.7.0 设计基线（对应插件 0.6.1 → 0.7.0）。上游 pin：`openfilm@0.3.2`（内核）；界面快照 `vendor/official-shell` 仍为 0.3.1。
+> 版本：0.7.0 设计基线（对应插件 0.6.1 → 0.7.0）。上游 pin：`openfilm@0.3.1`（内核与 `vendor/official-shell` 快照必须同版本）。
 
 ---
 
@@ -33,7 +33,7 @@
 │        │ emit(projectId, event)                                                     │
 │  official-event-hub ──SSE──▶ 官方壳子（vendor/official-shell，React，自己的 act 词典）│
 │        │                                                                            │
-│  studio-controller ── HTTP ──▶ Studio（上游内核 0.3.2，界面快照 0.3.1；自带 Chromium 渲染 + ffmpeg 导出）│
+│  studio-controller ── HTTP ──▶ Studio（上游 0.3.1；自带 Chromium 渲染 + ffmpeg 导出）│
 │        │  key 只在 Host                                                            │
 └────────┼───────────────────────────────────────────────────────────────────────────┘
          │ /__dsh/official-rpc（白名单 channel）、/__dsh/official-events（SSE）

@@ -575,10 +575,16 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         log.info('bootstrap-finish', { status: res.statusCode, ms: Date.now() - bootStarted, desktop });
       } catch (error) {
         // Log only a bounded allowlisted error code: messages may contain bearer keys.
-        const code = ['STUDIO_START', 'STUDIO_CLOSE', 'STUDIO_DEPENDENCY'].includes(error?.code) ? error.code : 'OTHER';
+        // OFFICIAL_SHELL_UNAVAILABLE belongs here: it is the one failure a person can
+        // act on (the bundled shell does not match the pinned OpenFilm kernel), and
+        // without it the log only ever said "OTHER".
+        const allowed = ['STUDIO_START', 'STUDIO_CLOSE', 'STUDIO_DEPENDENCY', 'OFFICIAL_SHELL_UNAVAILABLE'];
+        const code = allowed.includes(error?.code) ? error.code : 'OTHER';
         log.warn('bootstrap-failed', { stage, code, ms: Date.now() - bootStarted });
         if (!res.headersSent) res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' });
-        if (!res.writableEnded) res.end('Studio is unavailable');
+        // The panel shows this body beside the status: naming the code is the
+        // difference between "broken" and "the shell and the kernel disagree".
+        if (!res.writableEnded) res.end(`Studio is unavailable (${code})`);
       }
     },
   });
@@ -676,7 +682,9 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       if (!disposed && upstream) await proxyFor(webOrigin);
       log.info('studio-warm', { ms: Date.now() - started });
     } catch (error) {
-      log.warn('studio-warm-failed', { message: String(error?.message || error) });
+      // A code, never the message: upstream messages may carry keys or paths.
+      const code = String(error?.code || 'OTHER');
+      log.warn('studio-warm-failed', { code, message: String(error?.message || error) });
     }
   })();
   return async () => {

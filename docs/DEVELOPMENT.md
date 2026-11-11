@@ -5,7 +5,7 @@
 
 - 版本：`0.5.8`
 - 运行时：Node 20+，DSH 内核（需 `session-controller`、`storageDomain`、`webServer`、`llm`、`agents`）
-- 上游内核：`openfilm@0.3.2`（`package.json` 里的 tarball URL 是唯一版本来源）。界面快照仍是 `vendor/official-shell` 0.3.1：重建它需要上游 git checkout 到指定 commit，见 `scripts/build-official-shell.mjs`。
+- 上游：`openfilm@0.3.1`（`package.json` 里的 tarball URL 是唯一版本来源）。**内核版本必须与 `vendor/official-shell` 快照同版本**：`resolveOfficialShell()` 会拒绝不匹配的快照（表现为面板 503、项目会话建不起来、九个项目工具从会话里消失）。重建快照见 `scripts/build-official-shell.mjs`，需要上游 git checkout。
 
 ---
 

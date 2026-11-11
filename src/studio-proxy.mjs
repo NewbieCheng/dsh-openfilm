@@ -521,7 +521,11 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
             Object.keys(value).length !== 2 || typeof value.channel !== 'string' || !Object.hasOwn(value, 'payload')) return fail(res, 400);
         // These fixed channels do not access project data; they still require
         // the editor's authenticated origin, cookie and same-site checks above.
-        const needsProject = value.channel !== 'template:list' && value.channel !== 'template:create' && value.channel !== 'environment:check';
+        // `client:log` is here too: it is a page-side diagnostic line about this
+        // page itself, it carries no project id, and gating it on a project made
+        // the page's own logging fail with an empty 403 body.
+        const needsProject = value.channel !== 'template:list' && value.channel !== 'template:create'
+          && value.channel !== 'environment:check' && value.channel !== 'client:log';
         if (needsProject && await authorizeOfficialProject(req, value.payload?.projectId) !== true) return fail(res);
         const result = await officialRpc(value.channel, value.payload);
         if (closed || res.destroyed || res.writableEnded) return;
