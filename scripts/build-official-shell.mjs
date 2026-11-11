@@ -30,11 +30,12 @@ function main() {
   const head = git(checkout, 'rev-parse', 'HEAD').toString('utf8').trim();
   if (head !== COMMIT) fail(`Expected upstream HEAD ${COMMIT}, got ${head}`);
   // A matching HEAD alone does not identify the working-tree inputs used for a build.
-  // dsh-openfilm keeps exactly one upstream edit: the composer menu renders the
-  // permission row the Host offers (apps/desktop/chat/src/lib/agent-menu-rows.ts).
+  // dsh-openfilm keeps exactly two upstream edits: the composer menu renders the
+  // permission row the Host offers (agent-menu-rows.ts), and its choices open in
+  // place (ModelPopover.tsx) instead of in a panel beside it.
   // Any other tracked change is still refused, and the diff is recorded into the
   // snapshot as patch.diff so the fork stays reviewable and re-appliable.
-  const PATCHED = ['apps/desktop/chat/src/lib/agent-menu-rows.ts'];
+  const PATCHED = ['apps/desktop/chat/src/lib/agent-menu-rows.ts', 'apps/desktop/chat/src/components/ModelPopover.tsx'];
   const dirty = git(checkout, 'status', '--porcelain', '--untracked-files=no').toString('utf8')
     .split('\n').map(line => line.replace(/\r$/, '')).filter(Boolean).map(line => line.slice(3).trim());
   const unexpected = dirty.filter(path => !PATCHED.includes(path));

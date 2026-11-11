@@ -36,9 +36,10 @@ test('the shell snapshot declares its one upstream patch, or none at all', () =>
     assert.equal(existsSync(patchFile), false, 'a patch.diff without manifest.patch is an unrecorded fork');
     return;
   }
-  assert.deepEqual(manifest.patch.files, ['apps/desktop/chat/src/lib/agent-menu-rows.ts']);
+  assert.deepEqual([...manifest.patch.files].sort(), ['apps/desktop/chat/src/components/ModelPopover.tsx', 'apps/desktop/chat/src/lib/agent-menu-rows.ts']);
   assert.equal(existsSync(patchFile), true, 'manifest.patch must ship as patch.diff');
   const diff = readFileSync(patchFile, 'utf8');
   assert.match(diff, /^diff --git /m);
-  assert.match(diff, /category === 'permission'/, 'the recorded diff must be the permission row');
+  assert.match(diff, /category === 'permission'/, 'the recorded diff must include the permission row');
+  assert.match(diff, /data-agent-option-level/, 'and the one-level menu');
 });
