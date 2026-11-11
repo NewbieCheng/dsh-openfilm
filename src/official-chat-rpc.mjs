@@ -78,9 +78,23 @@ export function createOfficialChatRpc(store, agent, options = {}) {
       // Thinking intensity: the option for the project's current model, and the
       // person's choice. Both are validated against the live catalog in the
       // Host; the page only names a value it was shown.
-      if (channel === 'agent:thinking' && exact(payload, ['projectId']) && typeof agent?.thinkingOption === 'function') {
-        return await agent.thinkingOption(payload.projectId);
+      //
+      // The option list is a convenience — a menu that can also offer "auto" — so
+      // a failure here must never fail the panel that asked for it. It used to
+      // throw, the catch below turned that into OFFICIAL_CHAT_UNAVAILABLE, and the
+      // person saw a red 503 toast for a menu nobody opened. Degrading to null
+      // keeps the reason in the log and the panel usable.
+      if (channel === 'agent:thinking' && exact(payload, ['projectId'])) {
+        if (typeof agent?.thinkingOption !== 'function') return null;
+        try {
+          return await agent.thinkingOption(payload.projectId);
+        } catch (error) {
+          const reason = String(error?.code ?? error?.message ?? error).slice(0, 120);
+          if (typeof options.log === 'function') options.log('agent-thinking-unavailable', { reason });
+          return null;
+        }
       }
+
       if (channel === 'agent:select-thinking' && exact(payload, ['projectId', 'value']) &&
           typeof payload.value === 'string' && typeof agent?.selectThinking === 'function') {
         return await agent.selectThinking(payload.projectId, payload.value);
@@ -108,6 +122,13 @@ export function createOfficialChatRpc(store, agent, options = {}) {
       // Storage failures and user-controlled data must never expose a path,
       // upstream key, history or stack to the renderer.
       if (error?.code === 'OFFICIAL_CHAT_ARCHIVED') throw error;
+      // Our own codes name the cause without carrying a path or a stack, so they
+      // are kept: collapsing them into OFFICIAL_CHAT_UNAVAILABLE is what made a
+      // 503 unreadable in the first place.
+      if (typeof error?.code === 'string' && /^OFFICIAL_(AGENT|CHAT)_[A-Z][A-Z_]{2,40}$/.test(error.code) &&
+          error.code !== 'OFFICIAL_CHAT_UNAVAILABLE') {
+        throw Object.assign(new Error(error.code), { code: error.code });
+      }
       throw failure();
     }
   };

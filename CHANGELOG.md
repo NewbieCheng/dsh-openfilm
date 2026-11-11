@@ -1,5 +1,22 @@
 # 更新记录
 
+## 0.8.1
+
+### 修：面板弹 `[HTTP 503] OFFICIAL_CHAT_UNAVAILABLE (agent:thinking)`
+
+这是一个**可选菜单**把整块面板拖下水的 bug，由三件事叠出来：
+
+1. 面板每次开合、每轮结束都会顺手问一句 `agent:thinking`（只为「思考强度」菜单选项）。
+2. Host 侧 `official-chat-rpc.mjs` 里这个分支原来是 `if (… && typeof agent?.thinkingOption === 'function') return await agent.thinkingOption(…)`，**一旦 Host 那时答不上来（项目还没验证完、会话正在跑），异常就落到底部 `catch`，被统一压成 `OFFICIAL_CHAT_UNAVAILABLE`**。
+3. 页面里的抓取包装对所有 5xx 都弹红色横幅，于是"一个没人打开的菜单"变成一条红条。
+
+修法：
+
+- `agent:thinking` 改为**可选面**：Host 答不上来就返回 `null`，把真实原因写进插件日志（`agent-thinking-unavailable`），菜单只剩已有行，操作不受影响。
+- 底部 `catch` 不再把所有错误压平：`OFFICIAL_AGENT_*` / `OFFICIAL_CHAT_*` 这类我们自己的错误码原样透出（只透码，不带路径和栈），下次 503 就能直接看出原因。
+- 页面里的抓取包装对**可选通道**（`agent:thinking`、`agent:models`、`agent:permission`、`agent:trace`、`chat:archive-state`、`chat:log`）不再弹横幅，只留给真正失败的操作。
+- 测试：`tests/official-chat-rpc.test.mjs` 新增三例（降级为 null 且记日志、正常时照旧返回、自有错误码原样透出）。
+
 ## 0.8.0
 
 ### 面板里看得见思考（第四处上游改动）

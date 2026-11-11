@@ -247,6 +247,9 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       unarchive: async projectId => { const current = await archiveState(projectId); await archive.unarchive(current.sessionId); },
       // The trace tab's reading: what this turn called and what came back.
       turnLog: turnLogOf,
+      // A degraded optional surface (the thinking menu) says why here instead of
+      // raising a 503 the person has to read.
+      log: (event, fields) => { void log.info(event, fields); },
     })(channel, payload);
   };
   // Stage 1 trust model: the editor origin is the official OpenFilm window for

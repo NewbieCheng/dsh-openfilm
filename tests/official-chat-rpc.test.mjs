@@ -89,3 +89,39 @@ test('without a turn log the channel stays refused rather than inventing one', a
   const { dispatch } = rpc();
   await assert.rejects(() => dispatch('chat:log', { projectId: 'film123', turnId: 'local:1' }));
 });
+// A menu is not a reason to fail the whole panel.
+//
+// agent:thinking feeds the thinking menu only. When the Host could not answer —
+// a project whose session was not open yet, a catalog that had just changed — the
+// throw used to be masked into OFFICIAL_CHAT_UNAVAILABLE and the person got a red
+// 503 toast for a menu they never opened (seen in the panel: "OFFICIAL_CHAT_UNAVAILABLE
+// (agent:thinking)"). It degrades to null now, and says why in the log.
+test('the thinking menu degrades to null instead of failing the panel', async () => {
+  const logged = [];
+  const dispatch = createOfficialChatRpc(store(), {
+    thinkingOption: async () => { throw Object.assign(new Error('nope'), { code: 'OFFICIAL_AGENT_UNVERIFIED' }); },
+  }, {
+    state: async projectId => ({ projectId, archived: false, available: true, sessionId: 'session-a' }),
+    log: (event, fields) => logged.push([event, fields]),
+  });
+  assert.equal(await dispatch('agent:thinking', { projectId: 'project1' }), null);
+  assert.deepEqual(logged, [['agent-thinking-unavailable', { reason: 'OFFICIAL_AGENT_UNVERIFIED' }]]);
+});
+
+test('the thinking menu still answers when the Host can build it', async () => {
+  const option = { id: 'thinking', name: 'Thinking', category: 'thought_level', type: 'select', options: [] };
+  const dispatch = createOfficialChatRpc(store(), { thinkingOption: async () => option }, {
+    state: async projectId => ({ projectId, archived: false, available: true, sessionId: 'session-a' }),
+  });
+  assert.equal(await dispatch('agent:thinking', { projectId: 'project1' }), option);
+});
+
+test('our own failure codes survive instead of being flattened', async () => {
+  const dispatch = createOfficialChatRpc(store(), null, {
+    state: async () => { throw Object.assign(new Error('x'), { code: 'OFFICIAL_CHAT_RECOVERY_REQUIRED' }); },
+  });
+  await assert.rejects(
+    () => dispatch('chat:load', { projectId: 'project1' }),
+    error => error.code === 'OFFICIAL_CHAT_RECOVERY_REQUIRED',
+  );
+});
