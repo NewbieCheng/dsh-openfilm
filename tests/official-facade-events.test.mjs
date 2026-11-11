@@ -115,3 +115,38 @@ test('cancel before ready never dispatches prompt', async () => {
   env.sources[0].open(); env.sources[0].ready(); await tick();
   assert.equal(env.calls.filter(x => x.channel === 'agent:prompt').length, 0);
 });
+// The permission row: it has to reach the composer menu, and it must not invent a
+// preset the Host never applied.
+test('the permission row carries the Host preset and a real choice', async () => {
+  const sources = [];
+  const calls = [];
+  const factory = runInNewContext(officialFacadeSource, { EventSource: undefined, setTimeout: () => 0, clearTimeout: () => {} });
+  const facade = factory({ invoke: async (channel, payload) => {
+    calls.push({ channel, payload });
+    if (channel === 'agent:permission') return { current: 'danger-full-access', decided: 'danger-full-access', available: true };
+    if (channel === 'agent:permission-set') return { ok: true, preset: payload.preset, applied: true };
+    if (channel === 'agent:models') return { id: 'model', name: '模型', category: 'model', type: 'select', currentValue: 'a', options: [{ value: 'a', name: 'A' }] };
+    return null;
+  } });
+  const started = await facade.localAgents.start('deepseek', '', null, { projectId: 'project1' });
+  const option = (started.info?.configOptions || []).find(o => o && o.category === 'permission');
+  assert.ok(option, `expected a permission option, got ${JSON.stringify(started.configOptions)}`);
+  assert.equal(option.currentValue, 'danger-full-access');
+  // Values come from the vm realm, so compare textually rather than by prototype identity.
+  assert.equal(option.options.map(o => o.value).join(','), 'danger-full-access,workspace-write');
+  // Choosing it goes to the Host's own setter, not to a page-local pref.
+  await facade.localAgents.setOption(started.key, 'permission', 'workspace-write');
+  const set = calls.filter(c => c.channel === 'agent:permission-set').pop();
+  assert.equal(set?.payload?.preset, 'workspace-write');
+  assert.equal(sources.length, 0);
+});
+
+test('no applied preset means no permission row', async () => {
+  const factory = runInNewContext(officialFacadeSource, { EventSource: undefined, setTimeout: () => 0, clearTimeout: () => {} });
+  const facade = factory({ invoke: async (channel) => {
+    if (channel === 'agent:permission') return { current: null, available: false };
+    return null;
+  } });
+  const started = await facade.localAgents.start('deepseek', '', null, { projectId: 'project1' });
+  assert.equal((started.info?.configOptions || []).some(o => o && o.category === 'permission'), false);
+});

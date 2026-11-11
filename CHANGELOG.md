@@ -1,25 +1,15 @@
 # 更新记录
 
-## 0.7.0
+## 0.7.2
 
-**目标：让「一句话剪片」真的走得通——八步，每步对着一个用户能看见的问题。**
+### 权限搬进了模型菜单（唯一一处上游改动）
 
-| 步 | 之前的样子 | 现在 |
-|---|---|---|
-| 1 观测 | 右边空了只能靠猜 | `/diagnose.bridge` 给出 emitted/accepted/refused/kinds + 页面 seen，三路可对 |
-| 2 完全访问 | 每一步都被审批卡住 | 进项目一次性授权 `danger-full-access`，面板可随时改回 |
-| 3 模型/思考强度 | 只能用默认 | 模型来自 DSH 实时注册表，思考强度是一等选项，空闲时自动降档；预设提示词带 CLI 绝对路径与调用规约 |
-| 4 呈现 | 全部「正在处理」 | act 词典：读取/搜索/修改/执行/抓取/思考各有中文标签、文件名、命令；`todo_write` 变成计划清单 |
-| 5 审批/打断 | 右边看不到审批、打断报错、插话直接失败 | 审批卡出现在右侧且两侧都能答（后到者失效）；`aborted` 一律显示"已停止"；别人插话只发提示 |
-| 6 看得到 | 只能凭 film.html 猜 | `openfilm_frame`（Studio 自己画帧）/`openfilm_film`/`openfilm_library`/`openfilm_get` |
-| 7 落盘 | 不敢让它改文件 | `openfilm_clip` 原子写：hash 基线、写前二次比对、锁定轨道拒绝、最小 diff；`openfilm_assets` 走 Studio 导入管线 |
-| 8 出片 | 承诺了却不知道有没有文件 | `openfilm_export` 先读编码能力再排队，结果只认 `status` 里的 outputs；`openfilm_cli` 只开 doctor/look/render，argv 自建 |
-
-新增模块：`studio-http`（唯一上游出口，错误信息给 key 打码）、`clip-tool`、`assets-tool`、`export-tool`、`cli-tool`、`film-tool`、`library-tool`、`get-tool`、`frame-tool`、`official-approvals`、`official-approval-bridge`、`official-permission`、`official-thinking`、`official-turn-policy`、`tool-call-act`、`bridge-trace`。
-
-**修复（首次安装即暴露）**：`openfilm_frame` 的输出 schema 把 `required` 写成了属性级布尔（`attachmentId: { type: 'string', required: true }`），DSH 的加载期校验据此判"not supported on type string"，整个插件显示「异常」。已改为对象级数组，并新增 `tests/tool-schema.test.mjs`（11 条）对**全部 10 个工具**的 `parameters`/`output.schema` 做加载期等价校验，这类错误以后在单测阶段就挡住。
-
-**修复（插件真正加载后暴露）**：`assets/shell-ui.js` 里新加的 `permissionGate` IIFE 前面漏了分号，前一条语句以 `})()` 结尾，被 ASI 连成 `})(…)` 调用链，页面抛 `(intermediate value)… is not a function`，整段注入脚本失效。已补 `;`，并新增 `tests/shell-ui-asi.test.mjs`：用假 DOM **真正执行**注入脚本、检查"括号开头接在调用链后"的静态形态、并用同一份 harness 复现原报错作为反向控制。页面脚本按 mtime 读盘，改完强刷即可，无需重启。
+- 上游 `menuOptions()` 只渲染 `model` / `thought_level` / `speed` 三类，别的 `category` 一律丢弃；所以把权限做成 configOption 也画不出来。
+- 现在改的是上游前端源码：`apps/desktop/chat/src/lib/agent-menu-rows.ts` 增加一行 `category === 'permission'` 的行（`pick(..., 2)`，没有真实选择就不画）。
+- 打包脚本允许且只允许这一处改动（`PATCHED` 白名单），并把 diff 写进快照 `vendor/official-shell/patch.diff`，`manifest.json` 里新增 `patch.files`；其它任何 tracked 改动仍然拒绝打包。
+- facade 的 `probe()` 与 `localAgents.start()` 现在都会请求 `agent:permission` 并发布 `permission` 选项；`setOption('permission', …)` 走宿主 `agent:permission-set`。
+- 悬浮的权限胶囊整块删除（含 CSS/卡片），它原来盖在时间线上；`tests/shell-ui-asi.test.mjs` 随之改为"没有 body 时不报错、也不写 `<html>`"。
+- 后果要知道：界面快照不再与上游逐字节相同，升级内核/界面时要重新应用这处补丁（`patch.diff` 就是补丁本体）。
 
 ## 0.7.1
 
@@ -41,6 +31,27 @@
 **修复（第二次加载即暴露）**：注入脚本在 `<head>` 里执行，此时 `document.body` 还是 `null`，`permissionGate` 的 `mount()` 直接 `body.appendChild` 抛 `Cannot read properties of null (reading 'appendChild')`，后续注入全部中断。改为「没有 body 就等 `DOMContentLoaded` 再挂载」，并给三处 `createTreeWalker(document.body…)` 加了 `||document.documentElement` 兜底；`tests/shell-ui-asi.test.mjs` 增加 head-only 场景（body=null 时不抛、收到 DOMContentLoaded 后正常挂载），并用「改回旧写法」的反向控制证明能复现原报错。
 
 验证：324 项测试，323 通过、1 跳过（真实 GUI 验收清单见 `docs/TEST-CHECKLIST.md`，最后统一跑一次）。
+## 0.7.0
+
+**目标：让「一句话剪片」真的走得通——八步，每步对着一个用户能看见的问题。**
+
+| 步 | 之前的样子 | 现在 |
+|---|---|---|
+| 1 观测 | 右边空了只能靠猜 | `/diagnose.bridge` 给出 emitted/accepted/refused/kinds + 页面 seen，三路可对 |
+| 2 完全访问 | 每一步都被审批卡住 | 进项目一次性授权 `danger-full-access`，面板可随时改回 |
+| 3 模型/思考强度 | 只能用默认 | 模型来自 DSH 实时注册表，思考强度是一等选项，空闲时自动降档；预设提示词带 CLI 绝对路径与调用规约 |
+| 4 呈现 | 全部「正在处理」 | act 词典：读取/搜索/修改/执行/抓取/思考各有中文标签、文件名、命令；`todo_write` 变成计划清单 |
+| 5 审批/打断 | 右边看不到审批、打断报错、插话直接失败 | 审批卡出现在右侧且两侧都能答（后到者失效）；`aborted` 一律显示"已停止"；别人插话只发提示 |
+| 6 看得到 | 只能凭 film.html 猜 | `openfilm_frame`（Studio 自己画帧）/`openfilm_film`/`openfilm_library`/`openfilm_get` |
+| 7 落盘 | 不敢让它改文件 | `openfilm_clip` 原子写：hash 基线、写前二次比对、锁定轨道拒绝、最小 diff；`openfilm_assets` 走 Studio 导入管线 |
+| 8 出片 | 承诺了却不知道有没有文件 | `openfilm_export` 先读编码能力再排队，结果只认 `status` 里的 outputs；`openfilm_cli` 只开 doctor/look/render，argv 自建 |
+
+新增模块：`studio-http`（唯一上游出口，错误信息给 key 打码）、`clip-tool`、`assets-tool`、`export-tool`、`cli-tool`、`film-tool`、`library-tool`、`get-tool`、`frame-tool`、`official-approvals`、`official-approval-bridge`、`official-permission`、`official-thinking`、`official-turn-policy`、`tool-call-act`、`bridge-trace`。
+
+**修复（首次安装即暴露）**：`openfilm_frame` 的输出 schema 把 `required` 写成了属性级布尔（`attachmentId: { type: 'string', required: true }`），DSH 的加载期校验据此判"not supported on type string"，整个插件显示「异常」。已改为对象级数组，并新增 `tests/tool-schema.test.mjs`（11 条）对**全部 10 个工具**的 `parameters`/`output.schema` 做加载期等价校验，这类错误以后在单测阶段就挡住。
+
+**修复（插件真正加载后暴露）**：`assets/shell-ui.js` 里新加的 `permissionGate` IIFE 前面漏了分号，前一条语句以 `})()` 结尾，被 ASI 连成 `})(…)` 调用链，页面抛 `(intermediate value)… is not a function`，整段注入脚本失效。已补 `;`，并新增 `tests/shell-ui-asi.test.mjs`：用假 DOM **真正执行**注入脚本、检查"括号开头接在调用链后"的静态形态、并用同一份 harness 复现原报错作为反向控制。页面脚本按 mtime 读盘，改完强刷即可，无需重启。
+
 ## 0.6.1
 
 - Studio 失联时探测实际服务状态，清理旧代理后支持重新启动；面板在后续页面导航无响应时提供诊断和重试。
@@ -323,3 +334,4 @@
 ## 0.1.16 及更早
 
 OpenFilm 官方 Studio + 官方对话列的接入、DSH 会话桥接、固定端口调试页、模板打包与基础安装流程。
+

@@ -30,9 +30,17 @@ function main() {
   const head = git(checkout, 'rev-parse', 'HEAD').toString('utf8').trim();
   if (head !== COMMIT) fail(`Expected upstream HEAD ${COMMIT}, got ${head}`);
   // A matching HEAD alone does not identify the working-tree inputs used for a build.
-  if (git(checkout, 'status', '--porcelain', '--untracked-files=no').length) {
-    fail('Upstream tracked files have local changes; use a clean checkout.');
-  }
+  // dsh-openfilm keeps exactly one upstream edit: the composer menu renders the
+  // permission row the Host offers (apps/desktop/chat/src/lib/agent-menu-rows.ts).
+  // Any other tracked change is still refused, and the diff is recorded into the
+  // snapshot as patch.diff so the fork stays reviewable and re-appliable.
+  const PATCHED = ['apps/desktop/chat/src/lib/agent-menu-rows.ts'];
+  const dirty = git(checkout, 'status', '--porcelain', '--untracked-files=no').toString('utf8')
+    .split('\n').map(line => line.replace(/\r$/, '')).filter(Boolean).map(line => line.slice(3).trim());
+  const unexpected = dirty.filter(path => !PATCHED.includes(path));
+  if (unexpected.length) fail(`Upstream tracked files have local changes: ${unexpected.join(', ')}`);
+  const patch = dirty.length ? git(checkout, 'diff', '--', ...dirty) : Buffer.alloc(0);
+  if (dirty.length && !patch.length) fail('The upstream patch is empty; refusing to record it.');
   const desktop = JSON.parse(readFileSync(join(checkout, 'apps/desktop/package.json'), 'utf8'));
   if (desktop.version !== VERSION || desktop.name !== '@openfilm/desktop') fail('Unexpected upstream desktop package or version.');
 
@@ -90,8 +98,12 @@ function main() {
       dependencyLock: 'source/pnpm-lock.yaml',
       notice: 'Third-party dependencies, bundled fonts, trademarks and their licenses require independent review before distribution.',
     },
+    patch: dirty.length ? { files: dirty, diff: 'patch.diff' } : null,
     files: Object.fromEntries(files.map(file => [file.path, hash(file.content)])),
   };
+  // The fork is one file's diff; keeping it beside the build makes the snapshot
+  // reviewable without the checkout (and re-appliable on the next upgrade).
+  if (dirty.length) files.push({ path: 'patch.diff', content: patch });
   files.push({ path: 'manifest.json', content: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`) });
 
   // Never replace any existing directory, including a previous run. This avoids

@@ -101,15 +101,17 @@ test('the injected script loads as a page script instead of throwing', () => {
 // The script is injected inside <head>, so at execution time document.body is
 // null. Reading `body.appendChild` there threw "Cannot read properties of null"
 // and killed the rest of the injection; it must wait for the body instead.
-test('a page that has no body yet does not throw, and mounts once it does', () => {
+test('a page that has no body yet does not throw, and mounts nothing before one exists', () => {
   // The page guard is global: clear it so this test really executes the file.
   delete globalThis.__no996ShellUi;
   const { document, fire } = runInStubDom({ headOnly: true });
   assert.equal(document.body, null);
   document.body = stubElement('body');
+  // The injected script no longer parks an overlay on <body> (the permission
+  // chip moved into the composer menu), so what matters is that nothing ran
+  // against a null body and nothing was written to <html> instead.
   assert.doesNotThrow(() => fire('DOMContentLoaded'));
-  const ids = document.body.children.map(child => child.id ?? child.tagName);
-  assert.ok(ids.length > 0, `expected the overlay to be mounted, got ${JSON.stringify(ids)}`);
+  assert.deepEqual(document.body.children.map(child => child.id ?? child.tagName), []);
 });
 
 test('loading twice is a no-op rather than a second set of listeners', () => {

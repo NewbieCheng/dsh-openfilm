@@ -1,0 +1,17 @@
+diff --git a/apps/desktop/chat/src/lib/agent-menu-rows.ts b/apps/desktop/chat/src/lib/agent-menu-rows.ts
+index 603a205..728944a 100644
+--- a/apps/desktop/chat/src/lib/agent-menu-rows.ts
++++ b/apps/desktop/chat/src/lib/agent-menu-rows.ts
+@@ -27,7 +27,11 @@ export function menuOptions(options: MenuOption[] | undefined, defaultName: stri
+   const always = (category: string, found: MenuOption | undefined): MenuOption => (found && found.options!.length > 1 ? found
+     : { id: found?.id ?? category, name: found?.name ?? category, category, fixed: true, options: found?.options?.length ? found.options : [{ value: null, name: defaultName }] });
+   const speed = pick(isSpeed, 2);
+-  return [always('model', pick((o) => o.category === 'model', 1)), always('thought_level', pick((o) => o.category === 'thought_level', 1)), ...(speed ? [speed] : [])];
++  /* dsh-openfilm: a row the Host offers as a choice of its own — DSH's permission
++     preset for the video tools. Rendered only when it really has choices, so an
++     agent that reports none keeps the menu it had. */
++  const permission = pick((o) => o.category === 'permission', 2);
++  return [always('model', pick((o) => o.category === 'model', 1)), always('thought_level', pick((o) => o.category === 'thought_level', 1)), ...(permission ? [permission] : []), ...(speed ? [speed] : [])];
+ }
+ 
+ /**

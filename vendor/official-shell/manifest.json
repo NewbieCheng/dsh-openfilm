@@ -55,6 +55,12 @@
     "dependencyLock": "source/pnpm-lock.yaml",
     "notice": "Third-party dependencies, bundled fonts, trademarks and their licenses require independent review before distribution."
   },
+  "patch": {
+    "files": [
+      "apps/desktop/chat/src/lib/agent-menu-rows.ts"
+    ],
+    "diff": "patch.diff"
+  },
   "files": {
     "source/LICENSE": "4f39fecc5d074a4795bb7c55c5aaad1a4505b5e022ae6c2c3b55b4f26e7c43fc",
     "source/THIRD_PARTY_NOTICES.md": "bc548c7f663fe7ca3b407be60f65c95fa2b05adbc5a8c04f8de141555a0138e4",
@@ -62,10 +68,10 @@
     "source/package.json": "5e2d01f0720784a5af2350a00b77477c3d00acb4404f874810fd9dc48583907a",
     "source/pnpm-lock.yaml": "3fe58d8c7e4d51afff7debb50b35cfd3d6c8c961b1214bf782a68d3b6c5c4b4a",
     "source/pnpm-workspace.yaml": "af261372097773546d4000a74b771c8c09c4114ca5e9dd715c95018b44e1fbe3",
-    "ui/assets/CanvasView-BgAwRvcZ.js": "f579cf7341bf0c51c25908a2dc5db2a6f626f3efe63a450b62da90351adaef5b",
+    "ui/assets/CanvasView-BeJEZMxk.js": "7904a4fc22c9fd33609792be1622b22cb5ab6746159a8eefe38ec64902210250",
     "ui/assets/CanvasView-D_Y2VtPX.css": "738392246b7fcccf3b45c490c3ecc7b7107623505cc835d3ccf44730f107a77d",
     "ui/assets/index-BIc9OZCX.css": "1cab21cac5ff998a6aba7c101c4316df126530b07240a5dec041742327ec69c9",
-    "ui/assets/index-CdXJvJfX.js": "f672621fc802aff2bd41ba9f8e7c8eb208e023f7a41dbdf2281ecb3f42269b05",
+    "ui/assets/index-sDElFoXx.js": "2467834e63db40a7b106f908a4c5359935e1a085e7dca97f647c46e0297532c2",
     "ui/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2": "ca157063339ac4ad418f214f3abfed119b0798ab4d377386ce5c9e5a7a435ebd",
     "ui/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2": "71d5ee93cc1e9f1d520a3a8b66456de18c7879d8df09d57fcd2eaff75fef0075",
     "ui/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2": "6e9e020a25f9b56d418f2c085b1d3c09725a4da23fe693a5b463064606732190",
@@ -73,6 +79,6 @@
     "ui/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2": "34b9c504cab7a73e37b746343a449132e56cf7b5481af2cb81dc74dcff25c956",
     "ui/assets/inter-latin-wght-normal-Dx4kXJAl.woff2": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
     "ui/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2": "5c66f9e07e90c6d4ac4922cc68d60de26c17b1858e677fb5e603fce3952b3ff2",
-    "ui/index.html": "9bb7504ca398ee9d4b69a24e0e821c875773b53500220df0290bd183b76e4047"
+    "ui/index.html": "d3551c0f6edbb288d60df249ba990d9fb271ed2d554283917d9ee28e95238089"
   }
 }

@@ -5,7 +5,7 @@
 // project tools disappear from the session. Upgrading the kernel alone broke
 // exactly that once — this test is the tripwire.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const read = path => JSON.parse(readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'));
@@ -25,4 +25,20 @@ test('the pinned openfilm kernel matches the bundled desktop shell', () => {
 test('the bundled shell manifest names the commit it was built from', () => {
   const manifest = read('vendor/official-shell/manifest.json');
   assert.match(String(manifest.commit), /^[0-9a-f]{40}$/);
+});
+// The vendored shell is no longer a byte-for-byte upstream build: one file is
+// patched so the composer menu can draw the permission row. The snapshot has to
+// say so — a fork nobody can see is indistinguishable from a stale snapshot.
+test('the shell snapshot declares its one upstream patch, or none at all', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../vendor/official-shell/manifest.json', import.meta.url), 'utf8'));
+  const patchFile = new URL('../vendor/official-shell/patch.diff', import.meta.url);
+  if (!manifest.patch) {
+    assert.equal(existsSync(patchFile), false, 'a patch.diff without manifest.patch is an unrecorded fork');
+    return;
+  }
+  assert.deepEqual(manifest.patch.files, ['apps/desktop/chat/src/lib/agent-menu-rows.ts']);
+  assert.equal(existsSync(patchFile), true, 'manifest.patch must ship as patch.diff');
+  const diff = readFileSync(patchFile, 'utf8');
+  assert.match(diff, /^diff --git /m);
+  assert.match(diff, /category === 'permission'/, 'the recorded diff must be the permission row');
 });
