@@ -593,7 +593,7 @@
       if(footerRow&&!document.querySelector('[data-no996-version]')){
         var tag=document.createElement('div');
         tag.setAttribute('data-no996-version','1');
-        tag.textContent='兼容 OpenFilm '+(globalThis.__no996OpenfilmVersion||'0.3.1');
+        tag.textContent='兼容 OpenFilm '+(globalThis.__no996OpenfilmVersion||'0.3.2');
         tag.style.cssText='margin-top:6px;text-align:left;font-size:11px;color:#8a8a93';
         footerRow.appendChild(tag);
       }

@@ -6,8 +6,8 @@ import { lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFil
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const COMMIT = 'a85a80a9742981f0f77f61df88a2780984f8f3fb';
-const VERSION = '0.3.1';
+const COMMIT = '758b1a3888819bf191db191f690c4ca2fcb292af';
+const VERSION = '0.3.2';
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 const destination = join(packageRoot, 'vendor', 'official-shell');
 const usage = 'Usage: node packages/dsh-openfilm/scripts/build-official-shell.mjs <openfilm-checkout>';

@@ -1,6 +1,6 @@
 {
   "name": "dsh-openfilm",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "OpenFilm video studio as a DSH plugin: the official Studio + Chat shell, bridged to a DSH session.",
   "type": "module",
   "license": "MIT",
@@ -21,7 +21,7 @@
     "esbuild": "0.24.2"
   },
   "dependencies": {
-    "openfilm": "https://registry.npmjs.org/openfilm/-/openfilm-0.3.1.tgz",
+    "openfilm": "https://registry.npmjs.org/openfilm/-/openfilm-0.3.2.tgz",
     "zod": "3.25.76"
   },
   "engines": {

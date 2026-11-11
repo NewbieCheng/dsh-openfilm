@@ -21,7 +21,11 @@
 
 **修复（插件真正加载后暴露）**：`assets/shell-ui.js` 里新加的 `permissionGate` IIFE 前面漏了分号，前一条语句以 `})()` 结尾，被 ASI 连成 `})(…)` 调用链，页面抛 `(intermediate value)… is not a function`，整段注入脚本失效。已补 `;`，并新增 `tests/shell-ui-asi.test.mjs`：用假 DOM **真正执行**注入脚本、检查"括号开头接在调用链后"的静态形态、并用同一份 harness 复现原报错作为反向控制。页面脚本按 mtime 读盘，改完强刷即可，无需重启。
 
-**内核升级评估：openfilm 0.3.2（尝试后回退）**。上游 2026-11-09 发布 0.3.2，逐块比对确认接口是**增量兼容**（`server.mjs` 新增项目复制/`notifyReferences`/复合片段 `wave`；`pageframes.mjs` 新增 `compoundSound`，`pageFrame` 签名不变；`exports.mjs` 增剪映/CapCut 与 HEVC alpha，`ExportAsk` 字段未删；`websocket.mjs`、`http.mjs` 零变化；CLI 与库搜索逐字节相同），在 0.3.2 下 323 项测试全通过。但 `resolveOfficialShell()` 要求**内核与 `vendor/official-shell` 快照同版本**，而重建快照需要上游 git checkout 到固定 commit 且有预构建产物，于是"内核 0.3.2 + 快照 0.3.1"直接抛 `OFFICIAL_SHELL_UNAVAILABLE`：面板 503、项目会话建不起来、九个项目工具从会话里消失。**已回退到 0.3.1**，并加 `tests/kernel-shell-match.test.mjs` 把它变成加载期就会失败的硬约束；`studio-warm-failed` / `bootstrap-failed` 现在记真实错误码（含 `OFFICIAL_SHELL_UNAVAILABLE`），面板 503 的 body 也带上码。
+## 0.7.1
+
+发布包同时升级内核与界面快照：`openfilm 0.3.1 → 0.3.2`。
+
+**内核升级完成：openfilm 0.3.1 → 0.3.2**。上游 2026-11-09 发布。第一次只升内核被挡回来：`resolveOfficialShell()` 要求内核与 `vendor/official-shell` 快照同版本（manifest 的 version/commit + 每个 `ui/` 文件的 sha256），不匹配就抛 `OFFICIAL_SHELL_UNAVAILABLE`，连锁是 Studio 起不来 → 面板 503 → 项目会话建不起来 → 九个项目工具从会话消失。第二次从上游 tag `v0.3.2`（commit `758b1a3`）浅克隆、`pnpm --filter @openfilm/desktop build:shell` 构建桌面壳、用 `scripts/build-official-shell.mjs` 重建快照，然后内核与快照一起到 0.3.2：`resolveOfficialShell()` 通过、Studio `/api/health` 报 0.3.2、`GET /` 返回新壳页面、注入脚本依赖的 `data-app-menu` / `role="menuitem"` / `of-chat` / `data-studio` / `#root` 全部仍在。接口面逐文件比对为增量兼容（websocket/http 零改动，CLI 与库搜索逐字节相同，`film-doc.mjs` 与 0.3.2 相同故无需更新）。留下两道防线：`tests/kernel-shell-match.test.mjs`（pin 与快照版本不等即失败）与 `studio-warm-failed`/`bootstrap-failed` 记录真实错误码（含 `OFFICIAL_SHELL_UNAVAILABLE`，面板 503 body 也带码）。重建流程写在 `docs/PLAN-0.7.0-AGENT.md` §14.3。
 
 **修复（第二次加载即暴露）**：注入脚本在 `<head>` 里执行，此时 `document.body` 还是 `null`，`permissionGate` 的 `mount()` 直接 `body.appendChild` 抛 `Cannot read properties of null (reading 'appendChild')`，后续注入全部中断。改为「没有 body 就等 `DOMContentLoaded` 再挂载」，并给三处 `createTreeWalker(document.body…)` 加了 `||document.documentElement` 兜底；`tests/shell-ui-asi.test.mjs` 增加 head-only 场景（body=null 时不抛、收到 DOMContentLoaded 后正常挂载），并用「改回旧写法」的反向控制证明能复现原报错。
 

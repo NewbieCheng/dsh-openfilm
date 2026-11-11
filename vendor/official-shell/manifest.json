@@ -1,11 +1,11 @@
 {
   "generator": "packages/dsh-openfilm/scripts/build-official-shell.mjs",
-  "version": "0.3.1",
-  "commit": "a85a80a9742981f0f77f61df88a2780984f8f3fb",
+  "version": "0.3.2",
+  "commit": "758b1a3888819bf191db191f690c4ca2fcb292af",
   "upstream": {
     "project": "OpenFilm",
-    "desktopVersion": "0.3.1",
-    "commit": "a85a80a9742981f0f77f61df88a2780984f8f3fb",
+    "desktopVersion": "0.3.2",
+    "commit": "758b1a3888819bf191db191f690c4ca2fcb292af",
     "license": "MIT",
     "licenseFile": "source/LICENSE"
   },
@@ -58,14 +58,14 @@
   "files": {
     "source/LICENSE": "4f39fecc5d074a4795bb7c55c5aaad1a4505b5e022ae6c2c3b55b4f26e7c43fc",
     "source/THIRD_PARTY_NOTICES.md": "bc548c7f663fe7ca3b407be60f65c95fa2b05adbc5a8c04f8de141555a0138e4",
-    "source/apps/desktop/package.json": "061da9b4fbc124728ae7f5dde76ee5ad3ca54eb3257cf39cedf0d51c3792af0a",
+    "source/apps/desktop/package.json": "264bf87941964e406408ecfbd94ff49bd5db5fd700457e35f08582a69e655f96",
     "source/package.json": "5e2d01f0720784a5af2350a00b77477c3d00acb4404f874810fd9dc48583907a",
     "source/pnpm-lock.yaml": "3fe58d8c7e4d51afff7debb50b35cfd3d6c8c961b1214bf782a68d3b6c5c4b4a",
     "source/pnpm-workspace.yaml": "af261372097773546d4000a74b771c8c09c4114ca5e9dd715c95018b44e1fbe3",
-    "ui/assets/CanvasView-BnuhLJ6X.css": "1243b61a71923367ce620fb944427c80c9b03e863e18374fcf4f74d6d06f63fc",
-    "ui/assets/CanvasView-ChtLzJu4.js": "35c84fad683d9a1d7e3cd2ebb78023f0dc3419719266b3928e9f99e0d8fb59db",
-    "ui/assets/index-1YHCuSgq.js": "17506e0045f18624fbf1ab44b6cdad3eec9df4175d9b2316cc5dd7537e27a311",
-    "ui/assets/index-BWKyIzAf.css": "c3ab28c541bda215056e16d3de4e2353452d2d7f67dd6e754a04d73acc4117f3",
+    "ui/assets/CanvasView-BgAwRvcZ.js": "f579cf7341bf0c51c25908a2dc5db2a6f626f3efe63a450b62da90351adaef5b",
+    "ui/assets/CanvasView-D_Y2VtPX.css": "738392246b7fcccf3b45c490c3ecc7b7107623505cc835d3ccf44730f107a77d",
+    "ui/assets/index-BIc9OZCX.css": "1cab21cac5ff998a6aba7c101c4316df126530b07240a5dec041742327ec69c9",
+    "ui/assets/index-CdXJvJfX.js": "f672621fc802aff2bd41ba9f8e7c8eb208e023f7a41dbdf2281ecb3f42269b05",
     "ui/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2": "ca157063339ac4ad418f214f3abfed119b0798ab4d377386ce5c9e5a7a435ebd",
     "ui/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2": "71d5ee93cc1e9f1d520a3a8b66456de18c7879d8df09d57fcd2eaff75fef0075",
     "ui/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2": "6e9e020a25f9b56d418f2c085b1d3c09725a4da23fe693a5b463064606732190",
@@ -73,6 +73,6 @@
     "ui/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2": "34b9c504cab7a73e37b746343a449132e56cf7b5481af2cb81dc74dcff25c956",
     "ui/assets/inter-latin-wght-normal-Dx4kXJAl.woff2": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
     "ui/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2": "5c66f9e07e90c6d4ac4922cc68d60de26c17b1858e677fb5e603fce3952b3ff2",
-    "ui/index.html": "424cb0436833cbfdb04815498272fc55651c9b93a0aacf50a9e2a78c2e3ed006"
+    "ui/index.html": "9bb7504ca398ee9d4b69a24e0e821c875773b53500220df0290bd183b76e4047"
   }
 }

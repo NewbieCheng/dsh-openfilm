@@ -9,7 +9,7 @@
 
 ## 0. 一句话
 
-把官方 **OpenFilm 0.3.1** 视频工作台封装成可分发的 **DSH 插件**：Host 侧拉起官方 Studio 并做反向代理，浏览器侧用 `shell.overlay` 常驻一个 iframe 面板显示官方界面，右侧官方对话经 Host RPC 桥到 DSH 会话（模型、审批、会话都是 DSH 的）。
+把官方 **OpenFilm 0.3.2** 视频工作台封装成可分发的 **DSH 插件**：Host 侧拉起官方 Studio 并做反向代理，浏览器侧用 `shell.overlay` 常驻一个 iframe 面板显示官方界面，右侧官方对话经 Host RPC 桥到 DSH 会话（模型、审批、会话都是 DSH 的）。
 
 当前版本 `0.6.1`，仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。这是一个**早期可用但有缺口**的插件（见 §9 未完成清单），不是成品。
 

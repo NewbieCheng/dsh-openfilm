@@ -1,6 +1,6 @@
 # dsh-openfilm
 
-OpenFilm 视频创作作为 DSH 插件：整页官方 Studio 0.3.1 + 官方对话列，对话经 Host 桥到 DSH 会话。0.7.0 起，右侧对话能看真画面、能落盘改时间轴、能导出，审批与打断在页面这一侧可见可答。
+OpenFilm 视频创作作为 DSH 插件：整页官方 Studio 0.3.2 + 官方对话列，对话经 Host 桥到 DSH 会话。0.7.0 起，右侧对话能看真画面、能落盘改时间轴、能导出，审批与打断在页面这一侧可见可答。
 
 ## 文档
 
@@ -10,11 +10,11 @@ OpenFilm 视频创作作为 DSH 插件：整页官方 Studio 0.3.1 + 官方对�
 
 > **不是热加载**：改客户端源码要 `npm run build` + 刷新页面；改 Host 源码要重启 DSH；改 `vendor/templates` 下一次请求即生效。详见 `AGENTS.md` §4。
 
-## 下载与更新（0.7.0）
+## 下载与更新（0.7.1）
 
-从 [GitHub Releases](https://github.com/NewbieCheng/dsh-openfilm/releases) 下载 `dsh-openfilm-0.7.0.tgz`，在 DSH 插件管理器中安装该包，或通过管理器的 `install_bundle` 指定本地包路径。更新前请保存尚未保存的编辑，完成后按管理器提示重启 DSH 或刷新页面。
+从 [GitHub Releases](https://github.com/NewbieCheng/dsh-openfilm/releases) 下载 `dsh-openfilm-0.7.1.tgz`，在 DSH 插件管理器中安装该包，或通过管理器的 `install_bundle` 指定本地包路径。更新前请保存尚未保存的编辑，完成后按管理器提示重启 DSH 或刷新页面。
 
-发布包包含 OpenFilm 0.3.1、运行依赖、官方界面和模板，无需另外手动安装 OpenFilm；下载发布包本身仍需联网。宿主需提供兼容的 DSH 和 Node.js 22.2 或更高版本。自动化测试 323 项（322 通过、1 跳过），在 Windows 本机运行；macOS/Linux 尚未完成实机 GUI 验证。真机验收（右侧对话观感、审批卡、导出文件可播）按 `docs/TEST-CHECKLIST.md` 逐项执行，尚未由作者完整跑完，因此发布包里的这条链路仍属"待验收"。
+发布包包含 OpenFilm 0.3.2（内核与界面快照同版本）、运行依赖、官方界面和模板，无需另外手动安装 OpenFilm；下载发布包本身仍需联网。宿主需提供兼容的 DSH 和 Node.js 22.2 或更高版本。自动化测试 323 项（322 通过、1 跳过），在 Windows 本机运行；macOS/Linux 尚未完成实机 GUI 验证。真机验收（右侧对话观感、审批卡、导出文件可播）按 `docs/TEST-CHECKLIST.md` 逐项执行，尚未由作者完整跑完，因此发布包里的这条链路仍属"待验收"。
 
 **关于自动检查更新**：DSH 插件管理器的版本检查目前只支持从 npm 仓库安装的插件；GitHub 安装包和本地链接不会自动按 GitHub Releases 检查新版本。本项目目前尚未发布到 npm，需手动从 Releases 获取新包更新。
 

@@ -5,7 +5,7 @@
 
 - 版本：`0.5.8`
 - 运行时：Node 20+，DSH 内核（需 `session-controller`、`storageDomain`、`webServer`、`llm`、`agents`）
-- 上游：`openfilm@0.3.1`（`package.json` 里的 tarball URL 是唯一版本来源）。**内核版本必须与 `vendor/official-shell` 快照同版本**：`resolveOfficialShell()` 会拒绝不匹配的快照（表现为面板 503、项目会话建不起来、九个项目工具从会话里消失）。重建快照见 `scripts/build-official-shell.mjs`，需要上游 git checkout。
+- 上游：`openfilm@0.3.2`（`package.json` 里的 tarball URL 是唯一版本来源）。**内核与 `vendor/official-shell` 快照必须同版本**：`resolveOfficialShell()` 会比对 manifest 的 version/commit 与每个文件的 sha256，不匹配就抛 `OFFICIAL_SHELL_UNAVAILABLE`（表现为面板 503、项目会话建不起来、九个项目工具从会话里消失）。同版本升级时两者一起动：升级流程见 `docs/PLAN-0.7.0-AGENT.md` §14。
 
 ---
 
@@ -126,7 +126,7 @@
 | `src/draft-session.mjs` | 草稿的撤销/重置（保留原文与版本） |
 | `src/draft-tool.mjs` | Agent 工具 `openfilm_draft`（纯操作，不保存、不执行） |
 | `src/guide-tool.mjs` | Agent 工具 `openfilm_guide`（只对项目会话可见） |
-| `vendor/film-doc.mjs` | 上游 `film-doc.mjs` 的未修改副本（0.3.1，MIT） |
+| `vendor/film-doc.mjs` | 上游 `film-doc.mjs` 的未修改副本（0.3.2，MIT） |
 
 ### 客户端
 
