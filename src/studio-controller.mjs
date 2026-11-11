@@ -1,4 +1,5 @@
 import { createStudioRuntime } from './studio-runtime.mjs';
+import { createHostComponentDetector } from './host-components.mjs';
 import { installTemplate, listTemplates } from './official-templates.mjs';
 import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
@@ -14,17 +15,28 @@ const HOST_VERSION = (() => { try { return String(JSON.parse(readFileSync(new UR
 
 const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.url));
 /** Page events the Host will record; anything else is refused. */
-const CLIENT_EVENTS = new Set(['recovery-shown', 'restart-click', 'picker-placed', 'session-expired']);
+const CLIENT_EVENTS = new Set(['recovery-shown', 'restart-click', 'picker-placed', 'session-expired', 'permission-shown', 'permission-chosen']);
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
 import { startLocalConsole } from './studio-debug-redirect.mjs';
 import { createDshAskAgent } from './dsh-ai.mjs';
 import { reportPresetStatus } from './preset-report.mjs';
 import { openProjectConversations } from './project-conversation.mjs';
 import { createGuideTool } from './guide-tool.mjs';
+import { createStudioHttp } from './studio-http.mjs';
+import { createFrameTool } from './frame-tool.mjs';
+import { createFilmTool } from './film-tool.mjs';
+import { createLibraryTool } from './library-tool.mjs';
+import { createGetTool } from './get-tool.mjs';
+import { createClipTool } from './clip-tool.mjs';
+import { createAssetsTool } from './assets-tool.mjs';
+import { createExportTool } from './export-tool.mjs';
+import { createCliTool } from './cli-tool.mjs';
 import { resolveOfficialShell } from './official-shell.mjs';
 import { openOfficialChatStore } from './official-chat-store.mjs';
 import { createOfficialChatRpc } from './official-chat-rpc.mjs';
 import { createOfficialEventHub } from './official-event-hub.mjs';
+import { createOfficialApprovals } from './official-approvals.mjs';
+import { attachApprovalBridge } from './official-approval-bridge.mjs';
 import { createOfficialAgentService } from './official-agent-service.mjs';
 import { attachOfficialEventStream } from './official-event-stream.mjs';
 import { z } from 'zod';
@@ -33,6 +45,9 @@ import { registerTemplateBridge } from './template-bridge.mjs';
 import { registerArchiveBridge } from './archive-bridge.mjs';
 import { createArchiveWatcher } from './workspace-archive.mjs';
 import { createPluginLog } from './plugin-log.mjs';
+import { createBridgeTrace } from './bridge-trace.mjs';
+import { openProjectPermissions, FULL_ACCESS, WORKSPACE_WRITE } from './official-permission.mjs';
+import { openTurnPolicy } from './official-turn-policy.mjs';
 
 /**
  * Host-only route and Studio lifecycle. `createProxy` receives the private
@@ -42,6 +57,9 @@ import { createPluginLog } from './plugin-log.mjs';
  */
 export function createStudioController(ctx, createProxy, { officialShell = false } = {}) {
   const log = createPluginLog();
+  // What the bridge actually published to the panel, and what the page reported
+  // receiving. Read through /diagnose; never exposed as user content.
+  const bridgeTrace = createBridgeTrace();
   const openedAt = Date.now();
   if (!ctx?.connection || !ctx?.webServer || typeof createProxy !== 'function') throw new TypeError('Connection, webServer and proxy are required');
   if (typeof officialShell !== 'boolean') throw new TypeError('officialShell must be a boolean');
@@ -58,9 +76,14 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   const archive = createArchiveWatcher(ctx);
   let conversationsPromise;
   let conversations;
+  let permissionsPromise;
+  let turnPolicyPromise;
+  let httpClient;
   let officialStorePromise;
   let lastProxy;
   let debugBridge;
+  const detectHostComponents = createHostComponentDetector();
+  let componentCheck;
   // Write the preset activation result once per Host start so it can be checked
   // without a browser session (see preset-report.mjs).
   const presetReport = reportPresetStatus(ctx);
@@ -124,15 +147,63 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     if (disposed) throw new Error('Studio disposed');
     if (channel === 'agent:prompt') {
       if (!agentService) throw new Error('Agent bridge unavailable');
+      // A project whose person already chose full access gets it back on every
+      // new Session; the decision lives in the Host, never in the page.
+      if (typeof payload?.projectId === 'string') {
+        try {
+          const store = await permissions();
+          const sessionId = await boundSession(payload.projectId);
+          if (sessionId) await store.resume(payload.projectId, sessionId);
+        } catch { /* permission is an upgrade, never a precondition for sending */ }
+      }
       return agentService.send(payload?.projectId, { key: payload?.key, turnId: payload?.turnId, text: payload?.text, images: payload?.images });
+    }
+    if (channel === 'agent:permission') {
+      // What the panel needs to decide whether to ask: the decision remembered
+      // for this project and the preset DSH itself reports as in force.
+      const projectId = typeof payload?.projectId === 'string' ? payload.projectId : '';
+      if (!/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw Object.assign(new Error('unknown project'), { code: 'PERMISSION_INPUT' });
+      await verifyOfficialProject(projectId);
+      const store = await permissions();
+      const sessionId = await boundSession(projectId);
+      const remembered = store.remembered(projectId) ?? null;
+      const current = sessionId ? store.current(sessionId) ?? null : null;
+      return {
+        available: store.available(), decided: remembered !== null, remembered, current,
+        names: store.names(), fullAccess: FULL_ACCESS, workspace: WORKSPACE_WRITE,
+      };
+    }
+    if (channel === 'agent:permission-set') {
+      const projectId = typeof payload?.projectId === 'string' ? payload.projectId : '';
+      const preset = payload?.preset;
+      if (!/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw Object.assign(new Error('unknown project'), { code: 'PERMISSION_INPUT' });
+      if (preset !== FULL_ACCESS && preset !== WORKSPACE_WRITE) throw Object.assign(new Error('unknown preset'), { code: 'PERMISSION_INPUT' });
+      await verifyOfficialProject(projectId);
+      const store = await permissions();
+      const sessionId = await boundSession(projectId);
+      try {
+        // Before the first message there is no Session to change, so the answer is
+        // remembered and applied by `resume` on the next prompt.
+        if (!sessionId) return { ok: true, preset, applied: false };
+        const applied = await store.apply(projectId, sessionId, preset);
+        return { ok: true, preset: applied.preset, applied: true };
+      } catch (error) {
+        return { ok: false, preset: null, applied: false, error: String(error?.code ?? 'PERMISSION_FAILED'), message: String(error?.message ?? '') };
+      }
     }
     if (channel === 'agent:cancel') {
       if (!agentService) throw new Error('Agent bridge unavailable');
       return agentService.cancel(payload?.projectId);
     }
+    if (channel === 'agent:trace') {
+      // The page's own count of what it received. Counters only: no text, no
+      // paths, no keys — this exists so `/diagnose` can say whether a published
+      // envelope reached the panel, not to log what the model said.
+      const projectId = typeof payload?.projectId === 'string' ? payload.projectId : '';
+      if (!/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw Object.assign(new Error('unknown project'), { code: 'TRACE_INPUT' });
+      return { ok: bridgeTrace.panel(projectId, { seen: payload?.seen, kinds: payload?.kinds }) };
+    }
     if (channel === 'client:log') {
-      // Same allowlist as the HTTP route: the page may say what happened to it,
-      // not write free text.
       const event = typeof payload?.event === 'string' ? payload.event : '';
       if (!CLIENT_EVENTS.has(event)) throw Object.assign(new Error('unknown client event'), { code: 'CLIENT_EVENT_UNKNOWN' });
       log.info(`page-${event}`, { anchor: typeof payload?.anchor === 'string' ? payload.anchor.slice(0, 16) : undefined });
@@ -144,6 +215,14 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const proxy = await lastProxy;
       if (!proxy || typeof proxy.issueTicket !== 'function') throw Object.assign(new Error('Studio is not ready'), { code: 'EDITOR_LINK_UNAVAILABLE' });
       return proxy.issueTicket();
+    }
+    if (channel === 'environment:check') {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).length !== 0) {
+        throw Object.assign(new Error('Invalid environment check'), { code: 'ENVIRONMENT_INPUT' });
+      }
+      // Coalesce simultaneous requests but always probe again after completion.
+      if (!componentCheck) componentCheck = detectHostComponents().finally(() => { componentCheck = undefined; });
+      return componentCheck;
     }
     if (channel === 'template:list') {
       return { templates: await listTemplates(templatesRoot) };
@@ -184,6 +263,38 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     }
     return conversationsPromise;
   };
+  // Session permission for a project's conversation. Resolved lazily: a page
+  // that never opens a project never touches the permission domain.
+  const permissions = () => {
+    if (!permissionsPromise) {
+      permissionsPromise = openProjectPermissions(ctx, { z });
+      permissionsPromise.catch(() => { permissionsPromise = undefined; });
+    }
+    return permissionsPromise;
+  };
+  // The person's thinking-intensity intent per project, opened lazily like the
+  // permission store. The service takes plain async functions, so a not-yet-open
+  // domain is a delay rather than a missing dependency.
+  const turnPolicy = {
+    async thinking(projectId) { return (await openTurnPolicyStore()).thinking(projectId); },
+    async setThinking(projectId, value) { return (await openTurnPolicyStore()).setThinking(projectId, value); },
+    async forget(projectId) { return (await openTurnPolicyStore()).forget(projectId); },
+  };
+  const openTurnPolicyStore = () => {
+    if (!turnPolicyPromise) {
+      turnPolicyPromise = openTurnPolicy(ctx, { z });
+      turnPolicyPromise.catch(() => { turnPolicyPromise = undefined; });
+    }
+    return turnPolicyPromise;
+  };
+  // The Session bound to a project, resolved in the Host from the binding table.
+  // Null when the project has no conversation yet — reading a permission must
+  // never create one.
+  const boundSession = async projectId => {
+    const opened = await projectConversations();
+    const binding = opened.peek(projectId);
+    return binding && binding.projectId === projectId && typeof binding.sessionId === 'string' ? binding.sessionId : null;
+  };
   // Archive state of a project's bound conversation. Always resolved in the
   // Host: the page supplies a project ID and never a Session ID. This never
   // creates a Session — reading chat history must not have that side effect.
@@ -199,13 +310,69 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   const isProjectAgent = agent => Boolean(agent && conversations && !disposed && ctx.agents.get(agent.id) === agent && conversations.boundConversation(agent.id)?.available);
   // One project-scoped event fan-out feeds the official chat's stream.
   const eventHub = createOfficialEventHub();
+  // Approval questions travel the same stream as transcript updates. `publish`
+  // reports whether a live transport accepted the write, which is exactly the
+  // coordinator's delivery contract (acceptance, not proof of rendering).
+  const deliverToPanel = (projectId, event) => {
+    const delivered = eventHub.publish(projectId, event);
+    bridgeTrace.emit(projectId, event, delivered);
+    return delivered;
+  };
+  const approvals = createOfficialApprovals({ deliver: deliverToPanel });
   const agentService = officialShell ? createOfficialAgentService(ctx, {
     verifier: verifyOfficialProject,
     openProjectSessions: { ensure: args => projectConversations().then(opened => opened.resolve(args)) },
-    emit: async (projectId, event) => eventHub.publish(projectId, event),
+    // Every published envelope is recorded next to whether a live panel stream
+    // took it: accept-then-nothing and never-accepted look identical in the UI.
+    emit: async (projectId, event) => deliverToPanel(projectId, event),
     isArchived: id => archive.isArchived(id),
+    policy: turnPolicy,
+    approvals,
   }) : null;
+  // DSH asks the person before a sensitive tool call through a waterfall event.
+  // Without this the panel simply stopped moving, with no way to see why.
+  const unregisterApprovalBridge = agentService ? attachApprovalBridge(ctx, {
+    approvals,
+    deliver: deliverToPanel,
+    projectOfSession: sessionId => {
+      const bound = conversations?.boundConversation(sessionId);
+      return bound && bound.available === true ? bound.projectId : undefined;
+    },
+    keyOfProject: projectId => agentService.activeKey(projectId),
+  }) : () => {};
   const unregisterGuide = ctx.tools.register(createGuideTool(isProjectAgent), { when: ({ agent }) => isProjectAgent(agent) });
+  // One Studio client for every project tool: it resolves the live upstream, adds
+  // the key the page must never see, and turns a failure into readable text.
+  const studioHttp = () => {
+    if (!httpClient) {
+      httpClient = createStudioHttp({
+        studio: async () => {
+          // A closed panel is not a reason to refuse: starting Studio here is what
+          // the panel would have done, and it is the same process.
+          try { await runtime.ensureStarted(); } catch { /* fall through: the tool reports it */ }
+          return upstream ? { origin: upstream.origin, key: upstream.key } : undefined;
+        },
+      });
+    }
+    return httpClient;
+  };
+  // The project a bound conversation belongs to, resolved from the Host's own
+  // binding table. Never from a renderer-supplied id.
+  const projectOfAgent = agent => {
+    const bound = conversations?.boundConversation(agent?.id);
+    return bound && bound.available === true && typeof bound.path === 'string' ? bound : undefined;
+  };
+  const filmTools = [
+    createFrameTool({ isProjectAgent, projectOf: projectOfAgent, http: studioHttp, attachments: () => ctx.get('attachments'), llm: ctx.llm }),
+    createFilmTool({ isProjectAgent, projectOf: projectOfAgent, http: studioHttp }),
+    createLibraryTool({ isProjectAgent, projectOf: projectOfAgent, http: studioHttp }),
+    createGetTool({ isProjectAgent, projectOf: projectOfAgent, http: studioHttp }),
+    createClipTool({ isProjectAgent, projectOf: projectOfAgent }),
+    createAssetsTool({ isProjectAgent, projectOf: projectOfAgent, http: studioHttp }),
+    createExportTool({ isProjectAgent, projectOf: projectOfAgent, http: studioHttp }),
+    createCliTool({ isProjectAgent, projectOf: projectOfAgent }),
+  ];
+  const unregisterFilmTools = filmTools.map(tool => ctx.tools.register(tool, { when: ({ agent }) => isProjectAgent(agent) }));
   // Optional, bounded context: match the exact active Agent scope and a durable
   // project binding. Unknown scopes and all non-video sessions get no context.
   const unregisterContext = ctx.systemPrompt.context({
@@ -321,6 +488,17 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         // Whether this Host can see DSH's archive set, and how many Sessions it
         // currently hides. A zero count on an available watcher means "none".
         archive: { available: archive.available, archivedCount: archive.archivedIds().length },
+        // The three-link evidence for "the panel shows nothing": what the bridge
+        // published, whether a live stream took it, and what the page counted.
+        bridge: bridgeTrace.snapshot(),
+        // Whether this build can switch a Session's permission at all, and what it
+        // offers — the first thing to check when the consent card stays silent.
+        permission: await (async () => {
+          try {
+            const store = await permissions();
+            return { available: store.available(), names: store.names() };
+          } catch (error) { return { available: false, error: String(error?.code ?? 'PERMISSION_UNAVAILABLE') }; }
+        })(),
         // The last few events, so a support message can carry the history that
         // explains the symptom without asking for a file path.
         log: { file: log.file, tail: log.tail(12) },
@@ -506,6 +684,13 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     disposed = true;
     unregisterContext();
     unregisterGuide();
+    for (const unregisterTool of unregisterFilmTools) {
+      try { unregisterTool(); } catch { /* already removed */ }
+    }
+    // Stop answering approval questions before the stream that carries them goes
+    // away, so nothing is left waiting on a listener that can never reply.
+    try { unregisterApprovalBridge(); } catch { /* already removed */ }
+    approvals.close();
     unregisterTemplateBridge();
     unregisterArchiveBridge();
     archive.close();
@@ -518,6 +703,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     debugBridge = undefined;
     closingDebug?.then(bridge => bridge.close()).catch(() => {});
     eventHub.close();
+    bridgeTrace.close();
     const opened = await conversationsPromise?.catch(() => undefined);
     const chat = await officialStorePromise?.catch(() => undefined);
     try { await opened?.close(); }

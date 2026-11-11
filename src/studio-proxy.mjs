@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer, request } from 'node:http';
 import { officialFacadeSource } from './official-facade.mjs';
-import { shellUiInjection } from './shell-extras.mjs';
+import { officialUploadSource } from './official-attachment.mjs';
+import { shellUiInjection, shellUiVersion } from './shell-extras.mjs';
 
 // Upstream 5xx bodies are the only description of a Studio failure the person
 // can act on, and the page shows just the status. Keep the last few for
@@ -384,8 +385,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
               // transport is bound to the authenticated editor origin below.
               const officialPage = url.pathname === '/' || /^\/projects\/[A-Za-z0-9_-]{6,40}\/?$/.test(url.pathname);
               const transport = `async (channel,payload)=>{const r=await fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel,payload})});if(!r.ok){let detail='';try{detail=(await r.text()).slice(0,300)}catch(e){}throw new Error('OpenFilm capability unavailable: '+channel+' ['+r.status+'] '+(detail||''));}return r.json()}`;
-              const upload = `async (projectId,name,bytes)=>{const q=new URLSearchParams({projectId,name});const r=await fetch('/__dsh/official-upload?'+q,{method:'PUT',credentials:'same-origin',headers:{'content-type':'application/octet-stream'},body:bytes});if(r.status===422)throw new Error('文件已导入但无法读取，请检查素材，避免重复上传。 / The file was imported but cannot be read.');if(!r.ok)throw new Error('OpenFilm file upload unavailable');return r.json()}`;
-              const nativePrelude = officialShell && officialPage ? `<script>globalThis.openfilmNative=${officialFacadeSource}({invoke:${transport},upload:${upload}});</script>` : '';
+              const nativePrelude = officialShell && officialPage ? `<script>globalThis.openfilmNative=${officialFacadeSource}({invoke:${transport},upload:${officialUploadSource}});</script>` : '';
               // Visible, copyable failure reporting for a page we only partly control:
               // the official shell has no error UI of its own, so a thrown module or a
               // rejected promise otherwise leaves a blank frame with nothing to quote.
@@ -411,9 +411,20 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
 // with the chat docked on the right: Studio then insets the right side itself,
 // so the chat has no empty band on the left.
 if(!localStorage.getItem('openfilm.workspace.current.v2')){
-  var base={mode:'edit',tree:null,assets:false,layers:false,timeline:true,inspector:true,chat:true,libraryDock:'chat',chatSide:'right',layersSide:'left',inspectorSide:'right',timelineEdge:'bottom',assetsWidth:320,libraryHeight:280,layersWidth:240,inspectorWidth:360,timelineHeight:null,chatWidth:420};
+  var base={mode:'edit',tree:null,assets:false,layers:false,timeline:true,inspector:true,chat:true,libraryDock:'chat',chatSide:'left',layersSide:'left',inspectorSide:'right',timelineEdge:'bottom',assetsWidth:320,libraryHeight:280,layersWidth:240,inspectorWidth:360,timelineHeight:null,chatWidth:420};
   var plan=JSON.parse(JSON.stringify(base));plan.mode='canvas';plan.timeline=false;plan.inspector=false;
   localStorage.setItem('openfilm.workspace.current.v2',JSON.stringify({version:2,edit:base,canvas:plan}));
+}else{
+  // Earlier builds seeded chatSide:'right'. Move only that seeded shape back to
+  // upstream's default; a layout someone rearranged by hand is left alone.
+  try{
+    var saved=JSON.parse(localStorage.getItem('openfilm.workspace.current.v2'));
+    if(saved&&saved.edit&&saved.edit.chatSide==='right'&&saved.edit.chatWidth===420){
+      saved.edit.chatSide='left';
+      if(saved.canvas&&saved.canvas.chatSide==='right')saved.canvas.chatSide='left';
+      localStorage.setItem('openfilm.workspace.current.v2',JSON.stringify(saved));
+    }
+  }catch(e){}
 }
 }catch(e){}globalThis.openfilmHost={version:1,name:'DSH'};
 (function(){
@@ -471,6 +482,16 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
     res.on('close', () => { if (!res.writableEnded) remote.destroy(); });
     req.pipe(remote);
   }
+  // Lets the page notice that the injected overlay changed on disk, so a saved
+  // shell-ui.js reaches a long-lived desktop window without reopening the panel.
+  function shellVersion(req, res) {
+    if (!officialShell || req.url !== '/__dsh/shell-version') return false;
+    if (req.method !== 'GET' || !permitted(req, false) || !authenticated(req)) { fail(res); return true; }
+    const body = JSON.stringify({ version: shellUiVersion() });
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-length': Buffer.byteLength(body) });
+    res.end(body);
+    return true;
+  }
   // Fixed-channel official Chat RPC rides the existing authenticated editor
   // origin. No renderer-supplied path or upstream secret is accepted here.
   function officialBridge(req, res) {
@@ -498,9 +519,9 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
         const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
         if (!value || typeof value !== 'object' || Array.isArray(value) ||
             Object.keys(value).length !== 2 || typeof value.channel !== 'string' || !Object.hasOwn(value, 'payload')) return fail(res, 400);
-        // Template channels carry no project yet (create makes one); they still
-        // pass the same origin, cookie and same-site checks above.
-        const needsProject = value.channel !== 'template:list' && value.channel !== 'template:create';
+        // These fixed channels do not access project data; they still require
+        // the editor's authenticated origin, cookie and same-site checks above.
+        const needsProject = value.channel !== 'template:list' && value.channel !== 'template:create' && value.channel !== 'environment:check';
         if (needsProject && await authorizeOfficialProject(req, value.payload?.projectId) !== true) return fail(res);
         const result = await officialRpc(value.channel, value.payload);
         if (closed || res.destroyed || res.writableEnded) return;
@@ -545,7 +566,8 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
         typeof projectId !== 'string' || !/^[A-Za-z0-9_-]{6,40}$/.test(projectId) ||
         typeof name !== 'string' || !name || name.length > 200 || name.startsWith('.') || /[\\/\\\\<>:\"|?*\\x00-\\x1f\\x7f]/.test(name) || /[. ]$/.test(name) ||
         /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$)/i.test(name) ||
-        !Number.isSafeInteger(size) || size < 1 || size > 256 * 1024 * 1024) { fail(res); return true; }
+        !Number.isSafeInteger(size) || size < 1) { fail(res); return true; }
+    if (size > 256 * 1024 * 1024) { fail(res, 413); return true; }
     if (officialRequests >= 4) { fail(res, 503); return true; }
     officialRequests += 1;
     let remote;
@@ -606,7 +628,7 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
     })();
     return true;
   }
-  const editor = createServer((req, res) => { if (!officialEvents(req, res) && !officialUpload(req, res) && !officialBridge(req, res) && !desktopBridge(req, res)) forward(req, res, false); });
+  const editor = createServer((req, res) => { if (!officialEvents(req, res) && !officialUpload(req, res) && !shellVersion(req, res) && !officialBridge(req, res) && !desktopBridge(req, res)) forward(req, res, false); });
   const film = createServer((req, res) => forward(req, res, true));
   film.on('upgrade', (_req, socket) => socket.destroy());
   editor.on('upgrade', (req, socket, head) => {

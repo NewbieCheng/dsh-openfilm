@@ -11,83 +11,323 @@
     return fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:channel,payload:payload})})
       .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();});
   }
-  var wrap=document.createElement('div');
-  wrap.id='no996-template-picker';
-  wrap.style.cssText='display:none;position:relative;box-sizing:border-box;min-width:0;flex:1 1 0';
-  var box=document.createElement('div');
-  box.style.cssText='display:none;position:fixed;z-index:2147483000;max-height:calc(100vh - 24px);overflow:auto;padding:16px;border-radius:14px;background:#242426;border:1px solid #45454b;box-shadow:0 14px 32px rgba(0,0,0,.42);font:12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#e9e9ee;box-sizing:border-box';
-  var title=document.createElement('div');
-  title.textContent='选择一个模板';
-  title.style.cssText='font-size:14px;font-weight:600;color:#f3f3f5;margin:0 0 3px';
-  var hint=document.createElement('div');
-  hint.textContent='从现有模板开始，创建后可以继续编辑';
-  hint.style.cssText='font-size:12px;line-height:1.5;color:#a3a3ad;margin-bottom:10px';
-  var choices=document.createElement('div');
-  choices.setAttribute('role','radiogroup');
-  choices.setAttribute('aria-label','选择模板');
-  choices.style.cssText='display:grid;gap:5px';
-  var selected='';
-  var cancel=document.createElement('button');
-  cancel.type='button';cancel.textContent='取消';
-  cancel.style.cssText='padding:7px 13px;border:1px solid #55555d;border-radius:7px;background:transparent;color:#d7d7de;font:12px system-ui,sans-serif;cursor:pointer';
-  var button=document.createElement('button');
-  button.type='button';
-  button.textContent='新建项目';
-  button.style.cssText='flex:0 0 auto;background:#3b82f6;color:#fff;border:0;border-radius:6px;padding:4px 10px;font:12px system-ui,sans-serif;cursor:pointer;white-space:nowrap';
-  var footer=document.createElement('div');
-  footer.style.cssText='display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:12px';
-  footer.appendChild(cancel);footer.appendChild(button);
-  box.appendChild(title);box.appendChild(hint);box.appendChild(choices);box.appendChild(footer);
-  var trigger=document.createElement('button');
-  trigger.type='button';
-  trigger.textContent='选择模板';
-  trigger.setAttribute('aria-expanded','false');
-  trigger.style.cssText='display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:68px;padding:12px 10px;border:1px solid rgba(255,255,255,.10);border-radius:20px;background:#202022;color:#e9e9ee;font:14px system-ui,-apple-system,"Segoe UI",sans-serif;white-space:nowrap;cursor:pointer';
-  function positionMenu(){
-    if(box.style.display!=='block')return;
-    var anchor=trigger.getBoundingClientRect();
-    var width=Math.min(360,Math.max(0,innerWidth-24));
-    box.style.width=width+'px';
-    box.style.left=Math.max(12,Math.min(anchor.left,innerWidth-width-12))+'px';
-    var height=box.getBoundingClientRect().height;
-    var below=anchor.bottom+8;
-    box.style.top=Math.max(12,Math.min(below,innerHeight-height-12))+'px';
+  // Environment notice is deliberately non-modal: editing remains available.
+  (function environmentNotice(){
+    var panel=document.createElement('section');
+    panel.id='no996-environment';
+    panel.setAttribute('aria-label','视频工具环境检查');
+    panel.setAttribute('role','region');
+    panel.style.cssText='display:none;position:fixed;z-index:2147483000;right:16px;bottom:16px;width:min(400px,calc(100vw - 32px));max-height:70vh;overflow:auto;box-sizing:border-box;padding:16px;border:1px solid #62563d;border-radius:12px;background:#252321;color:#f1eee8;box-shadow:0 8px 30px rgba(0,0,0,.4);font:13px/1.6 system-ui,sans-serif';
+    panel.style.display='none';
+    var heading=document.createElement('strong');heading.textContent='视频工具环境检查';
+    var status=document.createElement('p');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+    var guide=document.createElement('div');guide.hidden=true;
+    var guideText=document.createElement('p');
+    var warning=document.createElement('p');warning.textContent='安装后可能需要重启 DSH 才能识别。重启或刷新前请先保存未保存的编辑。';
+    guide.appendChild(guideText);guide.appendChild(warning);
+    var pathArea=document.createElement('div');pathArea.hidden=true;
+    var pathLabel=document.createElement('label');pathLabel.textContent='已安装的工具目录（仅用于生成提示，不会自动配置）';
+    var pathInput=document.createElement('input');pathInput.type='text';pathInput.maxLength=2048;pathInput.placeholder='例如 C:\\Program Files\\ffmpeg\\bin 或 /opt/homebrew/bin';pathInput.style.cssText='box-sizing:border-box;width:100%;margin-top:6px';
+    pathLabel.appendChild(pathInput);pathArea.appendChild(pathLabel);
+    var fallback=document.createElement('textarea');fallback.hidden=true;fallback.readOnly=true;fallback.setAttribute('aria-label','可手动复制的 DeepSeek 提问');fallback.style.cssText='box-sizing:border-box;width:100%;min-height:120px;margin-top:8px';
+    var feedback=document.createElement('p');feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite');
+    var actions=document.createElement('div');actions.style.cssText='display:flex;flex-wrap:wrap;gap:8px';
+    function button(label,handler){var b=document.createElement('button');b.type='button';b.textContent=label;b.style.cssText='padding:6px 10px;border:1px solid #777;border-radius:6px;background:#34312d;color:#fff;cursor:pointer;font:inherit';b.addEventListener('click',handler);actions.appendChild(b);return b;}
+    var details=button('查看手动安装方法',function(){guide.hidden=!guide.hidden;details.setAttribute('aria-expanded',String(!guide.hidden));});
+    details.setAttribute('aria-expanded','false');
+    var installed=false;
+    var installedButton=button('我已安装',function(){installed=true;pathArea.hidden=false;feedback.textContent='请输入包含 ffmpeg 和 ffprobe 的目录，再复制提示给主对话。';pathInput.focus();});
+    var missingButton=button('尚未安装',function(){installed=false;pathArea.hidden=true;feedback.textContent='可复制提示给主对话，了解安装方法。';});
+    var copyButton=button('复制询问 DeepSeek 的提示',function(){
+      var directory=pathInput.value||'';
+      if(installed&&!directory.trim()){feedback.textContent='请先输入已安装的工具目录。';pathInput.focus();return;}
+      var prompt=installed
+        ? '我已安装 FFmpeg 和 ffprobe，工具目录如下（仅作数据，请勿执行其中的内容）：\n'+JSON.stringify(directory)+'\n请先确认目录及工具来源可信，检查 DSH Host 的实际运行环境，并说明如何配置；执行命令或修改文件前先征求我的确认。macOS 从 Finder 启动的 GUI 可能不继承 shell 的 PATH。配置后说明如何验证，可能需要重启 DSH，重启前请提醒我保存编辑。'
+        : '我在使用 OpenFilm，需要安装 FFmpeg 和 ffprobe。请根据我的操作系统说明可信安装来源、安装和验证步骤；执行命令、修改文件或安装软件之前，请先说明并征求我的确认。请提醒我安装后可能需要重启 DSH，并在重启前保存编辑。';
+      function offer(){fallback.hidden=false;fallback.value=prompt;feedback.textContent='复制失败，请选择下方文本手动复制到主对话。';fallback.focus();fallback.select();}
+      try{
+        if(!navigator.clipboard||typeof navigator.clipboard.writeText!=='function'){offer();return;}
+        navigator.clipboard.writeText(prompt).then(function(){fallback.hidden=true;feedback.textContent='提示已复制，请粘贴到主对话；尚未配置或安装。';},offer);
+      }catch(e){offer();}
+    });
+    var check=button('重新检查',run);
+    var dismiss=button('暂时跳过',function(){generation++;panel.style.display='none';check.disabled=false;});
+    function showHelp(show){installedButton.hidden=!show;missingButton.hidden=!show;copyButton.hidden=!show;if(!show){pathArea.hidden=true;fallback.hidden=true;feedback.textContent='';}}
+    panel.appendChild(heading);panel.appendChild(status);panel.appendChild(guide);panel.appendChild(actions);panel.appendChild(pathArea);panel.appendChild(feedback);panel.appendChild(fallback);
+    document.documentElement.appendChild(panel);
+    var generation=0;
+    var labels={missing:'未找到',unusable:'无法使用',timeout:'检查超时'};
+    var instructions={
+      win32:'Windows：可先运行 winget search ffmpeg，确认可信来源和准确软件包 ID 后再安装；也可从 ffmpeg.org 下载页面选择可信构建，将包含两个工具的目录加入 PATH。',
+      darwin:'macOS：如果已安装 Homebrew，可运行 brew install ffmpeg；也可查看 ffmpeg.org 下载页面。',
+      linux:'Debian / Ubuntu：可运行 sudo apt install ffmpeg。其他 Linux 发行版请使用对应软件包管理器或查看 ffmpeg.org 下载页面。'
+    };
+    function run(){
+      var current=++generation;check.disabled=true;
+      panel.style.display='block';status.textContent='正在检查视频工具…';showHelp(false);details.hidden=true;guide.hidden=true;dismiss.textContent='暂时跳过';
+      // A check is never served from a previous UI result or an HTTP cache.
+      fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'environment:check',payload:{}})})
+        .then(function(r){if(!r.ok)throw new Error('check failed');return r.json();})
+        .then(function(value){
+          if(current!==generation)return;
+          var tools=value&&value.tools, platform=value&&value.platform;
+          if(['win32','darwin','linux'].indexOf(platform)<0||!tools||!tools.ffmpeg||!tools.ffprobe||!['ok','missing','unusable','timeout'].includes(tools.ffmpeg.status)||!['ok','missing','unusable','timeout'].includes(tools.ffprobe.status))throw new Error('invalid response');
+          check.disabled=false;
+          var issues=['ffmpeg','ffprobe'].filter(function(name){return tools[name].status!=='ok';});
+          if(!issues.length){
+            if(panel.style.display!=='none'){
+              status.textContent='检查通过：ffmpeg 和 ffprobe 均可用。请回到原操作重试。';
+              guide.hidden=true;details.hidden=true;details.setAttribute('aria-expanded','false');dismiss.textContent='关闭';
+            }
+            return;
+          }
+          details.hidden=false;showHelp(true);
+          status.textContent='视频工具需要注意：'+issues.map(function(name){return name+'：'+labels[tools[name].status];}).join('；')+'。您可以继续使用工作台。';
+          guideText.textContent=instructions[platform]+' 安装后请确认两个工具均可用，再返回此处重新检查。';
+          panel.style.display='block';
+        }).catch(function(){
+          if(current!==generation)return;
+          check.disabled=false;showHelp(true);status.textContent='环境检查暂时失败，无法确定工具状态。请确认插件已更新并重启 DSH 后重新检查；您也可以继续使用工作台。';
+          guide.hidden=true;details.hidden=true;details.setAttribute('aria-expanded','false');guideText.textContent='';panel.style.display='block';
+        });
+    }
+    run();
+  })();
+  // Entry card. Cloned from the upstream suggestion card so it inherits that card's
+  // exact size, radius and positioning. A hand-built box drifted and overlapped it.
+  var wrap=null,wrapTarget=null;
+  function buildEntry(card){
+    // The suggestion is a grid cell wrapping the button. Cloning the button put both
+    // tiles inside one cell, which is what squeezed the labels; cloning the cell lets
+    // the host's own two-column grid lay them out at full column width.
+    var cell=card.parentElement;
+    var holder=(cell&&cell.tagName==='LI')?cell:card;
+    var clone;
+    try{ clone=holder.cloneNode(true); }catch(e){ return null; }
+    var ids=clone.querySelectorAll('[id]');
+    for(var k=0;k<ids.length;k++)ids[k].removeAttribute('id');
+    clone.id='no996-template-picker';
+    clone.removeAttribute('aria-disabled');
+    clone.removeAttribute('data-no996-disabled');
+    clone.removeAttribute('title');
+    clone.style.opacity='';
+    var inner=clone.querySelector('button');
+    if(inner){
+      inner.removeAttribute('data-no996-disabled');
+      inner.removeAttribute('aria-disabled');
+      inner.removeAttribute('title');
+      inner.style.opacity='';
+      inner.style.cursor='pointer';
+    }
+    var nodes=clone.querySelectorAll('*');
+    var replaced=false;
+    for(var i=0;i<nodes.length;i++){
+      var el=nodes[i];
+      if(el.childElementCount===0&&(el.textContent||'').trim()==='视频复刻'){el.textContent='选择模板';replaced=true;break;}
+    }
+    if(!replaced)(inner||clone).textContent='选择模板';
+    var target=inner||clone;
+    wrapTarget=target;
+    // The clone inherits the upstream card's disabled tooltip; replace it.
+    target.title='选择模板';
+    target.setAttribute('role','button');
+    target.setAttribute('tabindex','0');
+    target.setAttribute('aria-haspopup','dialog');
+    target.setAttribute('aria-expanded','false');
+    target.addEventListener('click',function(event){
+      event.preventDefault();event.stopPropagation();
+      if(openFlag)closeModal(); else openModal();
+    });
+    target.addEventListener('keydown',function(event){
+      if(event.key==='Enter'||event.key===' '){
+        event.preventDefault();event.stopPropagation();
+        if(openFlag)closeModal(); else openModal();
+      }
+    });
+    return clone;
   }
-  function closeMenu(){box.style.display='none';trigger.setAttribute('aria-expanded','false');}
-  trigger.addEventListener('click',function(){
-    if(box.style.display==='block'){closeMenu();return;}
-    box.style.display='block';trigger.setAttribute('aria-expanded','true');positionMenu();
-  });
-  cancel.addEventListener('click',function(){closeMenu();trigger.focus();});
-  document.addEventListener('keydown',function(event){if(event.key==='Escape'&&box.style.display==='block'){closeMenu();trigger.focus();}});
-  addEventListener('resize',positionMenu);
-  addEventListener('scroll',positionMenu,true);
-  wrap.appendChild(trigger);wrap.appendChild(box);
-  // Insert into the upstream suggestion-card layout when that card exists.
+  // Centered dialog: the templates as cards, the way a small market lists its shelves.
+  var modal=document.createElement('div');
+  modal.id='no996-template-modal';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+  modal.setAttribute('aria-label','选择模板');
+  modal.style.cssText='position:fixed;inset:0;z-index:2147483002;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(8,8,10,.62);font:13px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#e9e9ee';
+  var dialog=document.createElement('div');
+  dialog.style.cssText='display:flex;flex-direction:column;width:min(720px,100%);max-height:min(78vh,680px);background:#1e1e20;border:1px solid #3c3c42;border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.55);overflow:hidden';
+  var head=document.createElement('div');
+  head.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:20px 20px 14px';
+  var headText=document.createElement('div');
+  var titleEl=document.createElement('div');
+  titleEl.textContent='模板';
+  titleEl.style.cssText='font-size:16px;font-weight:600;color:#f4f4f6';
+  var hintEl=document.createElement('div');
+  hintEl.textContent='挑一个开始，创建后可以继续编辑';
+  hintEl.style.cssText='margin-top:4px;font-size:12px;color:#9a9aa3';
+  headText.appendChild(titleEl);headText.appendChild(hintEl);
+  var closeBtn=document.createElement('button');
+  closeBtn.type='button';
+  closeBtn.setAttribute('aria-label','关闭');
+  closeBtn.textContent='×';
+  closeBtn.style.cssText='flex:0 0 auto;width:28px;height:28px;border:0;border-radius:8px;background:transparent;color:#a9a9b2;font-size:20px;line-height:1;cursor:pointer';
+  head.appendChild(headText);head.appendChild(closeBtn);
+  var body=document.createElement('div');
+  body.setAttribute('role','radiogroup');
+  body.setAttribute('aria-label','模板列表');
+  body.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;padding:0 20px 16px;overflow:auto';
+  var foot=document.createElement('div');
+  foot.style.cssText='display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:14px 20px;border-top:1px solid #303036;background:#1b1b1d';
+  var cancel=document.createElement('button');
+  cancel.type='button';
+  cancel.textContent='取消';
+  cancel.style.cssText='padding:7px 14px;border:1px solid #55555d;border-radius:8px;background:transparent;color:#d7d7de;font:13px system-ui,sans-serif;cursor:pointer';
+  var create=document.createElement('button');
+  create.type='button';
+  create.textContent='新建项目';
+  create.style.cssText='padding:7px 14px;border:0;border-radius:8px;background:#3b82f6;color:#fff;font:13px system-ui,sans-serif;cursor:pointer';
+  foot.appendChild(cancel);foot.appendChild(create);
+  dialog.appendChild(head);dialog.appendChild(body);dialog.appendChild(foot);
+  modal.appendChild(dialog);
+  modal.addEventListener('click',function(event){if(event.target===modal)closeModal();});
+  closeBtn.addEventListener('click',closeModal);
+  cancel.addEventListener('click',closeModal);
 
-  var list=null,busy=false;
+  // A persistent desktop window has no browser reload button, so a rebuilt overlay
+  // never reaches it otherwise. This reloads the Studio page only.
+  var reload=document.createElement('button');
+  reload.type='button';
+  reload.textContent='↻';
+  reload.title='刷新界面（重新加载工作台页面）';
+  reload.setAttribute('aria-label','刷新界面');
+  reload.style.cssText='display:grid;place-items:center;flex:0 0 auto;width:30px;height:30px;margin-left:4px;border:0;border-radius:7px;background:transparent;color:#c9c9d1;font-size:16px;line-height:1;cursor:pointer';
+  reload.addEventListener('click',function(){location.reload();});
+  // Always on screen first; placeReload() moves it into the header when it finds it.
+  reload.style.position='fixed';
+  reload.style.left=Math.max(8,innerWidth-46)+'px';
+  reload.style.top='56px';
+  try{document.documentElement.appendChild(reload);}catch(e){}
+  // Inserted into the host's own header row; editing the official shell is allowed
+  // while this build pins its version. The 「剪辑」 label sits inside the action
+  // cluster, so climb to the wide row that holds several controls before inserting:
+  // inserting next to the label put the button inside a narrow wrapper and hid it.
+  reload.addEventListener('mouseenter',function(){reload.style.background='rgba(255,255,255,.08)';});
+  reload.addEventListener('mouseleave',function(){reload.style.background='transparent';});
+  function findHeaderAnchor(){
+    try{
+      var walker=document.createTreeWalker(document.body,4,null);
+      var node;
+      while((node=walker.nextNode())){
+        if((node.nodeValue||'').trim()!=='剪辑')continue;
+        var el=node.parentElement;
+        if(!el||(el.closest&&(el.closest('#no996-template-picker')||el.closest('#no996-template-modal'))))continue;
+        if(el.getClientRects().length)return el;
+      }
+    }catch(e){}
+    return null;
+  }
+  function findHeaderBar(el){
+    // The header row sits at the top of this page: wide, short, several controls.
+    var node=el;
+    for(var i=0;i<8&&node&&node!==document.body;i++){
+      var rect=node.getBoundingClientRect();
+      var controls=node.querySelectorAll('button,[role="button"],a');
+      if(rect.top<60&&rect.height>=24&&rect.height<=60&&rect.width>240&&controls.length>=2)return node;
+      node=node.parentElement;
+    }
+    var all=document.querySelectorAll('div,header,[role="toolbar"]');
+    var best=null;
+    for(var k=0;k<all.length;k++){
+      var e=all[k];
+      var r=e.getBoundingClientRect();
+      if(!(r.top<60&&r.height>=24&&r.height<=60&&r.width>240))continue;
+      if(e.querySelectorAll('button,[role="button"],a').length<2)continue;
+      if(!best||r.width<best.getBoundingClientRect().width)best=e;
+    }
+    return best;
+  }
+  function placeReload(){
+    try{
+      if(reload.isConnected&&reload.getAttribute('data-no996-in')==='bar')return;
+      var label=findHeaderAnchor();
+      var bar=label?findHeaderBar(label):null;
+      globalThis.__no996ReloadDebug={label:!!label,bar:!!bar,barTag:bar?bar.tagName:null,barClass:bar?String(bar.className).slice(0,80):null};
+      if(bar){
+        var computed=getComputedStyle(bar);
+        if(computed.display!=='flex'&&computed.display!=='inline-flex')bar.style.display='flex';
+        bar.style.alignItems='center';
+        bar.style.flexWrap='nowrap';
+        var child=label;
+        while(child&&child.parentElement&&child.parentElement!==bar)child=child.parentElement;
+        if(child&&child.parentElement===bar)bar.insertBefore(reload,child);
+        else bar.appendChild(reload);
+        reload.style.position='static';
+        reload.style.left='';
+        reload.style.top='';
+        reload.style.width='28px';
+        reload.style.height='28px';
+        var box=reload.getBoundingClientRect();
+        if(box.width<10||box.height<10||box.right>innerWidth+1){
+          document.documentElement.appendChild(reload);
+          reload.style.position='fixed';
+          reload.style.left=Math.max(8,innerWidth-46)+'px';
+          reload.style.top='56px';
+          reload.setAttribute('data-no996-in','corner');
+          globalThis.__no996ReloadDebug.clipped=true;
+          return;
+        }
+        reload.setAttribute('data-no996-in','bar');
+        globalThis.__no996ReloadDebug.clipped=false;
+        return;
+      }
+      if(reload.parentElement!==document.documentElement)document.documentElement.appendChild(reload);
+      reload.style.position='fixed';
+      reload.style.left=Math.max(8,innerWidth-46)+'px';
+      reload.style.top='56px';
+      reload.style.width='28px';
+      reload.style.height='28px';
+      reload.setAttribute('data-no996-in','corner');
+    }catch(e){
+      globalThis.__no996ReloadDebug={error:String(e&&e.message||e)};
+    }
+  }
+
+  var list=null,selected='',busy=false,openFlag=false;
+  var marks={'paper-texture':['▤','#d4ba91'],'replica-film':['▣','#8fb6d3'],'sketchnote':['✎','#d8b8a6']};
+
   function fill(items){
-    choices.textContent='';
+    body.textContent='';
     if(!items.some(function(item){return item.id===selected;}))selected=items.length?items[0].id:'';
     items.forEach(function(item){
-      var option=document.createElement('button');
-      option.type='button';option.setAttribute('role','radio');
-      option.setAttribute('aria-checked',String(item.id===selected));
-      option.style.cssText='display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 10px;border:1px solid '+(item.id===selected?'#6c96da':'transparent')+';border-radius:8px;background:'+(item.id===selected?'#303c50':'#303032')+';color:#ededf0;cursor:pointer;font:inherit';
-      var icons={'paper-texture':['▤','#d4ba91'],'replica-film':['▣','#8fb6d3'],'sketchnote':['✎','#d8b8a6']};
-      var icon=document.createElement('span'),mark=icons[item.id]||['▧','#afb9cb'];
-      icon.textContent=mark[0];icon.setAttribute('aria-hidden','true');
-      icon.style.cssText='display:grid;place-items:center;flex:0 0 34px;height:34px;border-radius:8px;background:#17191d;color:'+mark[1]+';font-size:19px';
-      var copy=document.createElement('span');copy.style.cssText='display:block;min-width:0';
-      var name=document.createElement('span');name.textContent=item.title||item.id;
-      name.style.cssText='display:block;font-size:13px;font-weight:600';copy.appendChild(name);
-      if(item.description){var desc=document.createElement('span');desc.textContent=item.description;desc.style.cssText='display:block;color:#adadb5;font-size:11px;line-height:1.45;margin-top:3px';copy.appendChild(desc);}
-      option.appendChild(icon);option.appendChild(copy);
-      option.addEventListener('click',function(){selected=item.id;fill(items);});
-      choices.appendChild(option);
+      var card=document.createElement('button');
+      card.type='button';
+      card.setAttribute('role','radio');
+      card.setAttribute('aria-checked',String(item.id===selected));
+      card.style.cssText='display:flex;flex-direction:column;gap:8px;min-width:0;text-align:left;padding:14px;border:1px solid '+(item.id===selected?'#6c96da':'#333338')+';border-radius:12px;background:'+(item.id===selected?'#2c374a':'#26262a')+';color:#ededf0;cursor:pointer;font:inherit';
+      var top=document.createElement('div');
+      top.style.cssText='display:flex;align-items:center;gap:8px;min-width:0';
+      var mark=marks[item.id]||['▧','#afb9cb'];
+      var icon=document.createElement('span');
+      icon.textContent=mark[0];
+      icon.setAttribute('aria-hidden','true');
+      icon.style.cssText='display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;border-radius:8px;background:#161619;color:'+mark[1]+';font-size:16px';
+      var name=document.createElement('span');
+      name.textContent=item.title||item.id;
+      name.style.cssText='min-width:0;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      top.appendChild(icon);top.appendChild(name);
+      var desc=document.createElement('span');
+      desc.textContent=item.description||'';
+      desc.style.cssText='display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;color:#a7a7b0;font-size:12px;line-height:1.5';
+      card.appendChild(top);card.appendChild(desc);
+      card.addEventListener('click',function(){selected=item.id;fill(items);});
+      body.appendChild(card);
     });
-    button.disabled=!selected||busy;
-    if(!items.length){var empty=document.createElement('div');empty.textContent='没有可用模板，请稍后重试';empty.style.cssText='color:#bcbcc4;padding:12px 4px';choices.appendChild(empty);}
+    create.disabled=!selected||busy;
+    if(!items.length){
+      var empty=document.createElement('div');
+      empty.textContent='没有可用模板，请稍后重试';
+      empty.style.cssText='grid-column:1/-1;color:#b9b9c1;padding:28px 4px;text-align:center';
+      body.appendChild(empty);
+    }
   }
   function load(){
     if(list)return Promise.resolve(list);
@@ -96,23 +336,40 @@
       fill(list);return list;
     }).catch(function(){list=[];fill(list);return list;});
   }
-  function reset(){
-    busy=false;button.disabled=false;button.textContent='新建项目';
+  function openModal(){
+    if(openFlag)return;
+    openFlag=true;
+    if(!modal.isConnected){
+      try{document.documentElement.appendChild(modal);}catch(e){openFlag=false;return;}
+    }
+    modal.style.display='flex';
+    if(wrapTarget)wrapTarget.setAttribute('aria-expanded','true');
+    load();
+    closeBtn.focus();
   }
-  button.addEventListener('click',function(){
-    if(busy)return;
-    var id=selected;
-    if(!id)return;
-    busy=true;button.disabled=true;button.textContent='创建中…';
-    rpc('template:create',{templateId:id}).then(function(value){
+  function closeModal(){
+    if(!openFlag)return;
+    openFlag=false;
+    modal.style.display='none';
+    if(wrapTarget)wrapTarget.setAttribute('aria-expanded','false');
+    try{wrapTarget&&wrapTarget.focus();}catch(e){}
+  }
+  document.addEventListener('keydown',function(event){ if(event.key==='Escape'&&openFlag){event.preventDefault();closeModal();} });
+  create.addEventListener('click',function(){
+    if(busy||!selected)return;
+    busy=true;create.disabled=true;create.textContent='创建中…';
+    rpc('template:create',{templateId:selected}).then(function(value){
       var projectId=value&&value.projectId;
       if(typeof projectId!=='string'||!/^[A-Za-z0-9_-]{6,40}$/.test(projectId))throw new Error('bad project');
       try{if(value.prompt)localStorage.setItem('no996.openfilm.templatePrompt',String(value.prompt).slice(0,600));}catch(e){}
       wrap.style.display='none';
+      closeModal();
       location.href='/projects/'+projectId;
     }).catch(function(){
-      button.textContent='创建失败，重试';button.disabled=false;busy=false;
-      setTimeout(reset,2500);
+      create.textContent='创建失败，重试';
+      create.disabled=false;
+      busy=false;
+      setTimeout(function(){create.textContent='新建项目';create.disabled=!selected;},2500);
     });
   });
   function textNode(exact){
@@ -232,16 +489,13 @@
   function place(){
     try{
       var card=findReplicaCard();
-      if(!card||!card.parentElement){wrap.style.display='none';return;}
-      if(wrap.parentElement!==card.parentElement||wrap.nextElementSibling!==card)card.parentElement.insertBefore(wrap,card);
-      // These are sibling suggestion cards; keep them side by side even in a narrow chat.
-      card.parentElement.style.display='flex';
-      card.parentElement.style.flexDirection='row';
-      card.parentElement.style.alignItems='stretch';
-      card.parentElement.style.gap='8px';
-      card.style.flex='1 1 0';card.style.minWidth='0';
-      wrap.style.display='block';
-      positionMenu();
+      if(!card||!card.parentElement){if(wrap)wrap.style.display='none';return;}
+      // Rebuild the clone when the host re-renders its own card away.
+      if(!wrap||!wrap.isConnected)wrap=buildEntry(card);
+      if(!wrap)return;
+      var host=(card.parentElement&&card.parentElement.tagName==='LI')?card.parentElement:card;
+      if(wrap.parentElement!==host.parentElement||wrap.nextElementSibling!==host)host.parentElement.insertBefore(wrap,host);
+      disableExtras();
       wrap.setAttribute('data-no996-anchor','card');
       globalThis.__no996PickerState={mode:'card',bar:rectInfo(wrap)};
     }catch(e){}
@@ -257,6 +511,7 @@
         var el=nodes[i];
         if(el.closest&&el.closest('#no996-template-picker'))continue;
         if(el.childElementCount===0&&(el.textContent||'').trim()==='视频复刻'){
+          el.style.whiteSpace='nowrap';el.style.overflow='hidden';el.style.textOverflow='ellipsis';el.style.maxWidth='100%';
           var card=el;
           for(var up=0;up<4&&card.parentElement&&card.parentElement!==document.body;up++){
             card=card.parentElement;
@@ -279,7 +534,73 @@
     }catch(e){}
     return null;
   }
-  function hideReplica(){ findReplicaCard(); place(); }
+  // "更多技能" and "从示例开始" open flows this build does not carry. Keep them in
+  // the row so it still reads like upstream, but stop clicks the same way the
+  // replica card is stopped.
+  var extrasApplied={};
+  function disableExtras(){
+    try{
+      var labels=['更多技能','从示例开始'];
+      // The panel polls often; once both links are marked and still mounted, skip the walk.
+      if(labels.every(function(label){return extrasApplied[label]&&extrasApplied[label].isConnected;}))return;
+      // Match the text node itself: these links carry a chevron icon beside the label,
+      // so requiring a childless element would miss them.
+      var walker=document.createTreeWalker(document.body,4,null);
+      var node;
+      while((node=walker.nextNode())){
+        if(labels.indexOf((node.nodeValue||'').trim())<0)continue;
+        var el=node.parentElement;
+        if(!el||(el.closest&&el.closest('#no996-template-picker')))continue;
+        var target=el.closest('button,[role="button"],a')||el;
+        if(target.hasAttribute('data-no996-off'))continue;
+        target.setAttribute('data-no996-off','1');
+        extrasApplied[(node.nodeValue||'').trim()]=target;
+        target.setAttribute('aria-disabled','true');
+        target.style.opacity='0.45';
+        target.style.cursor='not-allowed';
+        target.style.pointerEvents='none';
+        target.addEventListener('click',function(event){event.preventDefault();event.stopImmediatePropagation();},true);
+        target.addEventListener('keydown',function(event){if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopImmediatePropagation();}},true);
+      }
+    }catch(e){}
+  }
+  // The pinned build cannot update itself, so the About panel's failed update
+  // check is noise. Say what this build is, and drop the update row plus the
+  // GitHub / 示例 / 官网 links: they point at upstream, not at this wrapper.
+  // Matched by exact label rather than by an ancestor panel: inside that page the
+  // update line and the footer links sit in different containers, so a walk up
+  // from the line never reached the links.
+  function tuneAbout(){
+    try{
+      var walker=document.createTreeWalker(document.body,4,null);
+      var node,footerRow=null;
+      while((node=walker.nextNode())){
+        var text=(node.nodeValue||'').trim();
+        if(!text)continue;
+        if(text.indexOf('更新没能完成')>=0){node.nodeValue='基于 OpenFilm 开发';continue;}
+        if(text.indexOf('发现新版本')>=0||text==='检查更新'){
+          var row=node.parentElement;
+          if(row)row.style.display='none';
+          continue;
+        }
+        if(text==='GitHub'||text==='示例'||text==='官网'){
+          var el=node.parentElement;
+          if(!el)continue;
+          if(text==='GitHub')footerRow=el.parentElement;
+          el.style.display='none';
+        }
+      }
+      if(footerRow&&!document.querySelector('[data-no996-version]')){
+        var tag=document.createElement('div');
+        tag.setAttribute('data-no996-version','1');
+        tag.textContent='兼容 OpenFilm '+(globalThis.__no996OpenfilmVersion||'0.3.1');
+        tag.style.cssText='margin-top:6px;text-align:left;font-size:11px;color:#8a8a93';
+        footerRow.appendChild(tag);
+      }
+    }catch(e){}
+  }
+
+  function hideReplica(){ findReplicaCard(); place(); tuneAbout(); }
   var hideTimer=null;
   function scheduleHide(){
     if(hideTimer)return;
@@ -290,7 +611,29 @@
   }catch(e){}
   load().then(place);
   place();
-  setInterval(place,700);
+  // The overlay is read from disk per render, but an open page keeps the script it
+  // already loaded. Poll the Host so a saved file reaches this window without
+  // reopening the panel; auto-reload only while the window is not in front.
+  var loadedVersion='';
+  function watchVersion(){
+    if(location.protocol==='dsh-app:')return;
+    fetch('/__dsh/shell-version',{cache:'no-store',credentials:'same-origin'})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(v){
+        if(!v||!v.version)return;
+        if(!loadedVersion){loadedVersion=v.version;return;}
+        if(v.version===loadedVersion)return;
+        loadedVersion=v.version;
+        if(document.visibilityState!=='visible'){location.reload();return;}
+        reload.style.background='rgba(59,130,246,.28)';
+        reload.title='有新版本，点击刷新';
+      })
+      .catch(function(){});
+  }
+  setTimeout(watchVersion,1200);
+  setInterval(watchVersion,4000);
+  placeReload();
+  setInterval(function(){place();placeReload();tuneAbout();},700);
   addEventListener('resize',place);
   hideReplica();
 
@@ -353,3 +696,98 @@
   setTimeout(probe,3000);
   setInterval(probe,5000);
 })()
+
+// ── 视频剪辑模式的权限确认（0.7.0 第 2 步）────────────────────────────────────
+// 只在 /projects/<id> 页面上出现。DSH 的权限是按会话生效的预设：
+//   danger-full-access = 全盘读写 + 永不询问（剪辑要跑命令、导片、起渲染）
+//   workspace-write    = 只写工作区 + 需要时询问
+// 这里只做一件事：把 DSH 已经支持的选择，在用户真正看得见的地方问一次。
+// 前一个语句以 `})()` 结束、这一行以 `(` 开头：缺了这个分号，JS 会把两个
+// IIFE 连成 `})(…)` 的调用链，报 "(intermediate value)… is not a function"。
+;(function permissionGate(){
+  function call(channel,payload){
+    return fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({channel:channel,payload:payload})})
+      .then(function(r){return r.json();});
+  }
+  function log(event){ try{ call('client:log',{event:event}); }catch(e){} }
+  function projectIdOf(){
+    var m=/^\/projects\/([A-Za-z0-9_-]{6,40})\/?$/.exec(location.pathname||'');
+    return m?m[1]:'';
+  }
+  var chip=document.createElement('button');
+  chip.type='button'; chip.id='no996-permission'; chip.hidden=true;
+  chip.style.cssText='position:fixed;z-index:2147483001;left:50%;transform:translateX(-50%);bottom:12px;padding:4px 10px;border:1px solid #4b463c;border-radius:999px;background:#26241f;color:#cfc9bb;font:12px/1.5 system-ui,sans-serif;cursor:pointer';
+  var card=document.createElement('section');
+  card.id='no996-permission-card'; card.hidden=true;
+  card.setAttribute('role','dialog'); card.setAttribute('aria-label','视频剪辑权限');
+  card.style.cssText='position:fixed;z-index:2147483002;left:50%;top:64px;transform:translateX(-50%);width:min(520px,calc(100vw - 32px));box-sizing:border-box;padding:16px;border:1px solid #62563d;border-radius:12px;background:#252321;color:#f1eee8;box-shadow:0 8px 30px rgba(0,0,0,.45);font:13px/1.65 system-ui,sans-serif';
+  var title=document.createElement('strong'); title.textContent='视频剪辑要一次权限确认';
+  var body=document.createElement('div');
+  body.style.marginTop='6px';
+  var note=document.createElement('p'); note.style.cssText='margin:8px 0 0;color:#a99f8c'
+  var actions=document.createElement('div'); actions.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin-top:12px';
+  var status=document.createElement('p'); status.setAttribute('role','status'); status.setAttribute('aria-live','polite'); status.style.cssText='margin:8px 0 0;color:#e0b070';
+  function button(label,primary,handler){
+    var b=document.createElement('button'); b.type='button'; b.textContent=label;
+    b.style.cssText='padding:7px 12px;border-radius:8px;cursor:pointer;font:inherit;'+(primary?'border:1px solid #7a6a45;background:#3a3428;color:#fff':'border:1px solid #555;background:#2f2c28;color:#e8e4dc;');
+    b.addEventListener('click',handler); actions.appendChild(b); return b;
+  }
+  var allow=button('允许并继续（完全访问）',true,function(){ choose('danger-full-access'); });
+  var keep=button('只用工作区',false,function(){ choose('workspace-write'); });
+  var later=button('先不决定',false,function(){ card.hidden=true; chip.hidden=false; });
+  body.appendChild(title); body.appendChild(note);
+  card.appendChild(body); card.appendChild(actions); card.appendChild(status);
+  function mount(){
+    if(!chip.isConnected){ document.body.appendChild(chip); document.body.appendChild(card); }
+    chip.addEventListener('click',function(){ card.hidden=false; chip.hidden=true; });
+  }
+  var current=''; var rest=null; var asking='';
+  function render(rest){
+    if(!rest.available){ chip.hidden=false; chip.textContent='权限：由 DSH 决定'; chip.title='这个 DSH 版本没有暴露权限预设，请在 DSH 里设置'; return; }
+    var label = rest.current==='danger-full-access' ? '权限：完全访问' : rest.current==='workspace-write' ? '权限：工作区（关键步骤会询问）' : '权限：未设置';
+    chip.textContent=label; chip.hidden=false;
+    if(!rest.decided){
+      note.textContent='剪辑要在你的项目目录里写文件、跑命令、调渲染和导出，这些在默认设置下每一步都会停下来问。选一次，之后不再打断你；随时可以在这里改回来。';
+      status.textContent='';
+      card.hidden=false; chip.hidden=true;
+      if(!asked){ asked=true; log('permission-shown'); }
+    } else {
+      card.hidden=true;
+    }
+  }
+  var asked=false;
+  function choose(preset){
+    allow.disabled=true; keep.disabled=true; status.style.color='#a99f8c'; status.textContent='正在应用…';
+    call('agent:permission-set',{projectId:current,preset:preset}).then(function(result){
+      allow.disabled=false; keep.disabled=false;
+      if(result&&result.ok){
+        status.style.color='#8fbf7f';
+        status.textContent = result.applied===false
+          ? '已记住：这个项目的会话建好后自动生效（发第一句话即可）'
+          : '已应用：'+(preset==='danger-full-access'?'完全访问':'只用工作区');
+        log('permission-chosen');
+        setTimeout(function(){ card.hidden=true; refresh(); },900);
+      } else {
+        var code=(result&&result.error)||'FAILED';
+        status.style.color='#e08a70';
+        status.textContent = code==='PERMISSION_SESSION'
+          ? '这个项目还没有会话：先在右侧说一句话，让它建好会话，再回来点这里。'
+          : code==='PERMISSION_UNAVAILABLE'
+            ? '这个 DSH 版本不允许插件改权限，请在 DSH 的设置里选「完全访问」。'
+            : '没有应用成功（'+code+'）。可以重试，或到 DSH 里改权限。';
+      }
+    }).catch(function(error){ allow.disabled=false; keep.disabled=false; status.style.color='#e08a70'; status.textContent='请求失败：'+(error&&error.message||error); });
+  }
+  function refresh(){
+    var id=projectIdOf();
+    if(!id){ chip.hidden=true; card.hidden=true; return; }
+    if(id!==current){ current=id; asked=false; }
+    call('agent:permission',{projectId:current}).then(function(result){
+      if(!result||typeof result!=='object'){ return; }
+      rest=result; render(rest);
+    }).catch(function(){});
+  }
+  mount();
+  refresh();
+  setInterval(function(){ if(projectIdOf()!==current){ refresh(); } },1500);
+})();

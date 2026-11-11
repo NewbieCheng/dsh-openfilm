@@ -62,7 +62,10 @@ test('a tool call and its result become one act pair, never a duplicate', () => 
   assert.equal(called.events[0].update.sessionUpdate, 'tool_call');
   assert.equal(called.events[0].update.toolCallId, 'c1');
   assert.equal(called.events[0].update.title, 'ops_glob');
-  assert.match(called.events[0].update.rawInput, /pattern/);
+  // rawInput must be an object: the shell takes the detail (pattern, path,
+  // command) out of it and discards a string outright.
+  assert.deepEqual(called.events[0].update.rawInput, { pattern: '*' });
+  assert.equal(called.events[0].update.kind, 'search');
   // A repeated call (streamed and durable, or two frames) must not open a second card.
   assert.equal(durable(state, callEvent()).events.length, 0);
 

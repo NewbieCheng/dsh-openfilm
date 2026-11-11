@@ -38,10 +38,11 @@ export function createOfficialApprovals({ deliver, timeoutMs = DEFAULT_TIMEOUT_M
   }
 
   return Object.freeze({
-    request({ projectId, key, agentId, toolName, callId, signal } = {}) {
+    request({ projectId, key, agentId, toolName, callId, signal, onRequest } = {}) {
       if (signal?.aborted) return Promise.resolve('cancelled');
       if (closed || !binding({ projectId, key, agentId }) || typeof toolName !== 'string' || !TOOL_NAME.test(toolName) ||
           (callId !== undefined && !identity(callId)) || pending.size >= maxPending ||
+          (onRequest !== undefined && typeof onRequest !== 'function') ||
           (signal !== undefined && (!signal || typeof signal.addEventListener !== 'function' || typeof signal.removeEventListener !== 'function' || typeof signal.aborted !== 'boolean'))) {
         return Promise.resolve('unavailable');
       }
@@ -50,6 +51,9 @@ export function createOfficialApprovals({ deliver, timeoutMs = DEFAULT_TIMEOUT_M
         const entry = { projectId, key, agentId, requestId, signal, resolve, delivered: false, earlyAnswer: null };
         entry.abort = () => settle(entry, 'cancelled');
         pending.set(requestId, entry);
+        // Told before delivery so a caller can show the question without waiting
+        // for the (possibly absent) panel.
+        try { onRequest?.(requestId); } catch { /* the ask itself still proceeds */ }
         entry.timer = setTimeout(() => settle(entry, 'unavailable'), timeoutMs);
         if (signal) {
           signal.addEventListener('abort', entry.abort, { once: true });
@@ -79,6 +83,18 @@ export function createOfficialApprovals({ deliver, timeoutMs = DEFAULT_TIMEOUT_M
       if (!binding({ projectId, key, agentId }) || typeof requestId !== 'string') return false;
       const entry = pending.get(requestId);
       if (!entry || entry.projectId !== projectId || entry.key !== key || entry.agentId !== agentId || entry.earlyAnswer) return false;
+      const outcome = optionId === 'allow-once' ? 'allowed-once' : optionId === 'reject-once' ? 'rejected' : null;
+      if (!outcome) return false;
+      if (!entry.delivered) { entry.earlyAnswer = outcome; return true; }
+      return settle(entry, outcome);
+    },
+
+    // The panel knows only the request id it was shown, so the owning agent is
+    // read from the pending entry instead of being supplied by the renderer.
+    answerRequest({ projectId, key, requestId, optionId } = {}) {
+      if (typeof projectId !== 'string' || !PROJECT_ID.test(projectId) || !identity(key) || typeof requestId !== 'string') return false;
+      const entry = pending.get(requestId);
+      if (!entry || entry.projectId !== projectId || entry.key !== key || entry.earlyAnswer) return false;
       const outcome = optionId === 'allow-once' ? 'allowed-once' : optionId === 'reject-once' ? 'rejected' : null;
       if (!outcome) return false;
       if (!entry.delivered) { entry.earlyAnswer = outcome; return true; }

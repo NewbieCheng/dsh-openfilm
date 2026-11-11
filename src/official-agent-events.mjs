@@ -21,9 +21,10 @@
 // instead of matched against a required prefix.
 
 const TEXT_MAX = 8000;
-const INPUT_MAX = 4000;
 const nonempty = (value) => typeof value === 'string' && value.length > 0;
 const ordinal = (value) => Number.isSafeInteger(value) && value >= 0;
+
+import { describeToolCall, planFromTodoWrite } from './tool-call-act.mjs';
 
 // Thinking is shown as thought updates so a slow first token still looks alive.
 // `reasoning-delta` is the name the harness actually emits.
@@ -46,15 +47,31 @@ function textOf(content, type) {
   return content.filter(block => block?.type === type && typeof block.text === 'string').map(block => block.text).join('');
 }
 
+/**
+ * One tool call as the shell draws it.
+ *
+ * `todo_write` is not a tool card: its list IS the plan, so it becomes a `plan`
+ * update and its result card is suppressed. Everything else goes through the act
+ * dictionary, which is what turns a name into "正在读取文件 · film.html".
+ */
 function toolCallEvent(state, { callId, name, input }) {
   if (typeof callId !== 'string' || !callId || state.tools[callId]) return { state, events: [] };
-  const title = nonempty(name) ? clip(name, 120) : 'tool';
-  const rawInput = typeof input === 'string' ? clip(input, INPUT_MAX) : undefined;
+  if (name === 'todo_write') {
+    const entries = planFromTodoWrite(input);
+    if (!entries) return { state, events: [] };
+    return {
+      state: { ...state, tools: { ...state.tools, [callId]: { title: name, done: false, plan: true } } },
+      events: [update(state.key, 'plan', { entries })],
+    };
+  }
+  const act = describeToolCall({ name, input });
+  const title = nonempty(act.title) ? clip(act.title, 120) : 'tool';
   return {
-    state: { ...state, tools: { ...state.tools, [callId]: { title, done: false } } },
+    state: { ...state, tools: { ...state.tools, [callId]: { title, done: false, kind: act.kind } } },
     events: [update(state.key, 'tool_call', {
-      toolCallId: callId, title, kind: 'other', status: 'in_progress',
-      ...(rawInput !== undefined ? { rawInput } : {}),
+      toolCallId: callId, title, kind: act.kind, status: 'in_progress',
+      rawInput: act.rawInput,
+      ...(act.locations ? { locations: act.locations } : {}),
     })],
   };
 }
@@ -149,13 +166,20 @@ export function translateSessionEvent(state, { sessionId, turnId, event } = {}) 
     const callId = typeof data.toolCallId === 'string' ? data.toolCallId
       : typeof data.message?.toolCallId === 'string' ? data.message.toolCallId : '';
     if (!callId || state.tools[callId]?.done) return unchanged;
+    const known = state.tools[callId];
     const text = textOf(data.message?.content, 'text');
     const failed = data.message?.isError === true || Boolean(data.message?.error) || Boolean(data.error);
-    const tools = { ...state.tools, [callId]: { ...(state.tools[callId] ?? { title: 'tool' }), done: true } };
+    // A plan update has no card to complete; its list is already on screen.
+    if (known?.plan === true) {
+      return { state: { ...state, tools: { ...state.tools, [callId]: { ...known, done: true } } }, events: [] };
+    }
+    const tools = { ...state.tools, [callId]: { ...(known ?? { title: 'tool' }), done: true } };
     return {
       state: { ...state, tools },
       events: [update(state.key, 'tool_call_update', {
         toolCallId: callId,
+        ...(known?.title ? { title: known.title } : {}),
+        ...(known?.kind ? { kind: known.kind } : {}),
         status: failed ? 'failed' : 'completed',
         ...(text ? { content: [{ type: 'text', text: clip(text, TEXT_MAX) }], rawOutput: clip(text, TEXT_MAX) } : {}),
       })],
@@ -180,9 +204,9 @@ export function translateSessionEvent(state, { sessionId, turnId, event } = {}) 
   }
   for (const block of content) {
     if (block?.type !== 'tool-call') continue;
-    const input = typeof block.arguments === 'string' ? block.arguments
-      : block.arguments === undefined ? undefined : JSON.stringify(block.arguments);
-    const call = toolCallEvent(next, { callId: block.id, name: block.name, input: clip(input ?? '', INPUT_MAX) });
+    // Arguments stay as recorded: the act dictionary parses and clamps them, so a
+    // JSON string here cannot be truncated into something unparseable.
+    const call = toolCallEvent(next, { callId: block.id, name: block.name, input: block.arguments });
     next = call.state;
     events.push(...call.events);
   }

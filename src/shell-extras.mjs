@@ -14,6 +14,14 @@ const assetUrl = new URL('../assets/shell-ui.js', import.meta.url);
 
 let cached = { mtime: -1, html: '' };
 
+export function shellUiVersion() {
+  try {
+    return String(Math.round(statSync(assetUrl).mtimeMs));
+  } catch {
+    return '';
+  }
+}
+
 export function shellUiInjection() {
   try {
     const info = statSync(assetUrl);

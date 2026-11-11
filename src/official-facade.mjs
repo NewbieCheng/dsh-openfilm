@@ -33,7 +33,7 @@ function officialFacadeFactory(bridge) {
 
   // Only these fixed RPC and event channels may reach the supplied bridge.
   // The Host must independently authorize project IDs and validate all payloads.
-  const rpcAllow = new Set(['chat:load', 'chat:save-sessions', 'chat:save-turn', 'chat:archive', 'chat:unarchive', 'chat:archive-state', 'editor:link', 'client:log', 'agent:prompt', 'agent:cancel', 'agent:models', 'agent:select-model']);
+  const rpcAllow = new Set(['chat:load', 'chat:save-sessions', 'chat:save-turn', 'chat:archive', 'chat:unarchive', 'chat:archive-state', 'editor:link', 'client:log', 'agent:prompt', 'agent:cancel', 'agent:models', 'agent:select-model', 'agent:thinking', 'agent:select-thinking', 'agent:answer-permission', 'agent:trace']);
   const eventAllow = new Set(['desktop:full-screen', 'desktop:toggle-chat', 'desktop:open-settings']);
   const rpc = async (channel, payload) => {
     if (!rpcAllow.has(channel) || typeof bridge.invoke !== 'function') throw unavailable(channel);
@@ -114,6 +114,15 @@ function officialFacadeFactory(bridge) {
   const pendingAgentPrompts = new Map();
   const agentListeners = new Set();
   const agentSources = new Map();
+  // What this window actually received, per project. Sent back once at the end
+  // of every turn so `/diagnose` can separate "never published" from "published
+  // and lost" from "received and ignored by the shell".
+  const traceByProject = new Map();
+  const traceFor = (id) => {
+    let entry = traceByProject.get(id);
+    if (!entry) traceByProject.set(id, entry = { seen: 0, kinds: Object.create(null) });
+    return entry;
+  };
   const emitAgent = (event) => { for (const listener of [...agentListeners]) { try { listener(event); } catch { /* one closed view */ } } };
   const ensureAgentSource = (id) => {
     const current = agentSources.get(id);
@@ -156,7 +165,13 @@ function officialFacadeFactory(bridge) {
         pending.terminalSeen = true;
         emitAgent(value);
         pending.resolveTerminal(value.ok ? { ok: true, stopReason: value.stopReason } : { ok: false, error: value.error });
-      } else emitAgent(value);
+      } else {
+        const counts = traceFor(id);
+        counts.seen += 1;
+        const name = value.update && typeof value.update.sessionUpdate === 'string' ? value.update.sessionUpdate : '';
+        if (/^[a-z_]{1,40}$/.test(name)) counts.kinds[name] = (counts.kinds[name] || 0) + 1;
+        emitAgent(value);
+      }
     };
     return entry.ready;
   };
@@ -174,6 +189,14 @@ function officialFacadeFactory(bridge) {
           const option = await rpc('agent:models', { projectId: match[1] });
           if (option && option.id === 'model' && Array.isArray(option.options)) info.configOptions = [option];
         } catch { /* keep the empty list */ }
+        // The thinking menu is a second select option; a model with no declared
+        // efforts omits it rather than showing a dead control.
+        try {
+          const thinking = await rpc('agent:thinking', { projectId: match[1] });
+          if (thinking && thinking.id === 'thinking' && Array.isArray(thinking.options) && thinking.options.length > 1) {
+            info.configOptions = [...info.configOptions, thinking];
+          }
+        } catch { /* keep the model option alone */ }
       }
       return { ok: true, info };
     },
@@ -220,12 +243,30 @@ function officialFacadeFactory(bridge) {
     setOption: async (key, optionId, value) => {
       const id = agentKeys.get(key);
       if (!id) throw unavailable('localAgents.setOption');
-      if (optionId !== 'model' || typeof value !== 'string') throw unavailable('localAgents.setOption');
-      return await rpc('agent:select-model', { projectId: id, value });
+      if (typeof value !== 'string') throw unavailable('localAgents.setOption');
+      if (optionId === 'model') return await rpc('agent:select-model', { projectId: id, value });
+      // Thinking intensity travels as its own option: the Host applies it through
+      // the model selection, so the two can never disagree.
+      if (optionId === 'thinking') return await rpc('agent:select-thinking', { projectId: id, value });
+      throw unavailable('localAgents.setOption');
     },
-    // Approvals fail closed with a readable answer: the DSH approval service is
-    // not exposed to this plugin yet, and pretending to allow would be worse.
-    answerPermission: async () => ({ ok: false, error: '当前会话没有可审批的请求（DSH 审批服务尚未接入）' }),
+    // Approvals are answered from either window: DSH's own panel still owns them
+    // through its answerers, and this forwards the view's answer for the same
+    // one-shot decision. The Host picks the winner and resolves the owning agent
+    // from its own record, so the page never names a session.
+    answerPermission: async (key, requestId, optionId) => {
+      const match = /^\/projects\/([A-Za-z0-9_-]{6,40})\/?$/.exec(globalThis.location?.pathname || '');
+      if (!match || typeof requestId !== 'string' || typeof key !== 'string' || !key ||
+          (optionId !== 'allow-once' && optionId !== 'reject-once')) {
+        return { ok: false, error: '这个确认无法在这里回答（缺少项目或会话信息）' };
+      }
+      try {
+        const result = await rpc('agent:answer-permission', { projectId: match[1], key, requestId, optionId });
+        return result && result.ok === true ? { ok: true } : { ok: false, error: '这个确认已经失效（可能已在别处回答或超时）' };
+      } catch (error) {
+        return { ok: false, error: String((error && error.message) || error).slice(0, 200) };
+      }
+    },
     answerQuestion: async () => ({ ok: false, error: '当前会话没有待回答的问题' }),
     prompt: async (key, text, meta, images) => {
       const id = agentKeys.get(key);
@@ -270,6 +311,12 @@ function officialFacadeFactory(bridge) {
       } finally {
         settled = true;
         if (terminalTimer !== undefined) clearTimeout(terminalTimer);
+        // Report what this window received for this turn. Fire-and-forget: a
+        // trace that fails must never change the turn's outcome.
+        const counts = traceFor(id);
+        try {
+          void rpc('agent:trace', { projectId: id, seen: counts.seen, kinds: { ...counts.kinds } }).catch(() => {});
+        } catch { /* unavailable channel */ }
         if (pendingAgentPrompts.get(key) === pending) pendingAgentPrompts.delete(key);
       }
     },
@@ -326,10 +373,18 @@ function officialFacadeFactory(bridge) {
       return result;
     },
     saveAttachment: async (project, name, bytes) => {
-      if (typeof bridge.upload !== 'function' || typeof name !== 'string' || !(bytes instanceof ArrayBuffer) || bytes.byteLength < 1 || bytes.byteLength > 256 * 1024 * 1024) throw unavailable('chat:saveAttachment');
-      const id = await projectId(project);
+      if (!(bytes instanceof ArrayBuffer)) throw new Error('无法读取附件，请重新选择文件。');
+      if (bytes.byteLength > 256 * 1024 * 1024) throw new Error('附件超过 256 MiB 上限，请选择较小的文件。');
+      if (bytes.byteLength < 1) throw new Error('附件为空，请选择非空文件。');
+      if (typeof name !== 'string' || !name) throw new Error('附件文件名无效，请重命名后重试。');
+      if (typeof bridge.upload !== 'function') throw new Error('附件上传暂不可用，请稍后重试。');
+      let id;
+      try { id = await projectId(project); }
+      catch { throw new Error('无法确认当前项目，附件未上传；请刷新后重试。'); }
       const result = await bridge.upload(id, name, bytes);
-      if (await projectId(project) !== id || !result || typeof result.path !== 'string' || !result.path.startsWith('assets/upload/')) throw unavailable('chat:saveAttachment');
+      let current;
+      try { current = await projectId(project); } catch { /* project changed or is unavailable */ }
+      if (current !== id || !result || typeof result.path !== 'string' || !result.path.startsWith('assets/upload/')) throw new Error('附件上传结果无法确认，文件可能已导入，请先检查项目素材。');
       return { path: result.path };
     },
     saveSessions: (project, sessions, last) => saveChat(project, 'chat:save-sessions', { sessions, last }),

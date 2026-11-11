@@ -62,6 +62,24 @@ export function createOfficialChatRpc(store, agent, options = {}) {
         await agent.selectModel(payload.projectId, choice);
         return { ok: true };
       }
+      // Thinking intensity: the option for the project's current model, and the
+      // person's choice. Both are validated against the live catalog in the
+      // Host; the page only names a value it was shown.
+      if (channel === 'agent:thinking' && exact(payload, ['projectId']) && typeof agent?.thinkingOption === 'function') {
+        return await agent.thinkingOption(payload.projectId);
+      }
+      if (channel === 'agent:select-thinking' && exact(payload, ['projectId', 'value']) &&
+          typeof payload.value === 'string' && typeof agent?.selectThinking === 'function') {
+        return await agent.selectThinking(payload.projectId, payload.value);
+      }
+      // One-shot permission answer from the panel. The Host resolves the owning
+      // DSH agent from its own pending record; the page only names the question.
+      if (channel === 'agent:answer-permission' && exact(payload, ['projectId', 'key', 'requestId', 'optionId']) &&
+          typeof payload.key === 'string' && typeof payload.requestId === 'string' &&
+          ['allow-once', 'reject-once'].includes(payload.optionId) &&
+          typeof agent?.answerPermission === 'function') {
+        return await agent.answerPermission(payload.projectId, { key: payload.key, requestId: payload.requestId, optionId: payload.optionId });
+      }
       if (channel === 'chat:save-sessions' && exact(payload, ['projectId', 'sessions', 'last', 'expectedRevision'])) {
         if ((await inspect(payload.projectId)).archived) throw archivedFailure();
         const revision = await store.saveSessions(payload.projectId, { sessions: payload.sessions, last: payload.last, expectedRevision: payload.expectedRevision });

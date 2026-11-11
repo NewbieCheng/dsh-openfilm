@@ -165,6 +165,37 @@ test('a gated turn attributed through the inbox splice reports blocked, not a 50
   assert.deepEqual(await send(f.service), { ok: true, stopReason: 'end_turn' });
 });
 
+// A stop is a stop. DSH reports `aborted` whether the button was pressed here or
+// in its own window; calling that an error made a deliberate stop look like a
+// broken panel.
+test('a stopped turn reports cancellation rather than failure', async () => {
+  const f = fixture();
+  f.setReason('aborted');
+  assert.deepEqual(await send(f.service), { ok: true, stopReason: 'cancelled' });
+  assert.equal(f.events.at(-1).kind, 'done');
+  assert.equal(f.events.at(-1).stopReason, 'cancelled');
+  assert.equal(f.events.at(-1).error, undefined);
+});
+
+// A second person typing in DSH's own window is not a protocol violation: DSH
+// queues their message for the next turn. Failing the whole turn there is what
+// turned "someone typed in the other box" into a lost answer.
+test('someone typing in DSH during a turn is announced, not treated as a conflict', async () => {
+  const f = fixture();
+  f.hold();
+  const ready = f.ready();
+  const pending = send(f.service);
+  await ready;
+  f.push({ type: 'event', event: { type: 'user/message', data: { source: { kind: 'user', rpcId: 'their-request' }, content: [{ type: 'text', text: '顺便把标题也改了' }] } } });
+  // Twice: the notice is a courtesy, once is enough.
+  f.push({ type: 'event', event: { type: 'user/message', data: { source: { kind: 'user', rpcId: 'their-request' }, content: [{ type: 'text', text: '再补一句' }] } } });
+  f.end('completed');
+  assert.deepEqual(await pending, { ok: true, stopReason: 'end_turn' });
+  const notices = f.events.filter(event => event.update?.sessionUpdate === 'notice');
+  assert.equal(notices.length, 1);
+  assert.match(notices[0].update.description, /排在本轮之后/);
+});
+
 test('an archived conversation is refused before any prompt is admitted', async () => {
   const f = fixture({ archived: () => true });
   await assert.rejects(send(f.service), { code: 'OFFICIAL_AGENT_CONVERSATION_ARCHIVED' });

@@ -41,6 +41,8 @@
 | 模板源数据 | `vendor/templates/<模板>/shots/*.json`、`replica-film/shots/*.content.html` / `*.anim.js` | 一个镜头一份数据；页面是产物 |
 | 模板文档 | `docs/TEMPLATES.md` | 三个模板各自的模型、怎么加单元/镜头、自包含边界 |
 | 草稿工具 | `src/draft-tool.mjs`、`film-draft.mjs`、`film-operations.mjs`、`film-source.mjs`、`film-summary.mjs`、`timeline-*.mjs`、`draft-session.mjs` | 解析 `film.html`、生成摘要、内存内 move/trim/split |
+| Studio 工具面（0.7.0） | `src/studio-http.mjs`（唯一上游出口，key 不出 Host、错误打码）+ `frame-tool` / `film-tool` / `library-tool` / `get-tool` / `clip-tool` / `assets-tool` / `export-tool` / `cli-tool` | 全部 `when: ({agent}) => isProjectAgent(agent)`；只认绑定表里的 `projectId` + 相对路径 |
+| 0.7.0 控制层 | `official-permission.mjs`、`official-thinking.mjs`、`official-turn-policy.mjs`、`official-approvals.mjs`、`official-approval-bridge.mjs`、`tool-call-act.mjs`、`bridge-trace.mjs` | 权限/思考强度/审批竞速/act 词典/三路观测 |
 | 客户端源码 | `src/studio-entry.js`、`studio-panel.mjs`、`panel-keepalive.mjs` | 注册 `main`(占位) / `sidebar.panellist`(图标) / `shell.overlay`(真面板)。**面板没有模板首页**，打开就是官方 Studio |
 | 官方界面注入 | `src/shell-extras.mjs`（读取器）+ `assets/shell-ui.js`（真正的脚本） | 往官方 shell 页面叠模板下拉 / 故障卡片 / 隐藏「视频复刻」；每次渲染读盘，改完刷新即生效 |
 | 热更新教程 | `docs/HOT-RELOAD.md` | 三档热更新的具体做法与坑 |
@@ -54,6 +56,33 @@
 
 ---
 
+## 2.1 UI 定位与插件开发接手规范（所有模式适用）
+
+此节供任何接手本仓的 agent 使用，**不依赖进入视频创作模式**；但是否自动加载本文件取决于当前 agent 的指令机制，未加载时应主动读取仓库根目录 `AGENTS.md`。用户给了端口，只说明可能有服务，不代表有浏览器控制权或已看见界面。不要另开服务器冒充现有页面。
+
+### 先定位，再选修改层
+
+1. 明确目标：用户给的元素定位结果、截图、按钮文案、所在页面/弹窗、期望变化；信息不足且会改变方案时再问。若收到 `dsh-element-source` 的「[元素定位]」，先读所给源码（有行号则定位对应行），展示相关代码并用一句话说明渲染内容，然后停下等待具体修改需求；定位结果不是修改授权。
+2. 区分 **DSH 外壳 → OpenFilm 面板 → iframe 内官方 Studio/shell → 项目影片/模板页面**。不要把 iframe 内按钮当成 DSH Slot，也不要把影片内容当成工作台 UI。查看实际页面来源、定位路径及源码；浏览器不可用时依靠现有代码和用户证据，不猜 DOM 或宣称看过页面。
+3. 官方页面的样式微调、附近新增按钮/弹窗：优先检查 `assets/shell-ui.js`，它由 `src/shell-extras.mjs` 注入；示例：模板选择弹窗、刷新按钮已在其中。修改时局部作用域、尽量使用稳定锚点，避免脆弱的自动生成类名或宽泛选择器；考虑上游 React 重渲染、重复注入及监听器清理，不能影响原有控件。不是所有上游行为都能安全用注入层实现。
+4. DSH 面板的边框、加载/错误态、侧栏图标或面板本身：查 `src/studio-entry.js`、`src/studio-panel.mjs`、`src/panel-keepalive.mjs`；修改源码后 build，勿手改 `client.js`。影片画面和模板：查 `docs/TEMPLATES.md`，改模板源并按其构建流程生成，绝不直接覆盖用户项目。
+5. 必须改官方 shell 内部而注入不够时，先说明代价和影响，使用固定版本的上游源码及构建产物，不改 `node_modules/openfilm`。`scripts/build-official-shell.mjs` 是**打包预先构建好的固定上游 dist**，不是构建器，也不会覆盖已有 `vendor/official-shell`；运行前先读脚本、确认输入与目标，禁止为运行脚本擅自删除现有目录。上游改动的构建与清单校验需另行设计并验证，不能假设直接重算 manifest 就足够。
+
+### UI 实现与验证
+
+- 小改遵循现有布局、文案、主题及交互，不为单个按钮重做页面；使用语义化按钮、可见焦点和可访问名称。弹窗考虑键盘打开、Escape/关闭、焦点进入与返回、遮罩、窄屏及滚动；异步操作要有加载、失败及防重复提交状态。只接真实存在且经授权的动作，不能用假按钮冒充功能。
+- 涉及项目、会话、删除、归档或其他持久化操作时，先核对现有 Host 服务/桥的权限与错误语义；不要在浏览器绕过校验、暴露凭据、任意扩大代理权限或以 UI 隐藏替代授权。需要新接口时同时覆盖 Host、边界与测试。
+- 先检查当前安装是否确实指向本仓，不能假定其他环境也有 §4 所述链接。按 §4 / `docs/HOT-RELOAD.md` 选生效方式：注入脚本保存后刷新 Studio；客户端源码 build 后刷新 DSH；Host 修改需按管理器结果重载或重启再刷新。操作前提醒用户保存未保存编辑；任何插件管理动作都影响整个 profile，按当前工具授权执行。不要把 watcher 或热更新当成已启动。
+- 新增行为按 §7 加自动化测试；至少检查目标按钮及原控件、弹窗开关/键盘、重渲染和相应错误态。可操作真实 GUI 时在用户现有页面确认；不可操作时明确写「源码/测试已验证，真实 GUI 未验证」和用户可执行的刷新及检查步骤，不声称视觉效果已完成。
+
+### DSH/Cordis 插件开发规范
+
+- 先改本仓已有插件，不为一次 UI 微调新建或安装另一个插件。理解 Host 的 `index.js` / `cordis.patch.yml`、Client 的 `src/studio-entry.js` 和 `package.json` 声明；涉及 DSH 原生扩展点时，有 `cordis-plugin-development` skill 就先加载；改预设/组合时加载 `editing-cordis-compositions`。没有这些 skill 的 agent 仍可按本节和仓库文档继续，不得虚构 API。
+- 需要 DSH API 时先 `cordis_inspect_list`，再按返回的 provider/method 查询 Service、Event、Config、Tool；原生 UI 先查 Client `Slots.listSubTree` 的实时树及目标 slot 的注册选项/props，主题查 `Theme`。Inspect 只读，不能当业务接口调用；不可用时查已安装包的 README/类型或本仓现有实现，仍无法确认就报告阻塞，不猜方法名。用户操作应复用 Host 业务服务，Client 只负责显示与交互。
+- 插件包、补丁、依赖、locale、图标、导出资源和测试保持一致；客户端通过现有 ModuleLoader/Slot 注册并清理 effect，Host 通过注入依赖并在 dispose 时释放资源。安装/启停只在任务确有需要及获得授权时使用 `plugin_manager`，不要手改 profile 配置；以返回的 `application` / `nextStep` 为准，不能只凭日志判断已经生效。详细架构见 `docs/DEVELOPMENT.md`，重载见 §4。
+
+---
+
 ## 3. 改一行的最短路径
 
 ```sh
@@ -63,7 +92,7 @@ npm run templates:check            # 只校验页面与源是否一致
 node --test tests/*.test.mjs       # 最近一次 193 tests / 192 pass / 1 skip
 ```
 
-顺序：**先判断改的是哪一层 → 改 `src/` 源码 → build（如需）→ 跑测试 → 按 §4 让变更生效 → 在真实 GUI 里确认。**
+顺序：**先判断改的是哪一层 → 改对应源文件 → build（如需）→ 跑测试 → 按 §4 让变更生效 → 在真实 GUI 里确认。**
 
 跳过测试直接进 GUI 是本仓最常见的返工来源：`official-agent-events.mjs` 的失败全部是形状/顺序问题，只能在测试里先钉住。
 
@@ -101,7 +130,7 @@ plugin_manager set_plugin enabled=true  target=include:dsh-openfilm
 | 仅改 `client.js` 之外的客户端无关文件 | 不建议 | — | — |
 | Host 源码 `index.js`、`src/*.mjs`（含代理注入、SSE、会话桥） | 否 | **重载插件**（disable→enable）+ **刷新页面** | 刷新会重载 iframe，未保存编辑丢失；会话/项目保留，Studio 子进程重建 |
 | `vendor/templates/**`（`manifest.json`、`film.html`、页面） | 否 | **下一次请求即生效**（`listTemplates` 每次都读盘）；面板首页的列表要刷新页面重新 mount 才重列 | 无 |
-| `vendor/official-shell/ui/**` | **是**，且必须用 `scripts/build-official-shell.mjs` 重生成 `manifest.json` | 重启 Studio（= 重载插件/重启 Host） | 未保存编辑丢失。**手改 ui 而不更新 manifest 会直接 `OFFICIAL_SHELL_UNAVAILABLE`**（启动时逐个文件校验 sha256） |
+| `vendor/official-shell/ui/**` | 需上游构建和配套清单，先读 §2.1 | 验证并部署产物后重启 Studio | 未保存编辑丢失；清单不匹配会 `OFFICIAL_SHELL_UNAVAILABLE`。打包脚本不会覆盖已有目录，也不构建上游 |
 | `cordis.patch.yml` | 否 | 重新 `install_bundle` 或重启 Host | 已存在的会话不会被迁移或改写 |
 | `assets/shell-ui.js`（注入到官方页面的 UI/隐藏规则） | 否 | **保存 + 刷新页面**（每次渲染读盘，mtime 缓存） | 刷新会重载 iframe |
 | `src/shell-extras.mjs`（读取上面的文件，几乎不用改） | 否 | 重载插件 + 刷新页面 | 同上 |

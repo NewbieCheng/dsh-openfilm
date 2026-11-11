@@ -190,3 +190,27 @@
 3. 只推本仓。
 4. 未验证不说完成。
 5. 安全边界不靠"看起来有"：代理不是沙箱，草稿不是保存，实验代码不接主线。
+
+---
+
+## 八、0.7.0 第 1 步：观测层（已接线）
+
+目标：把"右边什么都没有"从推测变成可判定——拆成 **① DSH 没产出 → ② 桥接没发出 → ③ 发出但页面没收/没画**。
+
+### 已接线
+
+| 环节 | 落地 |
+|---|---|
+| ① DSH 产出 | `%TEMP%\dsh-openfilm-frames.jsonl`（既有，每轮覆盖写） |
+| ② 桥接发出 | `src/bridge-trace.mjs`：计数 `emitted/accepted/refused`、`sessionUpdate` 分布、最近 40 条 envelope；在 `studio-controller` 里包住 `emit`，publish 的返回值就是"有没有活着的面板流接收" |
+| ③ 页面收到 | `official-facade` 在每轮 `prompt` 结束时通过新通道 `agent:trace` 上报 `{seen, kinds}`；Host 侧 `bridgeTrace.panel()` 校验后存 |
+| 读取 | `POST /api/no996-openfilm/diagnose` 的 **`bridge`** 段 |
+
+`bridge` 只是计数与 `sessionUpdate` 名字（≤200 字符、名字白名单 `/^[a-z_]{1,40}$/`），不记模型文本、不记路径、不记 key。
+
+### 静态已证的根因（不需要跑也能确认）
+
+1. `src/official-agent-events.mjs:49-59` 的 `toolCallEvent()` 恒发 `kind:'other'`，而官方壳子的动作词典按 `read/edit/search/execute/fetch` 选择中文文案（`正在读取文件` / `正在运行命令` …），落到默认分支就只有「正在处理」。
+2. 同一个函数把 `rawInput` 序列化成**字符串**，壳子取细节处是 `typeof n === 'object' ? n : {}`，于是文件名、命令行全部丢失。
+3. 壳子只在 `tool_call_update` 的 `completed`/`failed` 改状态，中间态不画；所以"进度"要靠新的 `tool_call` + `plan` + `notice` 表达。
+4. **仍待真机确认的一条**：事件是否真的抵达页面（即 ③）。在 §1.4 的判定表里，`panel.seen > 0` 且右侧空白 = 壳子不画（第 4 步修）；`refused > 0` = 事件流没接上（另一类 bug）。

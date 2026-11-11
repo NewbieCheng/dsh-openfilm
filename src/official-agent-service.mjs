@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createOfficialAgentEventState, translateOfficialAgentEvent, translateSessionEvent } from './official-agent-events.mjs';
+import { AUTO, chooseEffort, effortsOf, modelEntry, thinkingOption } from './official-thinking.mjs';
 
 // Host-only adapter. verifier must authorize the caller and return the upstream
 // canonical project path on every invocation. openProjectSessions is a single,
@@ -51,7 +52,7 @@ function turnFailureMessage(reason, { archived = false } = {}) {
   return `Turn ended without completion (${kind})`;
 }
 
-export function createOfficialAgentService(ctx, { verifier, openProjectSessions, emit, isArchived } = {}) {
+export function createOfficialAgentService(ctx, { verifier, openProjectSessions, emit, isArchived, policy, approvals } = {}) {
   const controller = ctx?.sessionController;
   if (typeof verifier !== 'function' || typeof emit !== 'function' ||
       typeof openProjectSessions?.ensure !== 'function' ||
@@ -102,8 +103,104 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
     return frame.hasMore === false;
   }
 
+  /**
+   * The selection DSH itself reports for a Session: the pending choice first,
+   * then the one its last request proved. Read from the Session summary's
+   * `modelSelection` projection — no private API and no cache, so a model change
+   * in DSH's own UI is reflected here immediately.
+   */
+  async function selectionOf(sessionId) {
+    try {
+      const page = await controller.list({}, AbortSignal.timeout(15000));
+      const items = Array.isArray(page?.items) ? page.items : [];
+      const item = items.find(candidate => candidate?.sessionId === sessionId);
+      const view = item?.projections?.modelSelection;
+      const pending = view?.next ?? view?.pending;
+      const selection = pending && typeof pending === 'object' ? pending : view?.lastUsed ?? null;
+      return selection && nonempty(selection.provider) && nonempty(selection.model) ? selection : undefined;
+    } catch { return undefined; }
+  }
+
+  /** Current model, its declared efforts and the person's remembered intent. */
+  async function thinkingState(projectId) {
+    const catalog = await controller.modelCatalog();
+    const sessionId = await sessionFor(projectId);
+    const selection = (await selectionOf(sessionId)) ?? (catalog?.default ?? undefined);
+    const entry = modelEntry(catalog, selection);
+    const efforts = effortsOf(entry);
+    let stored;
+    try { stored = policy ? await policy.thinking(projectId) : undefined; } catch { stored = undefined; }
+    const current = stored === AUTO ? AUTO : stored ?? selection?.reasoningEffort;
+    return {
+      sessionId, selection, entry, efforts,
+      defaultEffort: entry?.reasoning?.defaultEffort,
+      stored,
+      option: thinkingOption({ efforts, defaultEffort: entry?.reasoning?.defaultEffort, current }),
+    };
+  }
+
+  /** Projects that have already been prompted, for the first-turn drafting tier. */
+  const prompted = new Set();
+  /**
+   * Apply the thinking intensity for one turn.
+   *
+   * A concrete choice is left alone (DSH already holds it). `auto` — or no choice
+   * yet — picks a rung from what the person wrote: whole-film work high, drafting
+   * low, otherwise the provider's default. Returns the effort now in force, or
+   * undefined when the model declares none.
+   */
+  async function applyAutomaticEffort(projectId, sessionId, promptText) {
+    if (!policy || typeof policy.thinking !== 'function') return undefined;
+    const stored = await policy.thinking(projectId);
+    if (stored !== undefined && stored !== AUTO) return undefined;
+    const catalog = await controller.modelCatalog();
+    const selection = (await selectionOf(sessionId)) ?? (catalog?.default ?? undefined);
+    const entry = modelEntry(catalog, selection);
+    const efforts = effortsOf(entry);
+    const firstTurn = !prompted.has(projectId);
+    prompted.add(projectId);
+    if (efforts.length === 0 || !selection) return undefined;
+    const wanted = chooseEffort({
+      efforts, defaultEffort: entry?.reasoning?.defaultEffort, stored,
+      prompt: promptText, firstTurn,
+    });
+    if (!wanted || wanted === selection.reasoningEffort) return wanted;
+    await controller.selectModel({ sessionId, provider: selection.provider, model: selection.model, reasoningEffort: wanted });
+    return wanted;
+  }
+
+  /** The OpenFilm turn this bridge currently owns for a project, once attributed. */
+  function activeKeyOf(projectId) {
+    const operation = typeof projectId === 'string' ? active.get(projectId) : undefined;
+    return operation?.matched === true && !operation.finished && !operation.conflict ? operation.key : undefined;
+  }
+
   return Object.freeze({
     async ensureProject(projectId) { await sessionFor(projectId); },
+    // The OpenFilm turn currently running for this project, when it has been
+    // attributed to our own prompt. Approvals are only meaningful inside such a
+    // turn: before attribution the answer would belong to someone else's turn.
+    activeKey(projectId) { return activeKeyOf(projectId); },
+
+    /**
+     * Answer the question the panel is showing.
+     *
+     * Only the turn this bridge owns can be answered: the key must still be the
+     * active one, so a late click cannot settle a decision that belongs to another
+     * turn or another project. The DSH approval service resolves the winner
+     * between this and its own answerers, and a late duplicate gets `ok:false`.
+     */
+    async answerPermission(projectId, { key, requestId, optionId } = {}) {
+      if (!approvals || typeof approvals.answerRequest !== 'function') {
+        throw fail('OFFICIAL_AGENT_DEPENDENCY', 'Approvals are not available in this Host');
+      }
+      if (!nonempty(projectId) || !nonempty(key) || !nonempty(requestId)) {
+        throw fail('OFFICIAL_AGENT_INPUT', 'A project, turn key and request ID are required');
+      }
+      if (activeKeyOf(projectId) !== key) return { ok: false, error: 'stale' };
+      const accepted = approvals.answerRequest({ projectId, key, requestId, optionId }) === true;
+      return { ok: accepted };
+    },
     async modelCatalog(projectId) {
       await verify(projectId);
       return controller.modelCatalog();
@@ -130,6 +227,46 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
       }
     },
 
+    /** The thinking-intensity option for the project's current model. */
+    async thinkingOption(projectId) {
+      await verify(projectId);
+      const state = await thinkingState(projectId);
+      return state.option;
+    },
+
+    /**
+     * Remember and apply a thinking intensity. `auto` stops forcing a rung: the
+     * Session goes back to the provider's own default and each turn chooses from
+     * what the person wrote.
+     */
+    async selectThinking(projectId, value) {
+      if (typeof value !== 'string' || !(value === AUTO || /^[A-Za-z0-9_.-]{1,40}$/.test(value))) {
+        throw fail('OFFICIAL_AGENT_INPUT', 'An unknown thinking intensity');
+      }
+      if (active.has(projectId) || uncertain.has(projectId)) throw fail('OFFICIAL_AGENT_BUSY', 'Project turn is active or requires recovery');
+      const reservation = {};
+      active.set(projectId, reservation);
+      try {
+        const state = await thinkingState(projectId);
+        if (value !== AUTO && !state.efforts.some(effort => effort.id === value)) {
+          throw fail('OFFICIAL_AGENT_MODEL_UNAVAILABLE', 'This model does not declare that thinking intensity');
+        }
+        if (!policy || typeof policy.setThinking !== 'function') throw fail('OFFICIAL_AGENT_DEPENDENCY', 'No thinking policy is mounted');
+        await policy.setThinking(projectId, value);
+        if (state.selection) {
+          // Applying now keeps the panel honest: DSH's recorded selection is the
+          // only thing the next turn will actually use.
+          await controller.selectModel({
+            sessionId: state.sessionId, provider: state.selection.provider, model: state.selection.model,
+            ...(value === AUTO ? {} : { reasoningEffort: value }),
+          });
+        }
+        return { ok: true, currentValue: value };
+      } finally {
+        if (active.get(projectId) === reservation) active.delete(projectId);
+      }
+    },
+
     // key and turnId identify OpenFilm state, never a DSH session. Callers may
     // add reference stills, but only as typed image parts.
     async send(projectId, { key, turnId, text, images } = {}) {
@@ -147,7 +284,7 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
         }
       }
       if (active.has(projectId) || uncertain.has(projectId)) throw fail('OFFICIAL_AGENT_BUSY', 'Project turn is active or requires recovery');
-      const operation = { admitted: false, rejected: false, matched: false, sawPrompt: false, conflict: false, finished: false, blocked: false, sessionId: undefined, cancelRequested: false };
+      const operation = { key, admitted: false, rejected: false, matched: false, sawPrompt: false, conflict: false, finished: false, blocked: false, sessionId: undefined, cancelRequested: false, interjected: false };
       const trace = [];
       active.set(projectId, operation); // before the first await
       const abort = new AbortController();
@@ -157,6 +294,9 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
       try {
         const sessionId = await sessionFor(projectId);
         operation.sessionId = sessionId;
+        // Thinking intensity for this turn. A preference, never a precondition:
+        // if the effort cannot be applied the turn runs with whatever DSH has.
+        try { operation.effort = await applyAutomaticEffort(projectId, sessionId, text); } catch { operation.effort = undefined; }
         // Preserve the Session's existing model selection. Selecting the Host
         // default here would overwrite an explicit choice on every message.
         const requestId = randomUUID();
@@ -214,12 +354,22 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
                   if (source?.kind === 'user') {
                     // Our own prompt can be recorded twice (queued splice, then
                     // the durable message): attributing it again is correct, not
-                    // a conflict. Any other human input during this turn is.
+                    // a conflict. Anyone else typing in DSH's own window is the
+                    // person, not a protocol failure: DSH queues that message for
+                    // after this turn, so say so once and keep following instead of
+                    // collapsing the whole turn into a conflict error.
                     if (source.rpcId === requestId) {
                       operation.sawPrompt = true;
                       attribute();
-                    } else {
-                      throw fail('OFFICIAL_AGENT_CONFLICT', 'Concurrent or unidentifiable session input');
+                    } else if (operation.interjected !== true) {
+                      operation.interjected = true;
+                      try {
+                        await emit(projectId, { key, kind: 'update', update: {
+                          sessionUpdate: 'notice',
+                          title: '你在 DSH 那边插了一句',
+                          description: '这条消息会排在本轮之后处理；本轮的输出仍会显示完整。',
+                        } });
+                      } catch { /* the notice is a courtesy, not a protocol step */ }
                     }
                   }
                 } else if (event?.type === 'agent/inbox/spliced') {
@@ -239,8 +389,10 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
                   // any other reason is genuinely foreign.
                   if (!operation.matched && kind !== 'blocked') throw fail('OFFICIAL_AGENT_CONFLICT', 'Unattributed turn ended');
                   const result = kind === 'completed' ? { ok: true, stopReason: 'end_turn' }
-                    : kind === 'aborted' && operation.cancelRequested && reason?.reason?.kind === 'user'
-                      ? { ok: true, stopReason: 'cancelled' }
+                    // A stopped turn is stopped whether we asked or the person did.
+                    // Reporting it as an error made the panel look broken after a
+                    // deliberate stop, and made our own cancel indistinguishable.
+                    : kind === 'aborted' ? { ok: true, stopReason: 'cancelled' }
                       : { ok: false, error: turnFailureMessage(reason, { archived: archived(sessionId) === true }) };
                   operation.blocked = kind === 'blocked';
                   await finish(result);
