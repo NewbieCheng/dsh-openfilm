@@ -1,8 +1,8 @@
 diff --git a/apps/desktop/chat/src/components/ModelPopover.tsx b/apps/desktop/chat/src/components/ModelPopover.tsx
-index 6800d48..51c28b5 100644
+index 6800d48..f9bf9ff 100644
 --- a/apps/desktop/chat/src/components/ModelPopover.tsx
 +++ b/apps/desktop/chat/src/components/ModelPopover.tsx
-@@ -4,17 +4,12 @@
+@@ -4,16 +4,11 @@
   *
   * The menu opens on a heading with a button to Settings → Agents, then lists the agents switched on there (none when
   * only one is: there is nothing to choose, and the heading names it instead), then its model and effort, always, and
@@ -19,11 +19,9 @@ index 6800d48..51c28b5 100644
   */
  import React from 'react';
 -import { createPortal } from 'react-dom';
--import { Check, ChevronDown, ChevronRight, KeyRound, Settings } from 'lucide-react';
-+import { Check, ChevronDown, ChevronLeft, ChevronRight, KeyRound, Settings } from 'lucide-react';
+ import { Check, ChevronDown, ChevronRight, KeyRound, Settings } from 'lucide-react';
  import { keepFocus, Popover } from './Popover';
  import { useT } from '@/i18n';
- import { Tooltip } from '@/components/Tooltip';
 @@ -23,19 +18,16 @@ import { BrandLogo } from '@/components/BrandLogo';
  import { POPOVER_CHROME } from '@/components/ComposerCard';
  import { desktopBridge, type LocalAgentId, type RosterAgent } from '@/lib/desktop-bridge';
@@ -81,7 +79,7 @@ index 6800d48..51c28b5 100644
  
    const la = useLocalAgents();
    const { hydrate, refresh, ensureOptions } = la;
-@@ -169,81 +142,16 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -169,81 +142,28 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
    /* a fixed row's one value is already the one in use */
    const pickChoice = (o: Option, value: unknown) => { if (!o.fixed) { la.setPref(agent, o.id, value); onPref?.(agent, o.id, value); } };
  
@@ -136,7 +134,19 @@ index 6800d48..51c28b5 100644
 -      window.cancelAnimationFrame(frame);
 -      window.removeEventListener('resize', schedule);
 -      window.removeEventListener('scroll', schedule, true);
--    };
++  /* The choices level: a long list (models above all) gets a search box over it, and
++     the box empties itself when the level changes so it never hides a fresh list. */
++  const [query, setQuery] = React.useState('');
++  React.useEffect(() => { setQuery(''); }, [side]);
++  /* Escape steps back one level instead of closing the whole menu: captured first, so
++     the popover's own Escape (close everything) only sees the second press. */
++  React.useEffect(() => {
++    if (!side) return;
++    const onKey = (event: KeyboardEvent) => {
++      if (event.key !== 'Escape') return;
++      event.stopImmediatePropagation();
++      setSide(null);
+     };
 -    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the open row
 -  }, [open, choosing?.id, cardShift, sidePainted, room]);
 -
@@ -160,10 +170,9 @@ index 6800d48..51c28b5 100644
 -    </div>,
 -    chatLayer(),
 -  ) : null;
-+  /* The choices level: a long list (models above all) gets a search box over it, and
-+     the box empties itself when the level changes so it never hides a fresh list. */
-+  const [query, setQuery] = React.useState('');
-+  React.useEffect(() => { setQuery(''); }, [side]);
++    window.addEventListener('keydown', onKey, true);
++    return () => window.removeEventListener('keydown', onKey, true);
++  }, [side]);
 +  const choices = choosing ? rowChoices(agent, choosing, chosenValue(choosing)) : [];
 +  const needle = query.trim().toLowerCase();
 +  const visibleChoices = needle ? choices.filter((choice) => choice.name.toLowerCase().includes(needle)) : choices;
@@ -173,7 +182,7 @@ index 6800d48..51c28b5 100644
  
    return (
      <>
-@@ -253,7 +161,6 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -253,7 +173,6 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
        placement={placement}
        align={align}
        bare
@@ -181,7 +190,7 @@ index 6800d48..51c28b5 100644
        trigger={
          <Tooltip label={t('composer.model')}>
            <button type="button" onMouseDown={keepFocus}
-@@ -270,8 +177,49 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -270,8 +189,47 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
          </Tooltip>
        }
      >
@@ -190,21 +199,19 @@ index 6800d48..51c28b5 100644
 +      <div ref={cardRef} style={{ ...POPOVER_CHROME, width: Math.min(shown.length > 1 ? CARD_W : CARD_W_ONE_AGENT, Math.max(CARD_MIN_W, Math.floor(window.innerWidth / 2))), padding: 4 }}>
 +        {choosing ? (
 +          <>
-+            {/* one level at a time: the choices replace the rows, and the arrow goes back */}
-+            <div className="flex items-center gap-1 pb-0.5 pl-0.5 pr-0.5 pt-0.5">
-+              <Tooltip label={t('composer.model')}>
-+                <button type="button" aria-label={rowLabel(choosing)} onMouseDown={keepFocus} onClick={() => setSide(null)}
-+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-[var(--text-faint)] outline-none transition hover:bg-[var(--bg-hover)] hover:text-[var(--text)] focus-visible:bg-[var(--bg-hover)]">
-+                  <ChevronLeft size={14} />
-+                </button>
-+              </Tooltip>
-+              <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-faint)]">{rowLabel(choosing)}</span>
++            {/* one level at a time: the choices replace the rows; Escape steps back */}
++            <div className="flex items-center pb-0.5 pl-2.5 pr-0.5 pt-0.5">
++              <span data-agent-option-level-label={choosing.id} className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-faint)]">{rowLabel(choosing)}</span>
 +            </div>
 +            <div data-agent-option-level={choosing.id}>
 +              {offerSearch ? (
 +                <div className="mb-1 px-0.5">
-+                  <input type="search" data-agent-search="" value={query} onChange={(event) => setQuery(event.target.value)}
-+                    onMouseDown={keepFocus} placeholder={searchPlaceholder} aria-label={searchPlaceholder}
++                  {/* No keepFocus here: it calls preventDefault, which is exactly what
++                      stopped this field from ever taking the caret. */}
++                  <input type="search" data-agent-search="" autoFocus value={query}
++                    onChange={(event) => setQuery(event.target.value)}
++                    onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Escape') setSide(null); }}
++                    placeholder={searchPlaceholder} aria-label={searchPlaceholder} spellCheck={false}
 +                    className="h-7 w-full rounded-[6px] border border-[var(--border)] bg-transparent px-2 text-[12.5px] text-[var(--text)] outline-none placeholder:text-[var(--text-faint)] focus-visible:border-[var(--text-faint)]" />
 +                </div>
 +              ) : null}
@@ -233,7 +240,7 @@ index 6800d48..51c28b5 100644
            <div className="px-2.5 py-2 text-[12.5px] leading-relaxed text-[var(--text-muted)]">
              {t('composer.agentNoneShown')}{' '}
              <button type="button" onMouseDown={keepFocus} onClick={openSettings} className="text-[var(--text)] underline underline-offset-2">{t('composer.openSettings')}</button>
-@@ -282,7 +230,7 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -282,7 +240,7 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
              <div className="flex items-center gap-2 pb-0.5 pl-2.5 pr-0.5 pt-0.5">
                <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-faint)]">{shown.length > 1 ? t('composer.agentSection') : current ? nameOf(current) : t('composer.agentSection')}</span>
                <Tooltip label={t('composer.openSettings')}>
@@ -242,7 +249,7 @@ index 6800d48..51c28b5 100644
                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-[var(--text-faint)] outline-none transition hover:bg-[var(--bg-hover)] hover:text-[var(--text)] focus-visible:bg-[var(--bg-hover)]">
                    <Settings size={13} />
                  </button>
-@@ -293,7 +241,7 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -293,7 +251,7 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
                  {shown.map((a) => {
                    const status = statusOf(a);
                    return (
@@ -251,7 +258,7 @@ index 6800d48..51c28b5 100644
                        <span className={`flex w-4 shrink-0 justify-center ${status ? 'text-[var(--text-faint)]' : 'text-[var(--text)]'}`}><ChatAgentIcon id={a.id} /></span>
                        <span className={`min-w-0 flex-1 truncate ${status ? 'text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>{nameOf(a)}</span>
                        {agent === a.id && !status ? <Check size={13} className="shrink-0 text-[var(--text)]" />
-@@ -325,8 +273,8 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -325,8 +283,8 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
                <React.Fragment key={o.id}>
                  {i > 0 ? <div className="mx-1 my-0.5 h-px bg-[var(--border)]" /> : null}
                  <button type="button" data-agent-option={o.id} ref={(el) => { rowRefs.current[o.id] = el; }} aria-haspopup="menu" aria-expanded={side === o.id}
@@ -262,7 +269,7 @@ index 6800d48..51c28b5 100644
                    className={`${ROW_BASE} ${side === o.id ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'}`}>
                    <span className="shrink-0 text-[var(--text)]">{rowLabel(o)}</span>
                    <span className="min-w-0 flex-1 truncate text-right text-[var(--text-muted)]">{valueOf(o)}</span>
-@@ -338,7 +286,6 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+@@ -338,7 +296,6 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
          )}
        </div>
      </Popover>

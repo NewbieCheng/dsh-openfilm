@@ -10,9 +10,9 @@ OpenFilm 视频创作作为 DSH 插件：整页官方 Studio 0.3.2 + 官方对�
 
 > **不是热加载**：改客户端源码要 `npm run build` + 刷新页面；改 Host 源码要重启 DSH；改 `vendor/templates` 下一次请求即生效。详见 `AGENTS.md` §4。
 
-## 下载与更新（0.7.5）
+## 下载与更新（0.7.6）
 
-从 [GitHub Releases](https://github.com/NewbieCheng/dsh-openfilm/releases) 下载 `dsh-openfilm-0.7.5.tgz`，在 DSH 插件管理器中安装该包，或通过管理器的 `install_bundle` 指定本地包路径。更新前请保存尚未保存的编辑，完成后按管理器提示重启 DSH 或刷新页面。
+从 [GitHub Releases](https://github.com/NewbieCheng/dsh-openfilm/releases) 下载 `dsh-openfilm-0.7.6.tgz`，在 DSH 插件管理器中安装该包，或通过管理器的 `install_bundle` 指定本地包路径。更新前请保存尚未保存的编辑，完成后按管理器提示重启 DSH 或刷新页面。
 
 发布包包含 OpenFilm 0.3.2（内核与界面快照同版本；界面快照带两处可查的本地改动，见 `vendor/official-shell/patch.diff`）、运行依赖、官方界面和模板，无需另外手动安装 OpenFilm；下载发布包本身仍需联网。宿主需提供兼容的 DSH 和 Node.js 22.2 或更高版本。自动化测试 340 项（339 通过、1 跳过），在 Windows 本机运行；macOS/Linux 尚未完成实机 GUI 验证。真机验收（右侧对话观感、审批卡、导出文件可播）按 `docs/TEST-CHECKLIST.md` 逐项执行，尚未由作者完整跑完，因此发布包里的这条链路仍属"待验收"。
 

@@ -1,5 +1,13 @@
 # 更新记录
 
+## 0.7.6
+
+### 搜索框真的能搜了；返回按钮删掉
+
+- **搜索框点不动的原因**：输入框上带了 `onMouseDown={keepFocus}`，而 `keepFocus` 的实现就是 `e.preventDefault()` —— 它本来是为了"点菜单别让输入框失焦"，套在输入框自己身上就变成"永远拿不到光标"。现在去掉，加了 `autoFocus`、`spellCheck=false`，并把按键的 `stopPropagation` 保留（避免聊天层的全局快捷键把字母吃掉）。
+- **返回按钮删掉**：标题栏只留层名（`data-agent-option-level-label`）。回退改成 `Escape`：捕获阶段拦下并把 `stopImmediatePropagation()` 打在最前面，所以第一次 Esc 回到上一层，第二次才关整个菜单；选中某项仍然自动返回。
+- 上游 `tsc -p chat` 通过；全库 340 项 339 通过 1 跳过。
+
 ## 0.7.5
 
 ### 菜单只认点击，模型列表能搜
