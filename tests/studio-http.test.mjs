@@ -100,3 +100,13 @@ test('a success that is not JSON is a failure, not an empty object', async () =>
   const { http } = client(() => respond('<html>'));
   await assert.rejects(http.get('/api/get'), { code: 'STUDIO_FAILED' });
 });
+// Studio keeps its prefs behind PATCH; the Host writes one (seenVersion) so the
+// bundled Studio stops showing its version dialog after every plugin upgrade.
+test('a PATCH reaches upstream with a JSON body', async () => {
+  const { http, calls } = client(() => respond({ seenVersion: '9999.0.0' }));
+  const prefs = await http.patch('/api/prefs', { body: { seenVersion: '9999.0.0' } });
+  assert.deepEqual(prefs, { seenVersion: '9999.0.0' });
+  assert.equal(calls[0].init.method, 'PATCH');
+  assert.match(calls[0].url, /\/api\/prefs$/);
+  assert.deepEqual(JSON.parse(calls[0].init.body), { seenVersion: '9999.0.0' });
+});

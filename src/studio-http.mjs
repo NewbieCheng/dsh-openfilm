@@ -91,6 +91,7 @@ export function createStudioHttp({ studio, fetchImpl = globalThis.fetch, timeout
     get: (path, options) => send('GET', path, options),
     post: (path, options) => send('POST', path, options),
     put: (path, options) => send('PUT', path, options),
+    patch: (path, options) => send('PATCH', path, options),
     del: (path, options) => send('DELETE', path, options),
     picture: (path, options) => send('GET', path, { ...options, accept: 'bytes' }),
   });

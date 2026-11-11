@@ -356,6 +356,25 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     }
     return httpClient;
   };
+  // Studio shows its own "what's new" dialog once after every version bump, which
+  // for a bundled Studio means every time this plugin upgrades. The dialog is
+  // gated by `prefs.seenVersion` (components/WhatsNew.tsx: it shows only when the
+  // saved version is older than the running one), so keeping that value ahead of
+  // any release retires the dialog without touching the page.
+  const WHATS_NEW_SEEN = '9999.0.0';
+  let whatsNewSettled = false;
+  const suppressWhatsNew = async () => {
+    if (whatsNewSettled || disposed) return;
+    try {
+      const client = studioHttp();
+      const prefs = await client.get('/api/prefs');
+      if (!prefs || typeof prefs !== 'object') return;
+      whatsNewSettled = true;
+      if (prefs.seenVersion === WHATS_NEW_SEEN) return;
+      await client.patch('/api/prefs', { body: { seenVersion: WHATS_NEW_SEEN } });
+      log.info('whats-new-suppressed', { from: typeof prefs.seenVersion === 'string' ? prefs.seenVersion : null });
+    } catch { /* prefs are a convenience: the dialog is not worth failing a turn over */ }
+  };
   // The project a bound conversation belongs to, resolved from the Host's own
   // binding table. Never from a renderer-supplied id.
   const projectOfAgent = agent => {
@@ -685,6 +704,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         await runtime.ensureStarted();
         if (!disposed && upstream) await proxyFor(webOrigin);
         log.info('studio-warm', { ms: Date.now() - started, attempt });
+        void suppressWhatsNew();
         return;
       } catch (error) {
         // A code, never the message: upstream messages may carry keys or paths.

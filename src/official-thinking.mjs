@@ -58,7 +58,7 @@ export function thinkingOption({ efforts = [], defaultEffort, current } = {}) {
   return {
     id: 'thinking',
     name: '思考强度',
-    category: 'thinking',
+    category: 'thought_level',
     type: 'select',
     ...(declared ? { currentValue: current } : { currentValue: AUTO }),
     options,

@@ -222,11 +222,17 @@ function officialFacadeFactory(bridge) {
       agentKeys.set(key, id);
       // The composer's model menu reads ACP config options, so publish the Host
       // catalog here; a missing catalog leaves the menu empty instead of broken.
+      // Thinking intensity rides along: without it the menu shows its built-in
+      // "default" row until the model probe answers, which reads as "no choice".
       let configOptions = [];
       try {
         const option = await rpc('agent:models', { projectId: id });
         if (option && option.id === 'model' && Array.isArray(option.options)) configOptions = [option];
       } catch { configOptions = []; }
+      try {
+        const thinking = await rpc('agent:thinking', { projectId: id });
+        if (thinking && thinking.id === 'thinking' && Array.isArray(thinking.options)) configOptions = [...configOptions, thinking];
+      } catch { /* the model row alone still works */ }
       return { ok: true, key, info: { sessionId: key, resumed: false, agentInfo: { name: 'DeepSeek Harness' }, authMethods: [], mcp: false, models: null, modes: null, configOptions } };
     },
     cancel: async (key) => {

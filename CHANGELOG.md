@@ -25,6 +25,13 @@
 
 发布包同时升级内核与界面快照：`openfilm 0.3.1 → 0.3.2`。
 
+**UI 打通（三条）**：
+
+- **思考强度真正生效**：菜单行由 `category` 决定，OpenFilm 只渲染 `model` / `thought_level` / `speed` 三种（`apps/desktop/chat/src/lib/agent-menu-rows.ts`）。我们原来发的 `category: 'thinking'` 根本不会被渲染，页面上那个「思考强度 · 默认」是上游内置的固定占位行。改成 `thought_level` 后，行里就是 DSH 声明的各档（外加「自动（按这一句话的内容）」）；`localAgents.start` 的 `configOptions` 也补上思考选项，首条消息前就能选。
+- **权限胶囊不再压在画面上**：从底部居中（压着时间轴）挪到右下角，仍在聊天列一侧，随时可改回工作区。
+- **屏蔽「已更新 / 有哪些新内容」弹窗**：上游用 Studio prefs 的 `seenVersion` 控制（`components/WhatsNew.tsx`），只要它落后于当前版本就弹。Host 启动后把该值写到 `9999.0.0` 并记 `whats-new-suppressed`，之后任何一次插件升级都不再弹；这是唯一一处会写 Studio 自身偏好设置的改动。
+
+
 **内核升级完成：openfilm 0.3.1 → 0.3.2**。上游 2026-11-09 发布。第一次只升内核被挡回来：`resolveOfficialShell()` 要求内核与 `vendor/official-shell` 快照同版本（manifest 的 version/commit + 每个 `ui/` 文件的 sha256），不匹配就抛 `OFFICIAL_SHELL_UNAVAILABLE`，连锁是 Studio 起不来 → 面板 503 → 项目会话建不起来 → 九个项目工具从会话消失。第二次从上游 tag `v0.3.2`（commit `758b1a3`）浅克隆、`pnpm --filter @openfilm/desktop build:shell` 构建桌面壳、用 `scripts/build-official-shell.mjs` 重建快照，然后内核与快照一起到 0.3.2：`resolveOfficialShell()` 通过、Studio `/api/health` 报 0.3.2、`GET /` 返回新壳页面、注入脚本依赖的 `data-app-menu` / `role="menuitem"` / `of-chat` / `data-studio` / `#root` 全部仍在。接口面逐文件比对为增量兼容（websocket/http 零改动，CLI 与库搜索逐字节相同，`film-doc.mjs` 与 0.3.2 相同故无需更新）。留下两道防线：`tests/kernel-shell-match.test.mjs`（pin 与快照版本不等即失败）与 `studio-warm-failed`/`bootstrap-failed` 记录真实错误码（含 `OFFICIAL_SHELL_UNAVAILABLE`，面板 503 body 也带码）。重建流程写在 `docs/PLAN-0.7.0-AGENT.md` §14.3。
 
 **修复（第二次加载即暴露）**：注入脚本在 `<head>` 里执行，此时 `document.body` 还是 `null`，`permissionGate` 的 `mount()` 直接 `body.appendChild` 抛 `Cannot read properties of null (reading 'appendChild')`，后续注入全部中断。改为「没有 body 就等 `DOMContentLoaded` 再挂载」，并给三处 `createTreeWalker(document.body…)` 加了 `||document.documentElement` 兜底；`tests/shell-ui-asi.test.mjs` 增加 head-only 场景（body=null 时不抛、收到 DOMContentLoaded 后正常挂载），并用「改回旧写法」的反向控制证明能复现原报错。

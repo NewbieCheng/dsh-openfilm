@@ -58,3 +58,14 @@ test('the middle rung is used when the provider declares no default', () => {
   assert.equal(chooseEffort({ efforts, prompt: '把标题改一下' }), 'b');
   assert.equal(chooseEffort({ efforts: [{ id: 'only', name: 'only' }], prompt: '把标题改一下' }), 'only');
 });
+// OpenFilm's composer menu renders only the rows whose category it knows:
+// model, thought_level and speed (apps/desktop/chat/src/lib/agent-menu-rows.ts).
+// Labelling the option 'thinking' made it invisible and left the menu showing its
+// built-in "默认" placeholder instead.
+test('the thinking option uses the category the composer menu renders', () => {
+  const option = thinkingOption({ efforts: [{ id: 'high', name: '高' }] });
+  assert.equal(option.id, 'thinking');
+  assert.equal(option.category, 'thought_level');
+  assert.equal(option.type, 'select');
+  assert.equal(option.options[0].value, AUTO);
+});

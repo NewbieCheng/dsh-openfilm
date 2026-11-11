@@ -724,7 +724,7 @@
   }
   var chip=document.createElement('button');
   chip.type='button'; chip.id='no996-permission'; chip.hidden=true;
-  chip.style.cssText='position:fixed;z-index:2147483001;left:50%;transform:translateX(-50%);bottom:12px;padding:4px 10px;border:1px solid #4b463c;border-radius:999px;background:#26241f;color:#cfc9bb;font:12px/1.5 system-ui,sans-serif;cursor:pointer';
+  chip.style.cssText='position:fixed;z-index:2147483001;right:14px;bottom:10px;padding:4px 10px;border:1px solid #4b463c;border-radius:999px;background:#26241f;color:#cfc9bb;font:12px/1.5 system-ui,sans-serif;cursor:pointer';
   var card=document.createElement('section');
   card.id='no996-permission-card'; card.hidden=true;
   card.setAttribute('role','dialog'); card.setAttribute('aria-label','视频剪辑权限');
