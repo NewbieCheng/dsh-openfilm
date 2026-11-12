@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { isAbsolute } from 'node:path';
+import { ensureStudioLibraryMirror } from './studio-library-mirror.mjs';
 
 const require = createRequire(import.meta.url);
 const dependency = require('../package.json').dependencies?.openfilm;
@@ -96,6 +97,11 @@ export function createStudioRuntime({ loadStudio = loadPinnedStudio, attach, ask
         if (typeof startStudio !== 'function') throw new Error();
         const resolvedEditorDir = resolveEditorDir ? await resolveEditorDir() : editorDir;
         if (resolvedEditorDir !== undefined && (typeof resolvedEditorDir !== 'string' || !isAbsolute(resolvedEditorDir))) throw new TypeError('Resolved editorDir must be an absolute path');
+        // The Studio fetches local models from OPENFILM_LIBRARY_URL; point it at
+        // the loopback mirror so SenseVoice comes from hf-mirror while Whisper
+        // and BiRefNet still redirect to OpenFilm's own library.
+        const mirror = await ensureStudioLibraryMirror().catch(() => null);
+        if (mirror) process.env.OPENFILM_LIBRARY_URL = `${mirror.origin}/library`;
         // No machine-wide persistent key, run.json advertisement or browser launch.
         const result = await startStudio({ port, advertise: false, stays: true, openBrowser: () => {}, ...(askAgent ? { askAgent } : {}), ...(resolvedEditorDir ? { editorDir: resolvedEditorDir } : {}) });
         if (!result || typeof result.close !== 'function') throw new Error();

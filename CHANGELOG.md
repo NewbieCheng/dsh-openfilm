@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.12.1 —— 本地服务 SenseVoice 改回原生渲染
+
+- 撤掉 `assets/shell-ui.js` 里往「本地服务」弹窗追加卡片的 B2 注入，改为改上游源码数据：`studio/server/local-models.mjs` 的 `ABOUT` 加一条 `sensevoice-small`，`library/local-models.json` 加模型文件清单。UI 完全由这份数据驱动，所以 SenseVoice 现在作为「语音转写」组里的普通一行渲染（名称 / FunAudioLLM · 228 MB / 安装 / 原生进度条 / 已开启），没有额外卡片。
+- 这两处都在安装后的 `openfilm` 包里，pnpm 重装会覆盖，所以 Host 每次启动幂等重放（`src/studio-library-patch.mjs`），重装后不会丢。
+- 模型文件仍走国内源：Host 起一个回环 library 镜像（`src/studio-library-mirror.mjs`），把 Studio 的 `OPENFILM_LIBRARY_URL` 指过去——SenseVoice 的两个文件从 hf-mirror 流式转发（失败回退 huggingface.co），Whisper / BiRefNet 302 回 `openfilm.dev/library`，不做全量镜像。
+- 模型仓合一：`asr-models` 现在直接读写 Studio 的 library 缓存 `~/.openfilm/library/models/sensevoice-small`（`OPENFILM_LIBRARY_CACHE` 可覆盖），并写 Studio 的 `.ok` 标记，所以原生面板和对话里的转写工具永远看到同一份文件、同一个“已安装”状态。
+- 新增测试：补丁幂等（`tests/studio-library-patch.test.mjs`）、镜像转发与 302（`tests/studio-library-mirror.test.mjs`）、缓存路径（`tests/asr-models.test.mjs`）。
+- 说明：上游源码用 `npm run upstream:fetch` 拉（pin `758b1a3`，checkout 在 `.upstream/openfilm`）；`fetch` 子命令对 pin 的 commit 用 `git fetch <sha>` 会失败，但对象已在 clone 里，直接 `git checkout <sha>` 即可。
+
 ## 0.12.0 —— 本地服务：镜像、进度、SenseVoice
 
 - 已安装检测：`resolveAny` 依次看打包依赖 → 我们下载的 `tools/` → Homebrew / WinGet / scoop / chocolatey 目录；Host 启动时把 `/opt/homebrew/bin`、`/usr/local/bin`、WinGet Links 前置进本进程 PATH。Mac 从 Finder 启动不再"已装却没检测到"。

@@ -129,7 +129,6 @@ src/theme.mjs             ← 读取 + 注入（按 surface 注册表）
 |---|---|---|---|
 | 模板选择弹窗 | `assets/shell-ui.js` | 历史上先做的注入；上游有模板入口 | 模板主路径迁进 A1 后删除 |
 | 视频工具环境检查卡 | `assets/shell-ui.js` | 需要 Host 能力，上游没有这个界面 | 上游有环境检查或迁进 A1 |
-| 本地服务里的 SenseVoice 行 | `assets/shell-ui.js` | 上游 `/api/local-models` 是固定清单，源码快照未带 TS 源；先按弹窗 DOM 追加，装/进度复用 `asr:*` 通道 | 上游注册表支持外部模型，或拿到源码改 A1 |
 | 账号条 / 登录态 | `assets/shell-ui.js` | 上游没有我们的账号体系 | 账号体系进 A1 的壳 |
 | 全屏登录首页 | `assets/shell-login.js` | 上游登录页不适用 | 同上 |
 | 故障卡片 / 恢复卡 | `assets/shell-ui.js` | 上游没有错误 UI | 上游有错误边界后删除 |

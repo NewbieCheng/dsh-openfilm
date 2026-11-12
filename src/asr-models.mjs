@@ -14,7 +14,7 @@
  * restores Chinese punctuation, so there is no second punctuation model to ship.
  */
 import { createHash } from 'node:crypto';
-import { createWriteStream } from 'node:fs';
+import { createWriteStream, writeFileSync } from 'node:fs';
 import { mkdir, rename, stat, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -23,15 +23,26 @@ import { pipeline } from 'node:stream/promises';
 import { MODEL_REPO, modelBases } from './download-sources.mjs';
 
 export const SENSE_VOICE = Object.freeze({
-  id: 'sensevoice-small-int8',
-  dir: MODEL_REPO.split('/')[1],
+  id: 'sensevoice-small',
+  dir: 'sensevoice-small',
   label: 'SenseVoice-small (int8)',
   bytes: 239233841 + 315894,
   files: [
     { name: 'model.int8.onnx', bytes: 239233841, sha256: 'c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51' },
-    { name: 'tokens.txt', bytes: 315894, sha256: null },
+    { name: 'tokens.txt', bytes: 315894, sha256: 'f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc' },
   ],
 });
+
+/**
+ * Where the Studio keeps the local models it installed: the same files its
+ * Settings → Services → Local services row fetches, so the native row and our
+ * transcription tool never disagree about whether the model is here.
+ */
+export function libraryCacheRoot({ env = process.env, home = homedir() } = {}) {
+  if (env.OPENFILM_LIBRARY_CACHE) return env.OPENFILM_LIBRARY_CACHE;
+  const shared = env.OPENFILM_SHARED_HOME || env.OPENFILM_HOME || join(home, '.openfilm');
+  return join(shared, 'library');
+}
 
 /** $DSH_HOME/no996-openfilm/models — the same home the account file already uses. */
 export function modelsRoot({ env = process.env, home = homedir() } = {}) {
@@ -40,7 +51,13 @@ export function modelsRoot({ env = process.env, home = homedir() } = {}) {
 }
 
 export function senseVoiceDir({ env, home } = {}) {
-  return join(modelsRoot({ env, home }), SENSE_VOICE.dir);
+  return join(libraryCacheRoot({ env, home }), 'models', SENSE_VOICE.dir);
+}
+
+/** The Studio's "every file checked" mark, so a model we fetched counts as installed there too. */
+export function senseVoiceReadyMark({ env, home } = {}) {
+  const digest = createHash('sha256').update(SENSE_VOICE.files.map(file => file.sha256 ?? '').join()).digest('hex').slice(0, 12);
+  return join(libraryCacheRoot({ env, home }), 'models', `${SENSE_VOICE.id}.${digest}.ok`);
 }
 
 /**
@@ -134,5 +151,8 @@ export async function ensureModels({ env, home, fetchImpl, onEvent, signal } = {
     downloaded.push(done);
   }
   const after = await modelState({ env, home });
+  if (after.ready) {
+    try { writeFileSync(senseVoiceReadyMark({ env, home }), ''); } catch { /* the Studio can still mark it itself */ }
+  }
   return { ...after, downloaded };
 }

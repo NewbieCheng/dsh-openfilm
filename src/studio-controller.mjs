@@ -11,6 +11,7 @@ import {
 } from './preferences.mjs';
 import { createToolInstaller } from './tool-installer.mjs';
 import { augmentPath } from './download-sources.mjs';
+import { applyStudioLibraryPatch } from './studio-library-patch.mjs';
 import { readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -107,6 +108,14 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // A GUI launched from Finder or the Start menu does not inherit the shell's
   // PATH; without this a brew/WinGet ffmpeg is "already installed but missing".
   augmentPath();
+  // The local-services list is native Studio data, but it lives inside the
+  // installed openfilm package; re-apply our two data edits on every start so a
+  // reinstall cannot silently drop SenseVoice.
+  const studioPackageRoot = (() => {
+    try { return fileURLToPath(new URL('.', import.meta.resolve('openfilm/package.json'))); } catch { return null; }
+  })();
+  const libraryPatch = applyStudioLibraryPatch({ packageRoot: studioPackageRoot, logger: log });
+  if (libraryPatch.patched) log.info('studio-library-patch', libraryPatch);
   const toolInstaller = createToolInstaller({ home: process.env.DSH_HOME || join(homedir(), '.dsh') });
   const detectHostComponents = createHostComponentDetector({ resolve: name => toolInstaller.resolveAny(name)?.path ?? null });
   let componentCheck;

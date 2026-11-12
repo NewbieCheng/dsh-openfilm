@@ -34,6 +34,26 @@
 
 ## 2. 故障档案
 
+### 2026-11-12：「本地服务」里的模型不能靠注入加
+
+**现象**：给「设置 → 服务 → 本地服务」加 SenseVoice 时，先在 `assets/shell-ui.js` 里往弹窗 DOM 追加了一张卡片。视觉上多出一块橙色边框，和其它行不是一个东西，用户明确拒绝注入。
+
+**定位**：这个弹窗是 **Studio（L2）** 的原生页面，不是桌面壳。上游源码 `github.com/openfilm/openfilm`（pin `758b1a3`）里：
+
+- 渲染：`packages/openfilm/studio/ui/src/components/settings/LocalModels.tsx`
+- 元数据：`packages/openfilm/studio/server/local-models.mjs` 的 `ABOUT`（Whisper / BiRefNet 写死在这）
+- 文件清单：`packages/openfilm/library/local-models.json`
+- 下载源：`studio/server/library.mjs`，`OPENFILM_LIBRARY_URL`（默认 `https://openfilm.dev/library`）
+- 缓存：`OPENFILM_LIBRARY_CACHE`，默认 `~/.openfilm/library`
+
+UI 完全由 `/api/local-models` 返回的数据驱动，所以**不需要重建 Studio UI**：补 `ABOUT` + `local-models.json` 两处数据，行就按原生组件渲染。
+
+**做法**：`src/studio-library-patch.mjs` 在 Host 启动时幂等改这两处（装在 `node_modules/openfilm` 里，pnpm 重装会覆盖）；`src/studio-library-mirror.mjs` 起回环镜像并把 `OPENFILM_LIBRARY_URL` 指过去，SenseVoice 两个文件从 hf-mirror 转发，其余 302 回 `openfilm.dev`。模型仓与 Studio 缓存合一（`~/.openfilm/library/models/sensevoice-small`），我们下载后补写 Studio 的 `.ok` 标记。
+
+**坑**：`npm run upstream:fetch` 用 `git fetch --depth=1 origin <sha>` 拉 pin 的 commit 会报 `couldn't find remote ref`；对象其实在 clone 里，直接 `git -C .upstream/openfilm checkout --force <sha>`。另外 `openfilm` 的 `exports` 只开 `./studio`、`./package.json` 等子路径，`import.meta.resolve('openfilm/package.json')` 再 `new URL('.', …)` 才拿得到包根。
+
+---
+
 ### 2026-11-11：服务断线后点"重启"白屏
 
 **现象**：长时间未使用后服务断开，点「重新启动工作台」白屏。
