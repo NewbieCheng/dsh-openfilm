@@ -5,6 +5,15 @@
 
 ---
 
+## 下一批候选：ACP 化（待拍板，见 [ARCHITECTURE.md](ARCHITECTURE.md)）
+
+| 项 | 内容 | 状态 |
+|---|---|---|
+| ACP 边车 | Host 以 `dsh --profile acp` 驱动面板对话，替换手写 RPC 回合（见 ARCHITECTURE.md M1） | 待批 |
+| 会话身份统一 | 面板与侧栏共用同一 DSH 会话；思考/工具/审批/续聊同源（M2） | 待批 |
+| 引用式附件 | 对话附件改为 `resource_link`，不再上传大文件；拖放任本机路径（M3） | 待批 |
+| 项目工作区命名 | `<项目名> · 视频创作`，同路径复用，不重复创建（M4） | 待批 |
+
 ## 当前批：0.9.1 账号与登录（进行中）
 
 接**不加班工作台后端**账号（不是 OpenFilm 站点账号）。未登录是硬闸门：壳内登录遮罩挡住剪辑；会话持久化在 Host，浏览器不持有 token。默认后端 `https://worker.bujiaban.top`（`NO996_WORKBENCH_BASE_URL` 可覆盖）。

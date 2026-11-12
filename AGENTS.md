@@ -1,8 +1,8 @@
 # AGENTS.md — dsh-openfilm / No996 Studio
 
-给在本仓工作的智能体的操作手册。人读 [`README.md`](README.md)；架构与重载 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)；改界面 [`docs/UI-PLAYBOOK.md`](docs/UI-PLAYBOOK.md)；上游 [`docs/UPSTREAM.md`](docs/UPSTREAM.md)；品牌 [`docs/BRAND.md`](docs/BRAND.md)；路线 [`docs/ROADMAP.md`](docs/ROADMAP.md)；决策与故障 [`docs/NOTES.md`](docs/NOTES.md)。
+给在本仓工作的智能体的操作手册。人读 [`README.md`](README.md)；架构与重载 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)；改界面 [`docs/UI-PLAYBOOK.md`](docs/UI-PLAYBOOK.md)；上游 [`docs/UPSTREAM.md`](docs/UPSTREAM.md)；品牌 [`docs/BRAND.md`](docs/BRAND.md)；架构 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；路线 [`docs/ROADMAP.md`](docs/ROADMAP.md)；决策与故障 [`docs/NOTES.md`](docs/NOTES.md)。
 
-> 本文件被 `openfilm-video-editing` 预设的 `@deepseek-ai/dsh-agent-instructions` 读入（`maxBytes: 65536`）。细节写进 `docs/`，这里只留"不知道就会犯错"的部分。
+> 被 `openfilm-video-editing` 预设的 `@deepseek-ai/dsh-agent-instructions` 读入（`maxBytes: 65536`）。细节写进 `docs/`，这里只留"不知道就会犯错"的部分。
 
 ---
 
