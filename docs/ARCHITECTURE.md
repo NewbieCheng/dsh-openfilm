@@ -141,7 +141,8 @@
 | 会话身份 | 完成 | `session/new` 的 id 存 `$DSH_HOME/no996-openfilm/acp-sessions.json`；`session/resume` 续聊（跨进程，同一子进程内 resume 会被 DSH 以"already active"拒绝，这是协议行为） |
 | 模型 / 思考 | 完成 | ACP `configOptions`（model、reasoning_effort）直接映射到面板菜单；会话打开后按 Host 当前选择 `set_config_option` |
 | 权限 | 完成 | 子进程按项目预设启动（`DSH_PERMISSION_MODE`）；改预设 = 丢弃子进程，下轮重建 |
-| 附件 | 部分 | 不支持图片的路由 → 临时文件 + 绝对路径；支持则内联 image block |
+| 附件 | 已完成 | 不支持图片的路由 → 临时文件 + 绝对路径；支持则内联 image block；拖入的文件本就以路径文本进入提示 |
+| 编辑指令 | 完成 | 会话打开时写 `<项目>/AGENTS.md`（`src/project-instructions.mjs`，8 KB 上限，已有文件绝不覆盖）；acp profile 自带 `agent-instructions`，按 cwd 读取 |
 | 工具 | 完成（待真机） | Host 的 `/api/no996-openfilm/mcp` 实现 MCP streamable-http（initialize / tools/list / tools/call / ping），`session/new` 时以 `mcpServers` 把 `openfilm_guide`、9 个影片工具与转写工具交给子进程；令牌按会话签发、随子进程退出吊销。真机探测：子进程连上端点并完成 `initialize` → `notifications/initialized` |
 | 真机验收 | 待做 | 刷新页面后：面板发一句 → 侧栏同一会话；模型/思考菜单可切；权限行仍在；SenseVoice 不受影响 |
 

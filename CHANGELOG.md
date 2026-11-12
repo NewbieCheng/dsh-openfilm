@@ -7,6 +7,7 @@
 - 权限不丢：面板的「完全访问 / 项目访问」在子进程启动时以 `DSH_PERMISSION_MODE` 传给 DSH 本身（sandbox + approval 都按它来）；改权限会丢弃该项目的子进程，下一轮按新预设重建。
 - 图片：路由声明支持图片就发内联 image block；不支持时落成临时文件并在提示里给绝对路径（不再有 500 MB 上传依赖）。agent 拒绝图片时自动退回路径重试一次。
 - 影片工具跟着走：Host 新增 `/api/no996-openfilm/mcp`（MCP streamable-http：initialize / tools/list / tools/call / ping），`session/new` 时以 `mcpServers` 交给子进程；令牌按会话签发（Bearer），子进程退出或切换权限时吊销。真机探测确认子进程连上端点并完成 `initialize`。没有这一步，ACP 会话只有 dsh-base 工具，面板里的 `openfilm_*` 全部消失。
+- 编辑指令跟着项目走：ACP 会话拿不到 `openfilm-video-editing` 预设，改为在会话打开时写 `<项目>/AGENTS.md`（schema 见 `src/project-instructions.mjs`；8 KB 上限；已有文件绝不覆盖）。acp profile 自带 `@deepseek-ai/dsh-agent-instructions`，按 cwd 读取，所以面板里的助手与侧栏会话读到同一份规则。
 - 兜底：`NO996_OPENFILM_ACP=0` 回到旧的进程内桥；CLI 解析优先用桌面应用自带的 `resources/runtime/cli/bin/dsh.cmd`。
 - 测试：`tests/acp-agent-service.test.mjs`（17 项，对着线级假代理，不碰真实模型）覆盖会话复用、模型/思考、图片两条路径、权限询问与拒绝、并发拒绝、cancel、预设随子进程生效、reset、MCP 传递；`tests/mcp-server.test.mjs`（9 项）覆盖 MCP 协议、令牌与错误形状。
 
