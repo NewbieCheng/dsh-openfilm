@@ -131,6 +131,9 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
     throw new TypeError('verifier, store and emit are required');
   }
   const projects = new Map();
+  // A child that was replaced on purpose must not report an exit as news: its
+  // handler would delete the entry and revoke the MCP token of its successor.
+  const retired = new WeakSet();
   let closed = false;
 
   const entryOf = projectId => {
@@ -162,6 +165,7 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
     });
     client.on('exit', ({ code }) => {
       void log?.('acp-exited', { projectId, code });
+      if (retired.has(client)) return;
       if (projects.get(projectId) === entry) projects.delete(projectId);
       try { onClosed?.(projectId); } catch { /* nothing left to clean */ }
     });
@@ -197,11 +201,16 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       // and only the child holding the token may call the film tools.
       const servers = typeof mcpServers === 'function' ? await mcpServers(projectId, project.path) : undefined;
       const wiring = Array.isArray(servers) && servers.length > 0 ? { mcpServers: servers } : {};
-      entry.client = createClient({ env: { ...process.env, ...(mode ? { DSH_PERMISSION_MODE: mode } : {}) }, ...(extraArgs.length > 0 ? { args: extraArgs } : {}) });
-      attach(entry);
-      const capabilities = await entry.client.start();
-      entry.imageEnabled = capabilities?.agentCapabilities?.promptCapabilities?.image === true;
-      entry.client.setPermissionHandler(params => askPermission(entry, params));
+      const startChild = async args => {
+        // The client's own diagnostics (stderr, a rejected request) must reach the
+        // log: without this a child that refuses a Session is silent.
+        entry.client = createClient({ env: { ...process.env, ...(mode ? { DSH_PERMISSION_MODE: mode } : {}) }, log, ...(args.length > 0 ? { args } : {}) });
+        attach(entry);
+        const capabilities = await entry.client.start();
+        entry.imageEnabled = capabilities?.agentCapabilities?.promptCapabilities?.image === true;
+        entry.client.setPermissionHandler(params => askPermission(entry, params));
+      };
+      await startChild(extraArgs);
       const known = store.get(projectId);
       if (known?.sessionId && RESUMABLE.test(known.sessionId)) {
         try {
@@ -215,7 +224,24 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
           void log?.('acp-resume-failed', { projectId, reason: String(error?.code ?? error).slice(0, 80) });
         }
       }
-      const created = await entry.client.newSession({ cwd: project.path, ...wiring });
+      const openSession = async () => {
+        try {
+          return await entry.client.newSession({ cwd: project.path, ...wiring });
+        } catch (error) {
+          // The DSH model chosen in the sidebar can belong to a provider the acp
+          // profile has no adapter for (the child's adapters are its own), and then
+          // even a new Session is refused. A conversation on the profile's default
+          // model, which the panel's menu can change afterwards, beats none at all.
+          if (extraArgs.length === 0) throw error;
+          void log?.('acp-model-fallback', { projectId, reason: String(error?.code ?? error).slice(0, 60) });
+          const previous = entry.client;
+          retired.add(previous);
+          try { await previous.close(); } catch { /* already gone */ }
+          await startChild([]);
+          return entry.client.newSession({ cwd: project.path, ...wiring });
+        }
+      };
+      const created = await openSession();
       if (!created || !text(created.sessionId)) throw failure('OFFICIAL_AGENT_UNAVAILABLE', 'agent returned no session');
       entry.sessionId = created.sessionId;
       entry.configOptions = created.configOptions ?? [];
@@ -230,6 +256,9 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       // A half-open child (spawned but failed to announce a session) must not be
       // orphaned: the retry builds a new one, and the old process would linger.
       entry.ready = undefined;
+      // Which stage failed matters more than the panel's generic bubble: spawn,
+      // initialize, resume and session/new all surface here.
+      void log?.('acp-session-failed', { projectId, reason: String(error?.message ?? error?.code ?? error).slice(0, 120) });
       const dead = entry.client;
       entry.client = undefined;
       entry.sessionId = undefined;

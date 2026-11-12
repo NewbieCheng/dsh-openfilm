@@ -50,6 +50,12 @@ function handle(message) {
       });
     case 'session/new':
     case 'session/resume':
+      // A model overlay naming a provider this agent has no adapter for: the real
+      // DSH acp profile answers -32603, so the service must retry without it.
+      if (process.env.FAKE_ACP_REFUSE_PATCH === '1' && process.argv.includes('--patch')) {
+        send({ jsonrpc: '2.0', id: message.id, error: { code: -32603, message: 'Internal error', data: { details: 'no adapter registered for provider "opencode-go"' } } });
+        return;
+      }
       mcpNames = (message.params?.mcpServers ?? []).map(server => server.name);
       sendResume = false;
       return result(message.id, { sessionId: message.params?.sessionId || 'session-fake-1', configOptions: configState() });

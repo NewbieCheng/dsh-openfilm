@@ -114,7 +114,12 @@ export function createAcpClient({ resolve = resolveAcpCommand, env = process.env
       return;
     }
     if (message?.id !== undefined) {
-      if (message.error) settle(message.id, fail('ACP_REQUEST_FAILED', `${message.error.code} ${message.error.message ?? ''}`.trim()));
+      if (message.error) {
+        // The agent's own error is the only description a failed session/new gets;
+        // its data field carries the stack that names the real stage.
+        void log?.('acp-request-failed', { code: String(message.error.code ?? ''), data: JSON.stringify(message.error.data ?? '').slice(0, 300) });
+        settle(message.id, fail('ACP_REQUEST_FAILED', `${message.error.code} ${message.error.message ?? ''}`.trim()));
+      }
       else settle(message.id, null, message.result);
     }
   };

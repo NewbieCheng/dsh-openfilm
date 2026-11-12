@@ -325,3 +325,37 @@ test('without an approvals coordinator a permission request is refused, not auto
   assert.equal(await handler({ toolCall: { title: 'Write' } }), null);
   await service.close();
 });
+
+test('a model overlay the agent cannot serve is dropped instead of failing the panel', async () => {
+  const made = [];
+  const logs = [];
+  const closed = [];
+  const service = createAcpAgentService({
+    verifier: async projectId => ({ projectId, path: 'C:\\fake' }),
+    store: memoryStore(),
+    emit: () => true,
+    log: (event, fields) => logs.push({ event, fields }),
+    onClosed: projectId => closed.push(projectId),
+    spawnArgs: async () => ['--patch', 'C:\\temp\\model.yml'],
+    createClient: options => {
+      made.push(options);
+      return createAcpClient({
+        resolve: () => ({ command: process.execPath, args: [fixture] }),
+        ...(options?.args ? { args: options.args } : {}),
+        env: { ...process.env, FAKE_ACP_REFUSE_PATCH: '1', ...(options?.env ?? {}) },
+        requestTimeoutMs: 5000,
+        spawnChild: (command, args, spawnOptions) => spawn(command, args, spawnOptions),
+      });
+    },
+  });
+  const catalog = await service.modelCatalog(PROJECT);
+  assert.ok(catalog.groups.length > 0);
+  assert.equal(made.length, 2, 'the overlay child and the fallback child');
+  assert.deepEqual(made[0].args, ['--patch', 'C:\\temp\\model.yml']);
+  assert.equal(made[1].args, undefined);
+  assert.ok(logs.some(entry => entry.event === 'acp-model-fallback'));
+  // The replaced child exits on purpose; that must not close the live Session.
+  assert.deepEqual(closed, []);
+  assert.equal(service.sessionOf(PROJECT), 'session-fake-1');
+  await service.close();
+});
