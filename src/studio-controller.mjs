@@ -789,31 +789,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     resolveToken: token => mcpTokens.resolve(token),
     log: (event, fields) => void log.info(event, fields),
   });
-  const unregisterMcp = trackRoute(registerRoute({
-    kind: 'exact', path: '/api/no996-openfilm/mcp',
-    async handler(req, res) {
-      res.setHeader('cache-control', 'no-store');
-      if (disposed) { res.writeHead(503).end('{}'); return; }
-      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end('{}'); return; }
-      const chunks = [];
-      let size = 0;
-      for await (const chunk of req) {
-        size += chunk.byteLength;
-        if (size > 4 * 1024 * 1024) { res.writeHead(413).end('{}'); return; }
-        chunks.push(chunk);
-      }
-      let answer;
-      try {
-        answer = await mcpEndpoint.handle({ headers: req.headers, body: Buffer.concat(chunks).toString('utf8') });
-      } catch (error) {
-        void log.warn('mcp-failed', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40) });
-        answer = { status: 500, body: { error: 'mcp failed' } };
-      }
-      if (answer.body === undefined) { res.writeHead(answer.status).end(); return; }
-      const body = JSON.stringify(answer.body);
-      res.writeHead(answer.status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
-    },
-  }));
   const unregisterTranscribeRoute = registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/asr',
     async handler(req, res) {
@@ -980,6 +955,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   let unregisterStandalone;
   let unregisterTemplatesPage;
   let unregisterDebugUrl;
+  let unregisterMcp;
   try {
   unregisterTemplateBridge = trackRoute(registerTemplateBridge(ctx, {
     webOrigin,
@@ -1236,6 +1212,31 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const cards = items.map(item => `<li><strong>${escape(item.title)}</strong> <small>${escape(item.mode)}</small><p>${escape(item.description)}</p><button type=\"button\" data-id=\"${escape(item.id)}\">用这个模板建项目</button></li>`).join('');
       const html = `<!doctype html><meta charset=\"utf-8\"><title>OpenFilm 模板</title><style>body{font:14px system-ui,sans-serif;background:#171717;color:#e8e8e8;margin:24px}li{margin:16px 0;padding:12px;border:1px solid #333;border-radius:8px;list-style:none}button{margin-top:8px;padding:6px 12px;border-radius:6px;border:1px solid #555;background:#2a2a2a;color:inherit;cursor:pointer}p{margin:6px 0;opacity:.8}#msg{margin-top:16px;color:#f88}</style><h1>OpenFilm 模板</h1><ul>${cards || '<li>没有可用模板</li>'}</ul><div id=\"msg\"></div><script>document.addEventListener('click',async e=>{const b=e.target.closest('button[data-id]');if(!b)return;b.disabled=true;b.textContent='创建中…';try{const r=await fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'template:create',payload:{templateId:b.dataset.id}})});const d=await r.json();if(!d||!d.projectId)throw new Error((d&&d.error)||('HTTP '+r.status));if(d.prompt){try{localStorage.setItem('no996.openfilm.templatePrompt',d.prompt)}catch(_){}}location.href='/projects/'+d.projectId}catch(err){document.getElementById('msg').textContent='创建失败：'+(err&&err.message||err);b.disabled=false;b.textContent='用这个模板建项目'}})</script>`;
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(html) }).end(html);
+    },
+  }));
+  unregisterMcp = trackRoute(registerRoute({
+    kind: 'exact', path: '/api/no996-openfilm/mcp',
+    async handler(req, res) {
+      res.setHeader('cache-control', 'no-store');
+      if (disposed) { res.writeHead(503).end('{}'); return; }
+      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end('{}'); return; }
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of req) {
+        size += chunk.byteLength;
+        if (size > 4 * 1024 * 1024) { res.writeHead(413).end('{}'); return; }
+        chunks.push(chunk);
+      }
+      let answer;
+      try {
+        answer = await mcpEndpoint.handle({ headers: req.headers, body: Buffer.concat(chunks).toString('utf8') });
+      } catch (error) {
+        void log.warn('mcp-failed', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40) });
+        answer = { status: 500, body: { error: 'mcp failed' } };
+      }
+      if (answer.body === undefined) { res.writeHead(answer.status).end(); return; }
+      const body = JSON.stringify(answer.body);
+      res.writeHead(answer.status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
     },
   }));
   unregisterDebugUrl = trackRoute(registerRoute({

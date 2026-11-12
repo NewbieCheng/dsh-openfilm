@@ -142,7 +142,7 @@
 | 模型 / 思考 | 完成 | ACP `configOptions`（model、reasoning_effort）直接映射到面板菜单；会话打开后按 Host 当前选择 `set_config_option` |
 | 权限 | 完成 | 子进程按项目预设启动（`DSH_PERMISSION_MODE`）；改预设 = 丢弃子进程，下轮重建 |
 | 附件 | 部分 | 不支持图片的路由 → 临时文件 + 绝对路径；支持则内联 image block |
-| 工具 | **缺** | ACP 子进程只有 dsh-base 工具，拿不到本插件的 `openfilm_*` 工具与 `openfilm-prompt` 预设提示词。这是下一里程碑：Host 起一个 MCP（HTTP）端，`session/new` 时以 `mcpServers` 传入，把影片工具与编辑指引暴露给子进程 |
+| 工具 | 完成（待真机） | Host 的 `/api/no996-openfilm/mcp` 实现 MCP streamable-http（initialize / tools/list / tools/call / ping），`session/new` 时以 `mcpServers` 把 `openfilm_guide`、9 个影片工具与转写工具交给子进程；令牌按会话签发、随子进程退出吊销。真机探测：子进程连上端点并完成 `initialize` → `notifications/initialized` |
 | 真机验收 | 待做 | 刷新页面后：面板发一句 → 侧栏同一会话；模型/思考菜单可切；权限行仍在；SenseVoice 不受影响 |
 
-里程碑口径修正：M1/M2 已在代码层完成，M4（工作区命名）在 ACP 下不需要——会话的 cwd 就是项目目录，侧栏按目录自然分组，没有注入。真正的下一步是上面的「工具」一项，然后才是 M5 真机验收。
+里程碑口径修正：M1/M2 已在代码层完成，M4（工作区命名）在 ACP 下不需要——会话的 cwd 就是项目目录，侧栏按目录自然分组，没有注入。工具已通过 MCP 端点补齐，剩下的就是 M5 真机验收：**刷新页面后由人发一句**，然后看 `plugin.log` 里的 `acp-session` / `acp-prompt-failed`。
