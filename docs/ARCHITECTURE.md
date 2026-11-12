@@ -149,6 +149,7 @@
 | 图片（内联） | 通过 | 子进程按当前 DSH 模型加 `--patch` overlay → `initialize` 报到 `image:true`；32×32 纯红 PNG 以 image block 送入，模型答 "Red"，`end_turn` |
 | 图片（回落路径） | 通过 | 默认模型 `image:false` → 服务把它们写成临时文件并在正文附 `[reference image] <绝对路径>`；模型自己读文件后答 "Red"，`end_turn` |
 | 项目 `AGENTS.md` 生效 | 通过 | 临时项目写入唯一允许答案 `MARKER-42` → 提问后模型只回 `MARKER-42`（子进程 cwd 即项目目录） |
+| 面板线路（离线） | 通过 | 真代理 + 真 SSE + 真 ACP 服务：`ready` → 逐条 `update`（带面板 key）→ 一条 `done`；伪造来源被 403 |
 | 面板真机验收 | 待做 | 刷新页面后：面板发一句 → 侧栏同一会话；模型/思考菜单可切；权限行仍在；SenseVoice 不受影响 |
 
 里程碑口径修正：M1/M2 已在代码层完成，M4（工作区命名）在 ACP 下不需要——会话的 cwd 就是项目目录，侧栏按目录自然分组，没有注入。工具已通过 MCP 端点补齐，剩下的就是 M5 真机验收：**刷新页面后由人发一句**，然后看 `plugin.log` 里的 `acp-session` / `acp-prompt-failed`。
