@@ -512,170 +512,396 @@
     const updatedAt = (project) => project.sessionId ? Number(sessions?.byId?.[project.sessionId]?.updatedAt ?? 0) : 0;
     return list.map((project, index) => ({ project, index, at: updatedAt(project) })).sort((a, b) => b.at - a.at || a.index - b.index).map((item) => item.project);
   }
+  function filterArea({ workspaces, sessions, hidden, projectPaths, archived } = {}) {
+    const hiddenSet = new Set(Array.isArray(hidden) ? hidden : []);
+    const archivedSet = new Set(Array.isArray(archived) ? archived : []);
+    const visible = (id) => typeof id === "string" && !hiddenSet.has(id) && !archivedSet.has(id);
+    const projectFolders = (Array.isArray(projectPaths) ? projectPaths : []).map(folderKey).filter(Boolean);
+    const groups = [];
+    const accounted = /* @__PURE__ */ new Set();
+    for (const workspace of Array.isArray(workspaces) ? workspaces : []) {
+      if (!workspace || typeof workspace.workspaceId !== "string") continue;
+      const sessionIds = Array.isArray(workspace.sessionIds) ? workspace.sessionIds : [];
+      for (const id of sessionIds) if (typeof id === "string") accounted.add(id);
+      const rows = sessionIds.filter(visible);
+      const projectFolder = projectFolders.includes(folderKey(workspace.path));
+      if (rows.length === 0 && projectFolder) continue;
+      groups.push({
+        workspaceId: workspace.workspaceId,
+        title: typeof workspace.title === "string" ? workspace.title : "",
+        sessionIds: rows
+      });
+    }
+    const ids = Array.isArray(sessions?.ids) ? sessions.ids : Object.keys(sessions?.byId ?? {});
+    const ungrouped = ids.filter((id) => visible(id) && !accounted.has(id));
+    return { groups, ungrouped, hiddenCount: hiddenSet.size };
+  }
+  function folderKey(path) {
+    if (typeof path !== "string" || !path) return "";
+    return path.replace(/[\\/]+$/, "").replaceAll("/", "\\").toLowerCase();
+  }
   function sessionTitle(sessions, sessionId) {
     return titleOf(sessions, sessionId);
   }
 
-  // src/area-panel.mjs
-  var STYLE_TAG = "no996-openfilm-projects";
-  var CSS = `
-.nof-projects{box-sizing:border-box;display:flex;flex-direction:column;min-height:0;height:100%;padding:28px 28px 12px;color:var(--dsw-alias-label-primary);overflow:hidden}
-.nof-projects-head{display:flex;align-items:center;gap:10px;flex:none;flex-wrap:wrap}
-.nof-projects-title{flex:1 1 auto;min-width:0;margin:0;font-size:15px;line-height:24px;font-weight:600}
-.nof-projects-count{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:20px}
-.nof-projects-search{display:flex;align-items:center;gap:6px;height:32px;min-width:220px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-tertiary)}
-.nof-projects-input{flex:1;min-width:0;border:0;outline:none;background:0 0;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:18px}
-.nof-projects-input::placeholder{color:var(--dsw-alias-label-tertiary)}
-.nof-projects-new{height:32px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:0 0;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;cursor:pointer}
-.nof-projects-new:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.nof-projects-hint{flex:none;margin:8px 0 4px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
-.nof-projects-list{flex:1;min-height:0;overflow-y:auto;margin:4px -8px 0;padding:0 8px 24px}
-.nof-projects-row{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;padding:10px 10px;border:0;border-radius:var(--dsw-radius-md);background:0 0;color:var(--dsw-alias-label-primary);text-align:left;cursor:pointer;font:inherit}
-.nof-projects-row:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.nof-projects-row:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
-.nof-projects-icon{flex:none;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-base));color:var(--dsw-alias-label-secondary)}
-.nof-projects-text{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
-.nof-projects-name{font-size:14px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.nof-projects-meta{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.nof-projects-open{flex:none;font-size:12px;line-height:20px;color:var(--dsw-alias-label-tertiary)}
-.nof-projects-row:hover .nof-projects-open{color:var(--dsw-alias-label-primary)}
-.nof-projects-empty{padding:24px 4px;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.8}
+  // src/area-browser.mjs
+  var PANEL = "no996-openfilm";
+  var STYLE_TAG = "no996-openfilm-area-fallback";
+  function discoverPrefixes(doc = typeof document === "undefined" ? void 0 : document) {
+    if (!doc) return { rows: null, browser: null };
+    let css = "";
+    for (const tag of doc.querySelectorAll('style[data-plugin-css*="ui-workspace"]')) css += `${tag.textContent}
 `;
-  function ensureProjectStyles(doc = typeof document === "undefined" ? void 0 : document) {
+    const pick = (name) => {
+      const match = new RegExp(`\\.([A-Za-z][\\w-]*)_${name}\\b`).exec(css);
+      return match ? match[1] : null;
+    };
+    return { rows: pick("projectRow"), browser: pick("sectionHeader") };
+  }
+  function classes(prefixes) {
+    const from = (prefix, names, fallback) => names.map((name) => prefix ? `${prefix}_${name}` : `${fallback}-${name}`).join(" ");
+    const rows = (name) => prefixes.rows ? `${prefixes.rows}_${name}` : `nof-${name}`;
+    const browser = (name) => prefixes.browser ? `${prefixes.browser}_${name}` : `nof-${name}`;
+    return {
+      rows,
+      browser,
+      from,
+      row: rows("projectRow"),
+      session: rows("sessionRow"),
+      selected: rows("selected"),
+      slot: rows("slot"),
+      title: rows("title"),
+      meta: rows("meta"),
+      text: rows("projectText"),
+      folder: rows("folder"),
+      arrow: rows("arrow"),
+      arrowOpen: rows("arrowOpen"),
+      actions: rows("rowActions"),
+      dot: rows("dot"),
+      root: browser("root"),
+      header: browser("sectionHeader"),
+      label: browser("sectionLabel"),
+      iconButton: browser("iconButton"),
+      search: browser("search"),
+      searchInput: browser("searchInput"),
+      list: browser("list")
+    };
+  }
+  var FALLBACK_CSS = `
+.nof-root{box-sizing:border-box;min-height:0;flex:1;display:flex;flex-direction:column;padding-right:var(--dsh-session-list-edge-inset,var(--dsh-sidebar-inline-padding,8px));color:var(--dsw-alias-label-primary)}
+.nof-sectionHeader{height:36px;display:flex;align-items:center;gap:4px;padding-left:var(--dsh-sidebar-row-padding,12px);margin-bottom:4px;color:var(--dsw-alias-label-tertiary);flex:none}
+.nof-sectionLabel{flex:1;min-width:0;font-size:12px;line-height:20px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nof-iconButton{width:28px;height:28px;border:0;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-secondary);display:inline-flex;align-items:center;justify-content:center;flex:none;cursor:pointer}
+.nof-iconButton:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.nof-search{height:32px;display:flex;align-items:center;gap:4px;margin:0 4px 4px;padding:0 4px 0 8px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-caption)}
+.nof-searchInput{flex:1;min-width:0;border:0;outline:none;background:0 0;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:18px}
+.nof-list{flex:1;min-height:0;overflow-y:auto;margin-left:-4px;padding:0 0 16px 4px;scrollbar-gutter:stable}
+.nof-projectRow{display:flex;align-items:center;gap:var(--dsh-sidebar-label-gap,6px);height:34px;padding:0 8px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) - var(--dsh-sidebar-paint-inset,0px));border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-primary);cursor:pointer;-webkit-user-select:none;user-select:none;position:relative}
+.nof-projectRow:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.nof-sessionRow{display:flex;align-items:center;height:32px;padding:0 8px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) - var(--dsh-sidebar-paint-inset,0px) + 22px);border-radius:var(--dsw-radius-md);cursor:pointer}
+.nof-sessionRow:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.nof-sessionRow.nof-selected{background:var(--dsw-alias-interactive-bg-hover)}
+.nof-slot{width:16px;height:20px;flex:none;display:inline-flex;align-items:center;justify-content:center;color:var(--dsw-alias-label-tertiary)}
+.nof-projectText{display:flex;flex-direction:column;flex:1;min-width:0;gap:2px}
+.nof-title{font-size:14px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nof-sessionRow .nof-title{flex:1;margin-left:var(--dsh-sidebar-label-gap,6px)}
+.nof-meta{font-size:12px;line-height:20px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nof-arrow{transition:transform .15s var(--ds-ease-in-out,ease)}
+.nof-arrowOpen{transform:rotate(90deg)}
+.nof-rowActions{flex:none;display:none;align-items:center;gap:13px}
+.nof-projectRow:hover .nof-rowActions,.nof-menuOpen .nof-rowActions{display:inline-flex}
+.nof-section{padding:6px var(--dsh-sidebar-row-padding,12px) 2px;font-size:12px;line-height:20px;color:var(--dsw-alias-label-tertiary)}
+.nof-empty{padding:12px var(--dsh-sidebar-row-padding,12px);font-size:12.5px;line-height:1.7;color:var(--dsw-alias-label-tertiary)}
+.nof-menu{position:absolute;right:4px;top:30px;z-index:30;min-width:168px;padding:4px;border:1px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-base));box-shadow:0 8px 24px #0006}
+.nof-menu button{display:block;width:100%;padding:6px 8px;border:0;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-primary);text-align:left;font:inherit;font-size:12.5px;line-height:20px;cursor:pointer}
+.nof-menu button:hover{background:var(--dsw-alias-interactive-bg-hover)}
+`;
+  function ensureFallbackStyles(doc = typeof document === "undefined" ? void 0 : document) {
     if (!doc || doc.querySelector(`style[data-no996="${STYLE_TAG}"]`)) return;
     const tag = doc.createElement("style");
     tag.dataset.no996 = STYLE_TAG;
-    tag.textContent = CSS;
+    tag.textContent = FALLBACK_CSS;
     doc.head.appendChild(tag);
   }
-  function createProjectPanel(React, deps) {
-    const { t, fetchArea, openProject, openPanel } = deps;
+  function createAreaBrowser(React, deps) {
+    const { t, fetchArea, openProject, openSession, openPanel, primitives } = deps;
     const h = React.createElement;
-    const icon = (name, size = 16) => {
-      const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", "aria-hidden": true };
-      if (name === "folder") {
-        return h("svg", common, h("path", { d: "M3.5 7.5a2 2 0 0 1 2-2h3l1.6 2h7.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2z", stroke: "currentColor", strokeWidth: 1.6, fill: "none" }));
-      }
-      if (name === "search") {
-        return h(
-          "svg",
-          common,
-          h("circle", { cx: 11, cy: 11, r: 6.5, stroke: "currentColor", strokeWidth: 1.8 }),
-          h("path", { d: "m16 16 4 4", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" })
-        );
-      }
-      return null;
+    const C = classes(discoverPrefixes());
+    const prim = primitives ?? {};
+    const icon = (name, size = 14) => {
+      const Component = prim[name];
+      return Component ? h(Component, { size }) : null;
     };
-    return function ProjectPanel(props) {
+    return function AreaBrowser(props) {
       const useSessions = props?.useSessions;
+      const useWorkspaces = props?.useWorkspaces;
+      const usePanelInfo = props?.usePanelInfo;
       const list = typeof useSessions === "function" ? useSessions((state) => state) : null;
+      const wsState = typeof useWorkspaces === "function" ? useWorkspaces((state) => state) : null;
+      const activePanel = typeof usePanelInfo === "function" ? usePanelInfo((info) => info?.activePanelId ?? null) : null;
+      const videoActive = activePanel === PANEL;
       const [area, setArea] = React.useState(() => ({ projects: [], hidden: [] }));
       const [loading, setLoading] = React.useState(true);
-      const [query, setQuery] = React.useState(props?.initialQuery ?? "");
+      const [query, setQuery] = React.useState("");
+      const [searching, setSearching] = React.useState(false);
+      const [menu, setMenu] = React.useState(null);
+      const [collapsed, setCollapsed] = React.useState(() => /* @__PURE__ */ new Set());
+      const [override, setOverride] = React.useState(null);
+      const [revision, setRevision] = React.useState(0);
+      const taggedVideo = React.useRef(videoActive);
+      if (taggedVideo.current !== videoActive) {
+        taggedVideo.current = videoActive;
+        setOverride(null);
+      }
+      const activeId = React.useMemo(() => {
+        if (!list?.byId) return null;
+        for (const id of Object.keys(list.byId)) {
+          if ((list.byId[id]?.retainedBy?.mainView ?? 0) > 0) return id;
+        }
+        return null;
+      }, [list]);
+      const mode = override ?? (videoActive ? "edit" : "work");
       React.useEffect(() => {
         let live = true;
-        fetchArea().then((payload) => {
-          if (!live) return;
-          setArea(parseAreaPayload(payload));
-          setLoading(false);
-        }).catch(() => {
-          if (live) setLoading(false);
+        const load = () => {
+          fetchArea().then((payload) => {
+            if (!live) return;
+            setArea(parseAreaPayload(payload));
+            setLoading(false);
+          }).catch(() => {
+            if (live) setLoading(false);
+          });
+        };
+        load();
+        const timer = setInterval(load, 15e3);
+        const off = areaBus.subscribe((event) => {
+          if (event.type === "project") load();
         });
+        const focus = () => load();
+        window.addEventListener("focus", focus);
         return () => {
           live = false;
+          clearInterval(timer);
+          off();
+          window.removeEventListener("focus", focus);
         };
-      }, []);
+      }, [revision]);
+      const choose = () => {
+        const next = mode === "edit" ? "work" : "edit";
+        setOverride(next);
+        if (next === "edit") openPanel();
+      };
       const projects = sortProjects(searchProjects(area.projects, query), list);
-      const titleOf2 = (project) => project.sessionTitle || (project.sessionId ? sessionTitle(list, project.sessionId) || t("areaSessionUntitled") : t("areaNotStarted"));
-      return h(
+      const workspaceRows = Array.isArray(wsState?.items) ? wsState.items : [];
+      const filtered = filterArea({
+        workspaces: workspaceRows,
+        sessions: list ?? { ids: [], byId: {} },
+        hidden: area.hidden,
+        projectPaths: area.projects.map((project) => project.path),
+        archived: Array.isArray(wsState?.archivedSessionIds) ? wsState.archivedSessionIds : []
+      });
+      const sessionsById = list?.byId ?? {};
+      const titleOf2 = (id) => sessionTitle(list, id);
+      const activate = (id) => {
+        let handled = false;
+        try {
+          handled = openSession(id) === true;
+        } catch {
+          handled = false;
+        }
+        if (!handled) {
+          try {
+            props?.open?.(id);
+          } catch {
+          }
+        }
+      };
+      const onKey = (action) => (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          action();
+        }
+      };
+      const toggle = (id) => setCollapsed((current) => {
+        const next = new Set(current);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      const restart = () => {
+        setRevision((value) => value + 1);
+        fetchArea().then((payload) => setArea(parseAreaPayload(payload))).catch(() => {
+        });
+      };
+      const switchTitle = mode === "edit" ? t("areaSwitchWork") : t("areaSwitchEdit");
+      const header = h(
         "div",
-        { className: "nof-projects" },
-        h(
-          "div",
-          { className: "nof-projects-head" },
-          h("h1", { className: "nof-projects-title" }, t("areaPanelTitle")),
-          h("span", { className: "nof-projects-count" }, String(projects.length)),
-          h(
-            "div",
-            { className: "nof-projects-search" },
-            icon("search"),
-            h("input", {
-              className: "nof-projects-input",
-              value: query,
-              placeholder: t("areaPanelSearch"),
-              "aria-label": t("areaPanelSearch"),
-              onChange: (event) => setQuery(event.target.value)
-            })
-          ),
-          h("button", { type: "button", className: "nof-projects-new", onClick: () => openPanel() }, t("areaPanelNew"))
-        ),
-        h("div", { className: "nof-projects-hint" }, t("areaPanelHint")),
-        h(
-          "div",
-          { className: "nof-projects-list" },
-          projects.length === 0 ? h("div", { className: "nof-projects-empty" }, loading ? t("areaLoading") : t("areaEmptyProjects")) : projects.map((project) => h(
-            "button",
-            {
-              key: project.projectId,
-              type: "button",
-              className: "nof-projects-row",
-              title: project.path,
-              "aria-label": project.name,
-              onClick: () => openProject(project.projectId)
-            },
-            h("span", { className: "nof-projects-icon" }, icon("folder")),
-            h(
-              "span",
-              { className: "nof-projects-text" },
-              h("span", { className: "nof-projects-name" }, project.name),
-              h("span", { className: "nof-projects-meta" }, titleOf2(project))
-            ),
-            h("span", { className: "nof-projects-open" }, t("areaPanelOpen"))
-          ))
-        )
+        { className: C.header },
+        h("span", { className: C.label, style: { marginRight: "auto" } }, mode === "edit" ? t("areaEditTitle") : t("areaWorkTitle")),
+        h("button", {
+          type: "button",
+          className: C.iconButton,
+          title: switchTitle,
+          "aria-label": switchTitle,
+          onClick: () => choose()
+        }, icon("IconWorkspaceTreeOutlineRegular", 14)),
+        mode === "edit" ? h("button", {
+          type: "button",
+          className: C.iconButton,
+          title: t("areaSearch"),
+          "aria-label": t("areaSearch"),
+          onClick: () => {
+            if (searching) setQuery("");
+            setSearching((value) => !value);
+          }
+        }, icon("IconSearchOutlineRegular", 14)) : null,
+        h("button", {
+          type: "button",
+          className: C.iconButton,
+          title: t("areaNew"),
+          "aria-label": t("areaNew"),
+          onClick: () => openPanel()
+        }, icon("IconPlusOutlineRegular", 14))
       );
-    };
-  }
-
-  // src/area-hider.mjs
-  var TAG = "no996-openfilm-hide";
-  function rowKeys(sessionIds) {
-    const keys = [];
-    const seen = /* @__PURE__ */ new Set();
-    for (const id of Array.isArray(sessionIds) ? sessionIds : []) {
-      if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(id) || seen.has(id)) continue;
-      seen.add(id);
-      keys.push(id);
-    }
-    return keys;
-  }
-  function hideCss(sessionIds) {
-    return rowKeys(sessionIds).map((id) => `[data-row-key="session:${id}"]{display:none!important}`).join("\n");
-  }
-  function createAreaHider(doc = typeof document === "undefined" ? void 0 : document) {
-    if (!doc) return { apply() {
-      return false;
-    } };
-    const tag = doc.createElement("style");
-    tag.dataset.no996 = TAG;
-    doc.head.appendChild(tag);
-    let last = "";
-    return {
-      /** Replace the hidden set; returns whether the stylesheet changed. */
-      apply(sessionIds) {
-        const css = hideCss(sessionIds);
-        if (css === last) return false;
-        last = css;
-        tag.textContent = css;
-        return true;
-      },
-      /** Count how many hidden rows the browser currently draws (diagnostics). */
-      matched() {
-        return tag.sheet?.cssRules?.length ?? 0;
-      },
-      remove() {
-        tag.remove();
-      }
+      const searchBar = searching ? h(
+        "div",
+        { className: C.search },
+        icon("IconSearchOutlineRegular", 13),
+        h("input", {
+          className: C.searchInput,
+          value: query,
+          autoFocus: true,
+          placeholder: t("areaSearchPlaceholder"),
+          "aria-label": t("areaSearchPlaceholder"),
+          onChange: (event) => setQuery(event.target.value),
+          onKeyDown: (event) => {
+            if (event.key === "Escape") {
+              setQuery("");
+              setSearching(false);
+            }
+            if (event.key === "Enter" && projects.length > 0) {
+              openProject(projects[0].projectId);
+              setSearching(false);
+            }
+          }
+        }),
+        h("button", {
+          type: "button",
+          className: C.iconButton,
+          "aria-label": t("areaClear"),
+          onClick: () => {
+            setQuery("");
+            setSearching(false);
+          }
+        }, icon("IconCloseFillRegular", 12))
+      ) : null;
+      const projectRow = (project) => h(
+        "div",
+        { key: project.projectId, style: { position: "relative" } },
+        h(
+          "div",
+          {
+            className: C.row,
+            role: "button",
+            tabIndex: 0,
+            title: project.path,
+            "aria-label": project.name,
+            onClick: () => openProject(project.projectId),
+            onKeyDown: onKey(() => openProject(project.projectId))
+          },
+          h("span", { className: C.slot }, icon("IconFolderCloseRegular", 16)),
+          h(
+            "span",
+            { className: C.text },
+            h("span", { className: C.title }, project.name),
+            h("span", { className: C.meta }, project.sessionTitle || (project.sessionId ? t("areaSessionUntitled") : t("areaNotStarted")))
+          ),
+          h(
+            "span",
+            { className: C.actions },
+            h("button", {
+              type: "button",
+              className: C.iconButton,
+              title: t("areaMore"),
+              "aria-label": t("areaMore"),
+              onClick: (event) => {
+                event.stopPropagation();
+                setMenu((current) => current === project.projectId ? null : project.projectId);
+              }
+            }, icon("IconEllipsisOutlineRegular", 14))
+          )
+        ),
+        menu === project.projectId ? h(
+          "div",
+          { className: "nof-menu" },
+          h("button", { type: "button", onClick: () => {
+            setMenu(null);
+            openProject(project.projectId);
+          } }, t("areaOpenPanel")),
+          project.sessionId ? h("button", { type: "button", onClick: () => {
+            setMenu(null);
+            activate(project.sessionId);
+          } }, t("areaOpenSession")) : null,
+          h("button", { type: "button", onClick: () => {
+            setMenu(null);
+            restart();
+          } }, t("areaRefresh"))
+        ) : null
+      );
+      const sessionRow = (id, parentId) => h(
+        "div",
+        {
+          key: `${parentId}:${id}`,
+          className: `${C.session}${id === activeId && activePanel === null ? ` ${C.selected}` : ""}`,
+          role: "button",
+          tabIndex: 0,
+          "aria-label": titleOf2(id) || id,
+          onClick: () => activate(id),
+          onKeyDown: onKey(() => activate(id))
+        },
+        h("span", { className: C.slot }, h("span", { className: C.dot })),
+        h("span", { className: C.title }, titleOf2(id) || (sessionsById[id]?.blank ? t("areaBlankSession") : t("areaSessionUntitled")))
+      );
+      const workRows = filtered.groups.map((group) => h(
+        "div",
+        { key: group.workspaceId },
+        h(
+          "div",
+          {
+            className: C.row,
+            role: "button",
+            tabIndex: 0,
+            "aria-expanded": !collapsed.has(group.workspaceId),
+            "aria-label": group.title || t("areaWorkspaceFallback"),
+            onClick: () => toggle(group.workspaceId),
+            onKeyDown: onKey(() => toggle(group.workspaceId))
+          },
+          h("span", { className: C.slot }, icon(collapsed.has(group.workspaceId) ? "IconFolderCloseRegular" : "IconFolderOpenRegular", 16)),
+          h(
+            "span",
+            { className: C.text },
+            h("span", { className: C.title }, group.title || t("areaWorkspaceFallback")),
+            h("span", { className: C.meta }, `${group.sessionIds.length} ${t("areaSessions")}`)
+          )
+        ),
+        collapsed.has(group.workspaceId) ? null : group.sessionIds.map((id) => sessionRow(id, group.workspaceId))
+      ));
+      const ungrouped = filtered.ungrouped.length > 0 ? h(
+        "div",
+        { key: "__ungrouped" },
+        h("div", { className: "nof-section" }, t("areaUngrouped")),
+        filtered.ungrouped.map((id) => sessionRow(id, "ungrouped"))
+      ) : null;
+      const body = mode === "edit" ? h(
+        "div",
+        { className: C.list, role: "tree" },
+        projects.length === 0 ? h("div", { className: "nof-empty" }, loading ? t("areaLoading") : t("areaEmptyProjects")) : projects.map(projectRow)
+      ) : h(
+        "div",
+        { className: C.list, role: "tree" },
+        filtered.groups.length === 0 && filtered.ungrouped.length === 0 ? h("div", { className: "nof-empty" }, loading ? t("areaLoading") : t("areaEmptyWorkspaces")) : [workRows, ungrouped]
+      );
+      return h("div", { className: C.root, "data-no996-openfilm-area": mode }, header, searchBar, body);
     };
   }
 
@@ -686,19 +912,19 @@
       const React = require2("react");
       const h = React.createElement;
       const NS = "no996Openfilm";
-      const PANEL = "no996-openfilm";
-      const PROJECTS = "no996-openfilm-projects";
+      const PANEL2 = "no996-openfilm";
       const en = {
         panel: "Video studio",
-        areaProjects: "Projects",
-        areaWorkspaces: "Workspaces",
-        areaSwitch: "Switch area",
-        areaEdit: "Editing",
-        areaWork: "Workspaces",
-        areaSearch: "Search projects or conversations",
+        areaEditTitle: "Editing area",
+        areaWorkTitle: "Workspaces",
+        areaSwitchEdit: "Switch to the editing area",
+        areaSwitchWork: "Switch to Workspaces",
+        areaSearch: "Search projects",
         areaSearchPlaceholder: "Search projects or conversations",
+        areaClear: "Clear search",
         areaNew: "New project",
         areaMore: "More",
+        areaSessions: "conversations",
         areaLoading: "Reading\u2026",
         areaEmptyProjects: "No projects yet. Open the video studio to create one.",
         areaEmptyWorkspaces: "No workspace to show.",
@@ -710,7 +936,6 @@
         areaRefresh: "Refresh list",
         areaUngrouped: "Ungrouped",
         areaWorkspaceFallback: "Workspace",
-        areaHiddenNote: "Project conversations appear only in the editing area.",
         studioLoading: "Starting OpenFilm Studio\u2026",
         studioFailed: "Unable to start OpenFilm Studio.",
         studioRetry: "Try again",
@@ -730,15 +955,16 @@
       };
       const zh = {
         panel: "\u89C6\u9891\u521B\u4F5C",
-        areaProjects: "\u9879\u76EE",
-        areaWorkspaces: "\u5DE5\u4F5C\u533A",
-        areaSwitch: "\u5207\u6362\u533A\u57DF",
-        areaEdit: "\u526A\u8F91\u533A",
-        areaWork: "\u5DE5\u4F5C\u533A",
-        areaSearch: "\u641C\u7D22\u9879\u76EE\u6216\u4F1A\u8BDD",
-        areaSearchPlaceholder: "\u641C\u7D22\u9879\u76EE\u6216\u4F1A\u8BDD",
+        areaEditTitle: "\u526A\u8F91\u7D20\u6750\u533A",
+        areaWorkTitle: "\u5DE5\u4F5C\u533A",
+        areaSwitchEdit: "\u5207\u6362\u5230\u526A\u8F91\u7D20\u6750\u533A",
+        areaSwitchWork: "\u5207\u6362\u5230\u5DE5\u4F5C\u533A",
+        areaSearch: "\u641C\u7D22\u9879\u76EE",
+        areaSearchPlaceholder: "\u641C\u7D22\u9879\u76EE\u6216\u5BF9\u8BDD",
+        areaClear: "\u6E05\u7A7A\u641C\u7D22",
         areaNew: "\u65B0\u5EFA\u9879\u76EE",
         areaMore: "\u66F4\u591A",
+        areaSessions: "\u4E2A\u5BF9\u8BDD",
         areaLoading: "\u6B63\u5728\u8BFB\u53D6\u2026",
         areaEmptyProjects: "\u8FD8\u6CA1\u6709\u9879\u76EE\u3002\u6253\u5F00\u89C6\u9891\u521B\u4F5C\u9762\u677F\u65B0\u5EFA\u4E00\u4E2A\u3002",
         areaEmptyWorkspaces: "\u6CA1\u6709\u53EF\u663E\u793A\u7684\u5DE5\u4F5C\u533A\u3002",
@@ -750,7 +976,6 @@
         areaRefresh: "\u5237\u65B0\u5217\u8868",
         areaUngrouped: "\u672A\u5206\u7EC4",
         areaWorkspaceFallback: "\u5DE5\u4F5C\u533A",
-        areaHiddenNote: "\u9879\u76EE\u5BF9\u8BDD\u53EA\u5728\u526A\u8F91\u533A\u663E\u793A\u3002",
         studioLoading: "\u6B63\u5728\u542F\u52A8 OpenFilm \u5DE5\u4F5C\u53F0\u2026",
         studioFailed: "\u65E0\u6CD5\u542F\u52A8 OpenFilm \u5DE5\u4F5C\u53F0\u3002",
         studioRetry: "\u91CD\u8BD5",
@@ -839,14 +1064,6 @@
         if (typeof data?.editorOrigin !== "string") throw new Error("Invalid Studio response");
         return data;
       };
-      function ProjectsIcon({ size }) {
-        return h(
-          "svg",
-          { width: size, height: size, viewBox: "0 0 24 24", fill: "none", "aria-hidden": true },
-          h("path", { d: "M4 7.5a2 2 0 0 1 2-2h3l1.6 2h7.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2z", stroke: "currentColor", strokeWidth: 1.6 }),
-          h("path", { d: "M4.5 12.5h15", stroke: "currentColor", strokeWidth: 1.2, opacity: 0.7 })
-        );
-      }
       function PanelIcon({ size }) {
         return h(
           "svg",
@@ -860,35 +1077,35 @@
         apply(ctx) {
           ctx.effect(() => ctx.locale.register(NS, { en, zh }), "openfilm: dictionaries");
           const t = ctx.locale.bind(NS);
-          ensureProjectStyles();
+          ensureFallbackStyles();
+          const borrowed = discoverPrefixes().rows !== null;
+          const primitives = (() => {
+            try {
+              return require2("@deepseek-ai/dsh-client-ui-primitives");
+            } catch {
+              return {};
+            }
+          })();
+          if (!borrowed) console.warn("[no996] ui-workspace classes not found; using the bundled stylesheet");
           const fetchArea = async () => {
             if (DESKTOP_PROTOCOL) return { projects: [], hiddenSessionIds: [] };
             const response = await fetch("/api/no996-openfilm/area", { credentials: "same-origin", cache: "no-store" });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             return response.json();
           };
-          const hider = createAreaHider();
-          const syncHidden = () => {
-            fetchArea().then((payload) => hider.apply(payload?.hiddenSessionIds)).catch(() => {
-            });
-          };
-          syncHidden();
-          if (typeof window !== "undefined") {
-            window.setInterval(syncHidden, 2e4);
-            window.addEventListener("focus", syncHidden);
-          }
           const selectPanel = () => {
             const layout = ctx.get?.("layout");
             if (!layout || typeof layout.selectPanel !== "function") return false;
             try {
-              layout.selectPanel(PANEL);
+              layout.selectPanel(PANEL2);
               return true;
             } catch {
               return false;
             }
           };
-          const ProjectPanel = createProjectPanel(React, {
+          const AreaBrowser = createAreaBrowser(React, {
             t,
+            primitives,
             fetchArea,
             openProject: (projectId) => {
               areaBus.navigate(projectId);
@@ -906,11 +1123,10 @@
               }
             }
           });
-          ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PANEL, locale: NS }, PanelSeat));
-          ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: PANEL, order: 21, locale: NS, label: () => t("panel") }, PanelIcon));
+          ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PANEL2, locale: NS }, PanelSeat));
+          ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: PANEL2, order: 21, locale: NS, label: () => t("panel") }, PanelIcon));
           ctx.slots.inject("shell.overlay", () => ctx.slots.register({ name: "shell.overlay", id: "no996-openfilm-panel", order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
-          ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PROJECTS, locale: NS }, ProjectPanel));
-          ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: PROJECTS, order: 20, locale: NS, label: () => t("projects") }, ProjectsIcon));
+          ctx.slots.inject("sidebar.workspaces", () => ctx.slots.register({ name: "sidebar.workspaces", priority: -100, locale: NS }, AreaBrowser));
         }
       };
     }

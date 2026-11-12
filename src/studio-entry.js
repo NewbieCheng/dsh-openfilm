@@ -1,7 +1,6 @@
 import { createStudioPanel } from './studio-panel.mjs';
 import { createActivationStore } from './panel-keepalive.mjs';
-import { createProjectPanel, ensureProjectStyles } from './area-panel.mjs';
-import { createAreaHider } from './area-hider.mjs';
+import { createAreaBrowser, discoverPrefixes, ensureFallbackStyles } from './area-browser.mjs';
 import { areaBus } from './area-bus.mjs';
 
 window.__ModuleLoader__.load({
@@ -11,17 +10,16 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
     const NS = 'no996Openfilm';
     const PANEL = 'no996-openfilm';
-    const PROJECTS = 'no996-openfilm-projects';
     const en = {
       panel: 'Video studio',
-      areaProjects: 'Projects', areaWorkspaces: 'Workspaces', areaSwitch: 'Switch area',
-      areaEdit: 'Editing', areaWork: 'Workspaces', areaSearch: 'Search projects or conversations',
-      areaSearchPlaceholder: 'Search projects or conversations', areaNew: 'New project', areaMore: 'More',
+      areaEditTitle: 'Editing area', areaWorkTitle: 'Workspaces',
+      areaSwitchEdit: 'Switch to the editing area', areaSwitchWork: 'Switch to Workspaces',
+      areaSearch: 'Search projects', areaSearchPlaceholder: 'Search projects or conversations',
+      areaClear: 'Clear search', areaNew: 'New project', areaMore: 'More', areaSessions: 'conversations',
       areaLoading: 'Reading…', areaEmptyProjects: 'No projects yet. Open the video studio to create one.',
       areaEmptyWorkspaces: 'No workspace to show.', areaNotStarted: 'Not started', areaSessionUntitled: 'New conversation',
       areaBlankSession: 'New conversation', areaOpenPanel: 'Open video studio', areaOpenSession: 'Open as conversation',
       areaRefresh: 'Refresh list', areaUngrouped: 'Ungrouped', areaWorkspaceFallback: 'Workspace',
-      areaHiddenNote: 'Project conversations appear only in the editing area.',
       studioLoading: 'Starting OpenFilm Studio…',
       studioFailed: 'Unable to start OpenFilm Studio.',
       studioRetry: 'Try again', studioStopped: 'Video workspace stopped', studioStoppedHint: 'The editing service is not running. Restart it to continue; projects and media are untouched.', studioRestart: 'Restart workspace',
@@ -32,14 +30,14 @@ window.__ModuleLoader__.load({
     };
     const zh = {
       panel: '视频创作',
-      areaProjects: '项目', areaWorkspaces: '工作区', areaSwitch: '切换区域',
-      areaEdit: '剪辑区', areaWork: '工作区', areaSearch: '搜索项目或会话',
-      areaSearchPlaceholder: '搜索项目或会话', areaNew: '新建项目', areaMore: '更多',
+      areaEditTitle: '剪辑素材区', areaWorkTitle: '工作区',
+      areaSwitchEdit: '切换到剪辑素材区', areaSwitchWork: '切换到工作区',
+      areaSearch: '搜索项目', areaSearchPlaceholder: '搜索项目或对话',
+      areaClear: '清空搜索', areaNew: '新建项目', areaMore: '更多', areaSessions: '个对话',
       areaLoading: '正在读取…', areaEmptyProjects: '还没有项目。打开视频创作面板新建一个。',
       areaEmptyWorkspaces: '没有可显示的工作区。', areaNotStarted: '未开始', areaSessionUntitled: '新会话',
       areaBlankSession: '新会话', areaOpenPanel: '打开视频创作面板', areaOpenSession: '在对话中打开',
       areaRefresh: '刷新列表', areaUngrouped: '未分组', areaWorkspaceFallback: '工作区',
-      areaHiddenNote: '项目对话只在剪辑区显示。',
       studioLoading: '正在启动 OpenFilm 工作台…',
       studioFailed: '无法启动 OpenFilm 工作台。',
       studioRetry: '重试', studioStopped: '工作台已停止运行', studioStoppedHint: '视频编辑服务已断开。重新启动即可继续，项目和素材不受影响。', studioRestart: '重新启动工作台',
@@ -122,11 +120,6 @@ window.__ModuleLoader__.load({
       if (typeof data?.editorOrigin !== 'string') throw new Error('Invalid Studio response');
       return data;
     };
-    function ProjectsIcon({ size }) {
-      return h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true },
-        h('path', { d: 'M4 7.5a2 2 0 0 1 2-2h3l1.6 2h7.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2z', stroke: 'currentColor', strokeWidth: 1.6 }),
-        h('path', { d: 'M4.5 12.5h15', stroke: 'currentColor', strokeWidth: 1.2, opacity: .7 }));
-    }
     function PanelIcon({ size }) {
       return h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true },
         h('rect', { x: 3, y: 5, width: 18, height: 14, rx: 3, stroke: 'currentColor', strokeWidth: 1.7 }),
@@ -137,7 +130,14 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'openfilm: dictionaries');
         const t = ctx.locale.bind(NS);
-        ensureProjectStyles();
+        ensureFallbackStyles();
+        // Reuse the shipped rows' look: the official CSS module is already in the
+        // document, so its hashed class names are read back and borrowed.
+        const borrowed = discoverPrefixes().rows !== null;
+        const primitives = (() => {
+          try { return require('@deepseek-ai/dsh-client-ui-primitives'); } catch { return {}; }
+        })();
+        if (!borrowed) console.warn('[no996] ui-workspace classes not found; using the bundled stylesheet');
         const fetchArea = async () => {
           // The desktop page (dsh-app://app) cannot reach /api/... at all; there
           // the project page stays empty rather than showing a broken list.
@@ -146,25 +146,14 @@ window.__ModuleLoader__.load({
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return response.json();
         };
-        // Keep project conversations out of the shipped Workspace list by hiding
-        // their rows (they carry data-row-key="session:<id>"); the browser itself
-        // stays the shipped component, so its look is untouched.
-        const hider = createAreaHider();
-        const syncHidden = () => {
-          fetchArea().then(payload => hider.apply(payload?.hiddenSessionIds)).catch(() => {});
-        };
-        syncHidden();
-        if (typeof window !== 'undefined') {
-          window.setInterval(syncHidden, 20000);
-          window.addEventListener('focus', syncHidden);
-        }
         const selectPanel = () => {
           const layout = ctx.get?.('layout');
           if (!layout || typeof layout.selectPanel !== 'function') return false;
           try { layout.selectPanel(PANEL); return true; } catch { return false; }
         };
-        const ProjectPanel = createProjectPanel(React, {
+        const AreaBrowser = createAreaBrowser(React, {
           t,
+          primitives,
           fetchArea,
           openProject: projectId => {
             areaBus.navigate(projectId);
@@ -182,10 +171,10 @@ window.__ModuleLoader__.load({
         // `shell.overlay` is rendered for the whole frame lifetime, so the panel
         // it hosts survives page switches instead of reloading Studio each time.
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'no996-openfilm-panel', order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
-        // The project page lives in the conversation area; the sidebar itself is
-        // the shipped WorkspaceBrowser, untouched.
-        ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PROJECTS, locale: NS }, ProjectPanel));
-        ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PROJECTS, order: 20, locale: NS, label: () => t('projects') }, ProjectsIcon));
+        // The Workspace block switches between the editing area and the normal
+        // list by the active page tag. It has to be the slot occupant: a single
+        // slot renders one entry, so any in-place switching lives in the occupant.
+        ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({ name: 'sidebar.workspaces', priority: -100, locale: NS }, AreaBrowser));
       },
     };
   },

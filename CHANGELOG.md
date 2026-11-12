@@ -1,15 +1,15 @@
 # 更新记录
 
-## 0.13.0 —— 项目页进对话区，侧栏保持原生
+## 0.13.0 —— 侧栏「工作区」按页签切换：剪辑素材区 / 原生工作区
 
-- 侧栏保持官方 `WorkspaceBrowser`，本插件不再接管 `sidebar.workspaces`。上一版用 `priority: -100` 盖住官方条目的做法在单槽规则上成立，但文件夹按钮、行距、菜单都得重画，观感和原生对不上（真机已见），所以撤掉；`src/area-browser.mjs` 一并删除。
-- 过滤改成"只藏行"：官方会话行自带 `data-row-key="session:<id>"`，`src/area-hider.mjs` 用一条 `display:none` 样式表把项目对话藏起来，其余界面由官方组件渲染。隐藏集合来自宿主路由，启动即拉、每 20 秒与窗口聚焦时刷新；拿不到（桌面页、路由未挂）就不藏。
-- 项目列表成为对话区的一个面板：`main` 槽 key `no996-openfilm-projects`，`sidebar.panellist` 新增「项目」图标（order 20）。页面里是项目名 + 它那条对话（或「未开始」）、搜索（项目名或对话标题）、「新建项目」。
+- 侧栏「工作区」这一块由插件接管（`sidebar.workspaces` 唯一 occupant，`priority: -100`）。单槽只渲染最小优先级的活条目，所以"在同一个位置换内容"只能由 occupant 做；换页签不重新注册。
+- 切换跟着当前页签走：视频创作面板激活时这块变成 **剪辑素材区**（项目名 + 它的对话 + 搜索 + 新建），其它页面自动回到 **工作区** 列表（项目对话不出现，只在剪辑素材区）。头部右侧有手动切换按钮，切换后到下一次页签变化前保持手动选择。
+- 样式和图标不再自造：运行时从文档里读回官方 `ui-workspace` CSS module 的类名前缀（`style[data-plugin-css*="ui-workspace"]`），行、标题、槽位、箭头直接使用官方类名；图标用 `@deepseek-ai/dsh-client-ui-primitives` 的 `IconFolderOpenRegular` / `IconFolderCloseRegular` / `IconEllipsisOutlineRegular` / `IconWorkspaceTreeOutlineRegular` 等，与官方行同一套 SVG。读不到前缀（DSH 改名）时退化到随包的 `nof-` 样式表，并在控制台留一行警告。
 - 点项目行只做两件事：中间区切到视频创作面板（`layout.selectPanel`），并请官方壳打开该项目（父页面 → iframe 的 `no996-openfilm:navigate`；注入桥用 `pushState + popstate`，壳不响应则退化 `location.replace`）。**不打开 DSH 聊天视图**，也不切换当前会话。
 - 新 Host 只读路由 `GET /api/no996-openfilm/area`（仅官方壳模式注册，鉴权与其它本地路由一致）：Studio 项目列表 + 绑定表 + 会话目录 → `{projects, hiddenSessionIds}`；不打开项目、不建会话。`project-conversation` 增加只读的 `bindings()`。
 - 面板侧：iframe 还没就绪时导航请求排队，`no996-openfilm:boot` 后补发；官方壳每次报告当前项目。
-- 测试：`tests/area-view.test.mjs`、`tests/area-client.test.mjs`、`tests/area-route.test.mjs`、`tests/area-panel.test.mjs`（替身 React 真渲染）、`tests/client-area-wiring.test.mjs`（断言侧栏没被接管、行动作不碰聊天视图、隐藏规则形状），`project-conversation` 补 `bindings()` 只读用例。
-- 边界：只剩被隐藏会话的项目文件夹仍显示文件夹行（点开为空）；要连文件夹一起藏，需要宿主给出"只含项目会话的工作区 id"，v1 没做。桌面页面（`dsh-app://`）拿不到 `/api/…`，项目页是空列表而不是坏数据。
+- 边界（工作区视图 v1）：官方浏览器被替换后，它的拖拽排序、置顶、重命名、右键菜单、新建工作区对话框没有复刻，只保留展开/折叠、选中态与「未分组」；只剩项目对话的项目文件夹整组不显示。桌面页面（`dsh-app://`）拿不到 `/api/…`，剪辑素材区为空列表而不是坏数据。
+- 测试：`tests/area-view.test.mjs`、`tests/area-client.test.mjs`、`tests/area-route.test.mjs`、`tests/client-area-wiring.test.mjs`（含替身 React 渲染的两种状态、页签切换、项目行行动作），`project-conversation` 补 `bindings()` 只读用例。
 
 ## 0.12.1 —— 本地服务 SenseVoice 改回原生渲染
 
