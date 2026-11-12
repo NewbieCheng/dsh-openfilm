@@ -1,5 +1,8 @@
 import { createServer, request } from 'node:http';
 import { randomBytes } from 'node:crypto';
+import { theme, themeSurfaceFor } from './theme.mjs';
+import { styleLabInjection } from './style-lab.mjs';
+import { replaceTitle } from './brand.mjs';
 
 /**
  * A development-only window onto one Studio editor.
@@ -14,7 +17,7 @@ import { randomBytes } from 'node:crypto';
  * editor origin with that origin's lobby session attached, so Studio still sees
  * exactly one local client and keeps its own file and process permissions.
  */
-export function startStudioDebug({ editorOrigin, sessionCookie, logger, port = Number(process.env.NO996_OPENFILM_DEBUG_PORT || 47821) }) {
+export function startStudioDebug({ editorOrigin, sessionCookie, logger, officialShell = false, port = Number(process.env.NO996_OPENFILM_DEBUG_PORT || 47821) }) {
   const token = randomBytes(24).toString('base64url');
   const target = new URL(editorOrigin);
   const cookieName = 'no996_debug';
@@ -41,6 +44,12 @@ export function startStudioDebug({ editorOrigin, sessionCookie, logger, port = N
       res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }).end('open this window through the video panel button');
       return;
     }
+    // `/shell` is a bookmarkable alias for the official shell preview. Upstream
+    // serves the shell at `/` when the Host passes an editorDir, so the alias
+    // only rewrites the forwarded path, never the authority.
+    const shellAlias = officialShell && url.pathname === '/shell';
+    const upstreamPath = shellAlias ? '/' : req.url;
+    const surface = themeSurfaceFor(shellAlias ? '/' : url.pathname, officialShell);
     const headers = { ...req.headers, host: target.host, cookie: sessionCookie, 'sec-fetch-site': 'same-origin' };
     // Studio's bridge inspects the navigation destination; a top-level document
     // is exactly what it refuses, so present the same shape the frame uses.
@@ -48,8 +57,39 @@ export function startStudioDebug({ editorOrigin, sessionCookie, logger, port = N
     if (req.method === 'GET') { headers['sec-fetch-dest'] = 'iframe'; headers['sec-fetch-mode'] = 'navigate'; }
     delete headers['accept-encoding'];
     const upstream = request({
-      hostname: target.hostname, port: target.port, method: req.method, path: req.url, headers,
+      hostname: target.hostname, port: target.port, method: req.method, path: upstreamPath, headers,
     }, reply => {
+      // The debug window is the standalone styling surface: inject the same
+      // theme the panel gets (and the workbench when enabled) so what a person
+      // tunes here is what ships. Buffering is bounded; anything not HTML is
+      // streamed as before.
+      const type = String(reply.headers['content-type'] || '').toLowerCase();
+      if (req.method === 'GET' && type.startsWith('text/html')) {
+        const chunks = [];
+        let length = 0;
+        reply.on('data', (chunk) => {
+          length += chunk.length;
+          if (length > 8 * 1024 * 1024) { reply.destroy(); res.destroy(); return; }
+          chunks.push(chunk);
+        });
+        reply.on('end', () => {
+          if (res.writableEnded || res.destroyed) return;
+          const inject = `${theme.injection(surface)}${styleLabInjection()}`;
+          const html = replaceTitle(Buffer.concat(chunks).toString('utf8')).replace(/<head(?:\s[^>]*)?>/i, (match) => match + inject);
+          const out = { ...reply.headers };
+          delete out['content-length'];
+          // Buffered responses are sent with a known length; keeping the
+          // upstream's chunked header would make the response invalid.
+          delete out['transfer-encoding'];
+          delete out.etag;
+          delete out['last-modified'];
+          out['content-length'] = String(Buffer.byteLength(html));
+          res.writeHead(reply.statusCode || 502, out);
+          res.end(html);
+        });
+        reply.on('error', () => res.destroy());
+        return;
+      }
       if (!res.headersSent) res.writeHead(reply.statusCode || 502, reply.headers);
       reply.pipe(res);
     });

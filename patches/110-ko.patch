@@ -1,0 +1,22 @@
+diff --git a/apps/desktop/chat/src/i18n/locales/ko.ts b/apps/desktop/chat/src/i18n/locales/ko.ts
+index da3793f..a9246a4 100644
+--- a/apps/desktop/chat/src/i18n/locales/ko.ts
++++ b/apps/desktop/chat/src/i18n/locales/ko.ts
+@@ -126,6 +126,8 @@ export const ko: Words = {
+     previewFailed: '이 파일을 읽을 수 없습니다',
+   },
+   composer: {
++    searchModel: '모델 검색…',
++    searchNoMatch: '일치하는 모델이 없습니다',
+     contextFull: '대화가 길어졌습니다. 새 대화를 시작하면 더 잘 됩니다.',
+     contextFullNew: '새 대화',
+     agentLoading: '불러오는 중…',
+@@ -239,6 +241,8 @@ export const ko: Words = {
+     untitledSession: '새 채팅',
+   },
+   projectMenu: {
++    delete: '삭제',
++    deleteConfirm: '한 번 더 클릭하면 삭제',
+     archive: '보관',
+     archived: '보관됨',
+     asking: '답변 대기 중',

@@ -39,6 +39,10 @@ function main() {
     'apps/desktop/chat/src/lib/agent-menu-rows.ts',
     'apps/desktop/chat/src/components/ModelPopover.tsx',
     'apps/desktop/chat/src/components/ConversationSessionBar.tsx',
+    'apps/desktop/chat/src/components/OnboardingGate.tsx',
+    'apps/desktop/chat/src/components/ProjectStarters.tsx',
+    'packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx',
+    'packages/openfilm/studio/ui/src/components/ProjectView.tsx',
     'apps/desktop/chat/src/App.tsx',
     'apps/desktop/chat/src/lib/chat-store.ts',
     'apps/desktop/chat/src/state/local-agent-store.ts',
@@ -47,19 +51,36 @@ function main() {
     'apps/desktop/chat/src/components/AgentActivityRow.tsx',
     'packages/shared/src/contract.ts',
   'packages/shared/src/markdown-blocks.ts',
-  'apps/desktop/chat/src/components/Markdown.tsx',
+    'apps/desktop/chat/src/components/Markdown.tsx',
     'apps/desktop/chat/src/i18n/locales/en-US.ts',
     'apps/desktop/chat/src/i18n/locales/es.ts',
     'apps/desktop/chat/src/i18n/locales/ja.ts',
     'apps/desktop/chat/src/i18n/locales/ko.ts',
     'apps/desktop/chat/src/i18n/locales/zh-CN.ts',
   ];
-  const dirty = git(checkout, 'status', '--porcelain', '--untracked-files=no').toString('utf8')
-    .split('\n').map(line => line.replace(/\r$/, '')).filter(Boolean).map(line => line.slice(3).trim());
-  const unexpected = dirty.filter(path => !PATCHED.includes(path));
-  if (unexpected.length) fail(`Upstream tracked files have local changes: ${unexpected.join(', ')}`);
-  const patch = dirty.length ? git(checkout, 'diff', '--', ...dirty) : Buffer.alloc(0);
+  // Include staged + unstaged edits, and brand-new files on the PATCHED
+  // allowlist (plain --untracked-files=no would omit OnboardingGate-style adds).
+  const porcelain = git(checkout, 'status', '--porcelain', '--untracked-files=all').toString('utf8')
+    .split('\n').map(line => line.replace(/\r$/, '')).filter(Boolean);
+  const dirty = [];
+  for (const line of porcelain) {
+    const path = line.slice(3).trim().replace(/ -> /, ' ').split(/\s+/).pop();
+    if (!path) continue;
+    if (!PATCHED.includes(path)) fail(`Upstream has unexpected local changes: ${path}`);
+    dirty.push(path);
+  }
+  // `git diff HEAD` covers staged new files; plain `git diff` would miss them.
+  // Untracked allowlist files need intent-to-add first, or they appear in dirty
+  // but contribute zero bytes to the recorded patch (manifest/files drift).
+  for (const path of dirty) {
+    const mark = porcelain.find(line => line.slice(3).trim().replace(/ -> /, ' ').split(/\s+/).pop() === path);
+    if (mark && mark.startsWith('??')) git(checkout, 'add', '-N', '--', path);
+  }
+  const patch = dirty.length ? git(checkout, 'diff', 'HEAD', '--', ...dirty) : Buffer.alloc(0);
   if (dirty.length && !patch.length) fail('The upstream patch is empty; refusing to record it.');
+  for (const path of dirty) {
+    if (!patch.toString('utf8').includes(`b/${path}`)) fail(`Recorded patch is missing ${path} (stage new files or use git add -N)`);
+  }
   const desktop = JSON.parse(readFileSync(join(checkout, 'apps/desktop/package.json'), 'utf8'));
   if (desktop.version !== VERSION || desktop.name !== '@openfilm/desktop') fail('Unexpected upstream desktop package or version.');
 

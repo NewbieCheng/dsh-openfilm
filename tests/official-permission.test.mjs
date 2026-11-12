@@ -140,3 +140,51 @@ test('forgetting removes only the remembered decision', async () => {
   assert.equal(permissions.remembered(project), undefined);
   assert.equal(permissions.current('session-a'), 'danger-full-access');
 });
+
+test('the default is full access and is applied without recording a decision', async () => {
+  const { ctx, table, sets } = fixture();
+  const permissions = await openProjectPermissions(ctx, { z });
+  assert.equal(permissions.defaultPreset(), 'danger-full-access');
+  assert.deepEqual(await permissions.applyDefault('session-a'), { preset: 'danger-full-access', applied: true });
+  assert.deepEqual(sets, [['session-a', 'danger-full-access']]);
+  // Nobody answered, so there is no decision to remember: a later switch to
+  // workspace-write (in DSH) must not be flipped back by resume.
+  assert.equal(table.get(project), undefined);
+  assert.equal(permissions.remembered(project), undefined);
+});
+
+test('a storage domain this build cannot open leaves the preset usable', async () => {
+  // The stored decision is a hint. Losing it must not lose the row, the default,
+  // or the ability to apply a preset — that failure is what hid the menu once.
+  const { ctx, service } = fixture();
+  const failures = [];
+  ctx.storageDomain.open = async () => { throw Object.assign(new Error('DOMAIN_MISMATCH'), { code: 'DOMAIN_MISMATCH' }); };
+  const permissions = await openProjectPermissions(ctx, { z, onFailure: (event, fields) => failures.push([event, fields.code]) });
+  assert.equal(permissions.available(), true);
+  assert.equal(permissions.remembered(project), undefined);
+  assert.deepEqual(await permissions.applyDefault('session-a'), { preset: 'danger-full-access', applied: true });
+  assert.equal(service.values.get('session-a'), 'danger-full-access');
+  assert.deepEqual(await permissions.apply(project, 'session-a', 'workspace-write'), { projectId: project, preset: 'workspace-write' });
+  assert.deepEqual(failures, [['permission-hint-unavailable', 'DOMAIN_MISMATCH']]);
+});
+
+test('the default is skipped, not fatal, when the Session is not live yet', async () => {
+  const { ctx } = fixture();
+  const permissions = await openProjectPermissions(ctx, { z });
+  assert.deepEqual(await permissions.applyDefault('session-gone'), { preset: 'danger-full-access', applied: false, error: 'PROJECT_PERMISSION_SESSION' });
+});
+
+test('the default never overrides a preset someone chose in DSH', async () => {
+  const { ctx, service, sets } = fixture();
+  service.values.set('session-a', 'read-only');
+  const permissions = await openProjectPermissions(ctx, { z });
+  assert.deepEqual(await permissions.resume(project, 'session-a'), { projectId: project, preset: 'read-only', applied: false });
+  assert.deepEqual(sets, []);
+});
+
+test('resume applies the default full access when nothing was decided', async () => {
+  const { ctx, sets } = fixture();
+  const permissions = await openProjectPermissions(ctx, { z });
+  assert.deepEqual(await permissions.resume(project, 'session-b'), { projectId: project, preset: 'danger-full-access', applied: true });
+  assert.deepEqual(sets, [['session-b', 'danger-full-access']]);
+});

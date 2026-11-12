@@ -40,6 +40,27 @@ test('lazily probes both PATH commands without exposing their output', async () 
   }
 });
 
+test('prefers a packaged binary over PATH, and falls back when absent', async () => {
+  const calls = [];
+  const detect = createHostComponentDetector({
+    resolve: name => (name === 'ffmpeg' ? '/opt/ffmpeg.exe' : '/opt/ffprobe.exe'),
+    spawn: fakeSpawn({
+      '/opt/ffmpeg.exe': { output: 'ffmpeg version 6\n', close: 0 },
+      '/opt/ffprobe.exe': { output: 'ffprobe version 6\n', close: 0 },
+    }, calls),
+  });
+  assert.deepEqual(await detect(), wrap({ status: 'ok' }, { status: 'ok' }));
+  assert.deepEqual(calls.map(call => call.bin), ['/opt/ffmpeg.exe', '/opt/ffprobe.exe']);
+
+  const fallback = [];
+  const plain = createHostComponentDetector({
+    resolve: () => null,
+    spawn: fakeSpawn({ ffmpeg: { output: 'ffmpeg version 6\n', close: 0 }, ffprobe: { output: 'ffprobe version 6\n', close: 0 } }, fallback),
+  });
+  await plain();
+  assert.deepEqual(fallback.map(call => call.bin), ['ffmpeg', 'ffprobe']);
+});
+
 test('distinguishes absent, non-executable, and other failed commands', async () => {
   for (const [code, expected] of [
     ['ENOENT', { status: 'missing' }],

@@ -1,8 +1,16 @@
 diff --git a/apps/desktop/chat/src/App.tsx b/apps/desktop/chat/src/App.tsx
-index 9c7041b..4b98b79 100644
+index 9c7041b..0abcab7 100644
 --- a/apps/desktop/chat/src/App.tsx
 +++ b/apps/desktop/chat/src/App.tsx
-@@ -69,6 +69,7 @@ import { studioRefsFromTransfer, transferHasStudioRefs } from '@/lib/studio-tran
+@@ -10,6 +10,7 @@ import { ArrowDown, Coins, CornerDownLeft, LibraryBig, Loader2, Plus, Square } f
+ import { buildPromptDisplay, type Turn } from '@openfilm/shared';
+ import { useT, useUiLocale } from '@/i18n';
+ import { ConversationBar } from '@/components/ConversationSessionBar';
++import { OnboardingGate } from '@/components/OnboardingGate';
+ import { ProjectConversation, TurnUndoContext, primeStoredTranscript } from '@/components/ProjectConversation';
+ import type { ProjectVersion } from '@/components/project-version';
+ import { ProjectStarters } from '@/components/ProjectStarters';
+@@ -69,6 +70,7 @@ import { studioRefsFromTransfer, transferHasStudioRefs } from '@/lib/studio-tran
  import { agentModelSummary, agentOptions, currentAgent, effectivePrefs, offeredOption, useLocalAgents } from '@/state/local-agent-store';
  import { useLiveActivityFromStore } from '@/lib/live-activity';
  import { loadLastSession, loadSessions, newSession, saveLastSession, saveSessions } from '@/lib/local-sessions';
@@ -10,7 +18,16 @@ index 9c7041b..4b98b79 100644
  import type { ProjectSessionItem } from '@/lib/project-sessions';
  import { conversationAgent, conversationPrefs, keptPrefs } from '@/lib/conversation-agent';
  import { AGENT_DEFINITIONS, isAgentId } from '../../src/agent-definitions.mjs';
-@@ -964,6 +965,13 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+@@ -156,6 +158,8 @@ export function App({ initialProject, initialSelection, initialFfmpeg }: {
+           onPick={onProject ? (skill) => app.useSkill?.(skill) : undefined}
+           onMake={onProject ? () => window.dispatchEvent(new Event(MAKE_SKILL)) : undefined} />
+       ) : null}
++      {/* First-run film-type gate: Host prefs; full-shell portal; reopen via no996-openfilm:reopen-onboarding. */}
++      <OnboardingGate />
+       {/* shell.css owns the single line below the window's top bar. The seam on the right is the resize handle. */}
+       <Divider />
+       <div className="flex min-h-0 flex-1 flex-col">
+@@ -964,6 +968,13 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
    const onSelectSession = (id: string) => { setSessionId(id); composerRef.current?.focus(); };
    const onRenameSession = (id: string, title: string) => editSession(id, { title });
    const onPinSession = (id: string, pinned: boolean) => editSession(id, { pinned });
@@ -24,7 +41,32 @@ index 9c7041b..4b98b79 100644
    /* the conversation shown, archived: a new one in its place */
    const onArchiveSession = (id: string, archived: boolean) => {
      if (archived && running.has(id)) return;
-@@ -1132,6 +1140,7 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+@@ -996,6 +1007,11 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+ 
+   const editComposerCard = (
+     <div className="flex flex-col gap-1">
++      {dropping ? (
++        <p className="px-0.5 text-[12px] font-medium leading-snug transition-colors duration-120" style={{ color: '#FF6400' }}>
++          {t('editor.dropActive')}
++        </p>
++      ) : null}
+       <div
+         /* a file from the disk dropped on the card is brought along, a pill where it was let go (on the words) or at
+            the cursor; Studio's things dropped on it become pills too */
+@@ -1028,9 +1044,10 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+           attachFiles(filesFromTransfer(event.dataTransfer), { x: event.clientX, y: event.clientY });
+         }}
+         data-prompt-shell=""
+-        className={`rounded-[12px] border bg-[var(--bg-raised)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-colors duration-200 ${
+-          dropping ? 'border-[var(--accent)]' : 'border-[var(--border)] focus-within:border-[var(--text-faint)]'
++        className={`rounded-[12px] border bg-[var(--bg-raised)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-[border-color] duration-120 ${
++          dropping ? '' : 'border-[var(--border)] focus-within:border-[var(--text-faint)]'
+         }`}
++        style={dropping ? { borderColor: '#FF6400' } : undefined}
+       >
+         {openedFile ? <AttachmentPreview item={openedFile} onClose={() => setOpenedFile(null)} /> : null}
+         <div className="flex items-end gap-1 py-2.5 pl-3.5 pr-2">
+@@ -1132,6 +1149,7 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
                    onRenameSession={onRenameSession}
                    onPinSession={onPinSession}
                    onArchiveSession={onArchiveSession}
@@ -113,7 +155,7 @@ index 69c82b6..3c278ed 100644
              <span className="min-w-0 truncate text-[var(--text-faint)] opacity-80" title={item.query}>
                “{item.query}”
 diff --git a/apps/desktop/chat/src/components/ConversationSessionBar.tsx b/apps/desktop/chat/src/components/ConversationSessionBar.tsx
-index 102217b..7691503 100644
+index 102217b..dfbd754 100644
 --- a/apps/desktop/chat/src/components/ConversationSessionBar.tsx
 +++ b/apps/desktop/chat/src/components/ConversationSessionBar.tsx
 @@ -1,7 +1,7 @@
@@ -134,7 +176,30 @@ index 102217b..7691503 100644
  }
  
  /** A title being renamed, in place: Enter or leaving keeps it, Esc lets it go (`onDone(null)`). */
-@@ -172,12 +174,20 @@ export function ConversationBar({
+@@ -136,7 +138,7 @@ export function ConversationBar({
+               aria-hidden={renaming || undefined} tabIndex={renaming ? -1 : undefined}
+               onClick={(event) => { event.stopPropagation(); popup.toggle(); }}
+               onDoubleClick={() => { if (onRenameSession) { popup.dismiss(); setRenaming(true); } }}
+-              className={`flex h-[22px] min-w-0 max-w-[16rem] items-center gap-1.5 rounded px-1.5 outline-none transition-colors hover:bg-[var(--bg-hover)] focus-visible:shadow-[inset_0_0_0_1px_var(--accent)] ${renaming ? 'invisible' : ''}`}
++              className={`flex h-[22px] min-w-0 max-w-[12rem] items-center gap-1.5 rounded px-1.5 outline-none transition-colors hover:bg-[var(--bg-hover)] focus-visible:shadow-[inset_0_0_0_1px_var(--accent)] ${renaming ? 'invisible' : ''}`}
+             >
+               <span className={`${PANE_TITLE} ${current?.title.trim() ? '' : 'text-[var(--text-faint)]'}`}>{label}</span>
+               {otherRunning || otherUnseen ? <StatusLight turnId={otherRunning} unseen={otherUnseen} /> : null}
+@@ -164,6 +166,13 @@ export function ConversationBar({
+         ) : null}
+       </div>
+       <span className="min-w-0 flex-1" />
++      <button
++        type="button"
++        onClick={() => window.dispatchEvent(new Event('no996-openfilm:reopen-onboarding'))}
++        className="shrink-0 rounded px-1.5 py-0.5 text-[11.5px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
++      >
++        {t('onboarding.reopen')}
++      </button>
+     </div>
+   );
+ }
+@@ -172,12 +181,20 @@ export function ConversationBar({
  const ROW_BTN = menu.iconButton;
  
  /** One conversation in the history: its title, a running one turning; each row has its own actions. */
@@ -156,7 +221,7 @@ index 102217b..7691503 100644
    const icon = item.pinned ? <Pin size={13} className={menu.rowIcon} /> : <MessageCircle size={13} className={menu.rowIcon} />;
    return (
      <div className={`group ${menu.row} ${active ? menu.active : ''} ${renaming ? menu.editing : ''}`}>
-@@ -221,6 +231,17 @@ function SessionRow({ item, label, active, turnId, unseen, onSelect, onRenameSes
+@@ -221,6 +238,17 @@ function SessionRow({ item, label, active, turnId, unseen, onSelect, onRenameSes
                </button>
              </Tooltip>
            ) : null}
@@ -559,11 +624,564 @@ index 6800d48..4c9f535 100644
      </>
    );
  }
+diff --git a/apps/desktop/chat/src/components/OnboardingGate.tsx b/apps/desktop/chat/src/components/OnboardingGate.tsx
+new file mode 100644
+index 0000000..ec02cbf
+--- /dev/null
++++ b/apps/desktop/chat/src/components/OnboardingGate.tsx
+@@ -0,0 +1,403 @@
++/**
++ * First-step film-type gate — Film Bay stage.
++ * Centered workbench surface; Ember only on selection + primary CTA.
++ * One entrance motion; respects prefers-reduced-motion.
++ */
++import React from 'react';
++import { createPortal } from 'react-dom';
++import { Loader2 } from 'lucide-react';
++import { useT } from '@/i18n';
++
++type Prefs = {
++  onboardingCompleted: boolean;
++  defaultTemplateId: string;
++  lastProjectId: string;
++};
++
++type Card = {
++  id: string;
++  productTitle?: string;
++  productBlurb?: string;
++  title?: string;
++  description?: string;
++};
++
++type CreateResult = {
++  projectId?: string;
++  prompt?: string;
++  onboarding?: { title?: string; steps?: string[]; uploadHint?: string };
++};
++
++const REOPEN = 'no996-openfilm:reopen-onboarding';
++const EMBER = '#FF6400';
++const NAVY = '#051D43';
++const PANEL = '#12161f';
++const LINE = '#2a3344';
++const TEXT = '#f3eee4';
++const MUTE = '#8d90a6';
++const PROJECT_ID = /^[A-Za-z0-9_-]{6,40}$/;
++const ORDER = ['paper-texture', 'replica-film', 'sketchnote', 'motion-styles', 'custom'];
++
++const STYLE_ID = 'no996-bay-onboarding-css';
++
++function ensureStyles() {
++  if (typeof document === 'undefined' || document.getElementById(STYLE_ID)) return;
++  const style = document.createElement('style');
++  style.id = STYLE_ID;
++  style.textContent = `
++@keyframes no996-bay-in {
++  from { opacity: 0; transform: translateY(10px); }
++  to { opacity: 1; transform: none; }
++}
++.no996-bay-scrim {
++  position: fixed; inset: 0; z-index: 9000;
++  display: flex; align-items: center; justify-content: center;
++  padding: clamp(16px, 3vw, 36px);
++  background:
++    radial-gradient(90% 70% at 50% 35%, rgba(18,28,48,.7) 0%, transparent 58%),
++    linear-gradient(180deg, rgba(5,15,38,.82), rgba(5,8,16,.92));
++  font-family: inherit;
++}
++.no996-bay-stage {
++  width: min(1080px, 96vw);
++  border: 1px solid rgba(255,100,0,.22);
++  border-radius: 6px;
++  background: linear-gradient(180deg, rgba(255,255,255,.04), transparent 28%), ${PANEL};
++  padding: 26px 0 24px;
++  box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 28px 64px rgba(0,0,0,.55);
++  animation: no996-bay-in 220ms ease-out both;
++  text-align: center;
++}
++.no996-bay-title {
++  margin: 0;
++  padding: 0 32px;
++  font-size: 22px;
++  font-weight: 700;
++  letter-spacing: .02em;
++  color: ${TEXT};
++  line-height: 1.25;
++}
++.no996-bay-sub {
++  margin: 8px auto 0;
++  padding: 0 32px;
++  max-width: 32rem;
++  font-size: 13.5px;
++  line-height: 1.55;
++  color: ${MUTE};
++}
++.no996-bay-rule {
++  margin: 16px auto 0;
++  width: min(220px, 48%);
++  border-bottom: 2px dashed rgba(185,173,152,.35);
++}
++.no996-bay-grid {
++  display: flex;
++  flex-wrap: nowrap;
++  gap: 12px;
++  margin-top: 20px;
++  padding: 0 28px 6px;
++  overflow-x: auto;
++  overflow-y: hidden;
++  scroll-snap-type: x proximity;
++  text-align: left;
++  scrollbar-width: thin;
++  scrollbar-color: #3a4558 transparent;
++}
++.no996-bay-grid::-webkit-scrollbar { height: 6px; }
++.no996-bay-grid::-webkit-scrollbar-thumb { background: #3a4558; border-radius: 999px; }
++.no996-bay-card {
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++  flex: 1 1 0;
++  min-width: 148px;
++  max-width: 220px;
++  min-height: 128px;
++  padding: 14px 14px 12px;
++  border: 1px solid ${LINE};
++  border-top: 2px solid transparent;
++  border-radius: 4px;
++  background:
++    linear-gradient(rgba(255,255,255,.05), rgba(255,255,255,0)),
++    radial-gradient(rgba(243,238,228,.08) 1px, transparent 1.3px) 0 0 / 14px 14px,
++    #171c28;
++  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
++  color: ${TEXT};
++  cursor: pointer;
++  font: inherit;
++  text-align: left;
++  scroll-snap-align: start;
++  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
++}
++.no996-bay-card:hover:not(:disabled) { transform: translateY(-1px); }
++.no996-bay-card:disabled { opacity: .55; cursor: not-allowed; }
++.no996-bay-card[data-active="true"] {
++  border-color: rgba(255,100,0,.85);
++  border-top-color: ${EMBER};
++  background:
++    linear-gradient(rgba(255,255,255,.1), rgba(255,255,255,0)),
++    radial-gradient(rgba(243,238,228,.08) 1px, transparent 1.3px) 0 0 / 14px 14px,
++    linear-gradient(180deg, #2a1c16, #171c28);
++  box-shadow: 0 0 0 1px rgba(255,100,0,.35), inset 0 1px 0 rgba(255,180,100,.25);
++}
++.no996-bay-card:focus-visible {
++  outline: 2px solid ${EMBER};
++  outline-offset: 2px;
++}
++.no996-bay-card-title {
++  font-size: 15px;
++  font-weight: 700;
++  line-height: 1.3;
++  color: ${TEXT};
++}
++.no996-bay-card[data-active="true"] .no996-bay-card-title { color: #ffc28a; }
++.no996-bay-card-blurb {
++  font-size: 12.5px;
++  line-height: 1.5;
++  color: ${MUTE};
++  display: -webkit-box;
++  -webkit-line-clamp: 4;
++  -webkit-box-orient: vertical;
++  overflow: hidden;
++}
++.no996-bay-actions {
++  display: flex;
++  flex-direction: column;
++  align-items: stretch;
++  gap: 10px;
++  margin-top: 18px;
++  padding: 0 32px;
++}
++.no996-bay-actions-row {
++  display: flex;
++  flex-direction: row;
++  justify-content: space-between;
++  align-items: center;
++  gap: 16px;
++  width: 100%;
++}
++.no996-bay-cta {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  min-height: 44px;
++  min-width: 180px;
++  padding: 0 26px;
++  border: 0;
++  border-radius: 3px;
++  background: ${NAVY};
++  color: #fff;
++  font: 700 15px/1 inherit;
++  letter-spacing: .06em;
++  cursor: pointer;
++  transition: transform .15s ease, filter .15s ease, opacity .15s ease;
++}
++.no996-bay-cta:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
++.no996-bay-cta:active:not(:disabled) { transform: translateY(1px); filter: brightness(.96); }
++.no996-bay-cta:disabled { opacity: .45; cursor: not-allowed; transform: none; filter: none; }
++.no996-bay-quiet {
++  border: 0;
++  background: transparent;
++  color: ${MUTE};
++  font: 13.5px/1.4 inherit;
++  cursor: pointer;
++  padding: 8px 4px;
++  text-decoration: underline;
++  text-underline-offset: 3px;
++}
++.no996-bay-quiet:hover:not(:disabled) { color: ${TEXT}; }
++.no996-bay-quiet:disabled { opacity: .5; cursor: not-allowed; }
++.no996-bay-default {
++  text-align: center;
++  text-decoration: none;
++}
++.no996-bay-error {
++  margin: 12px 32px 0;
++  font-size: 12.5px;
++  color: #f08888;
++}
++@media (prefers-reduced-motion: reduce) {
++  .no996-bay-stage { animation: none !important; }
++  .no996-bay-card, .no996-bay-cta { transition: none !important; }
++}
++`;
++  document.head.appendChild(style);
++}
++
++async function hostRpc<T>(channel: string, payload: Record<string, unknown> = {}): Promise<T> {
++  const response = await fetch('/__dsh/official-rpc', {
++    method: 'POST',
++    credentials: 'same-origin',
++    headers: { 'content-type': 'application/json' },
++    body: JSON.stringify({ channel, payload }),
++  });
++  if (!response.ok) {
++    let detail = '';
++    try { detail = (await response.text()).slice(0, 200); } catch { /* ignore */ }
++    throw new Error(detail || `HTTP ${response.status}`);
++  }
++  return response.json() as Promise<T>;
++}
++
++function openProject(projectId: string) {
++  const next = `/projects/${projectId}`;
++  if (location.pathname !== next) location.assign(next);
++  else window.dispatchEvent(new Event('popstate'));
++}
++
++function sortCards(cards: Card[]) {
++  const rank = (id: string) => {
++    const i = ORDER.indexOf(id);
++    return i === -1 ? 100 + id.charCodeAt(0) : i;
++  };
++  return [...cards].sort((a, b) => rank(a.id) - rank(b.id));
++}
++
++export function OnboardingGate() {
++  const t = useT();
++  const [ready, setReady] = React.useState(false);
++  const [open, setOpen] = React.useState(false);
++  const [forced, setForced] = React.useState(false);
++  const [cards, setCards] = React.useState<Card[]>([]);
++  const [prefs, setPrefs] = React.useState<Prefs | null>(null);
++  const [selected, setSelected] = React.useState('');
++  const [busy, setBusy] = React.useState(false);
++  const [error, setError] = React.useState('');
++
++  React.useEffect(() => { ensureStyles(); }, []);
++
++  React.useEffect(() => {
++    let alive = true;
++    void (async () => {
++      try {
++        const listed = await hostRpc<{ templates?: Card[]; prefs?: Prefs }>('template:list', {});
++        if (!alive) return;
++        const nextPrefs = listed.prefs ?? {
++          onboardingCompleted: false,
++          defaultTemplateId: '',
++          lastProjectId: '',
++        };
++        const nextCards = sortCards(Array.isArray(listed.templates) ? listed.templates : []);
++        setPrefs(nextPrefs);
++        setCards(nextCards);
++        setSelected(nextPrefs.defaultTemplateId || nextCards[0]?.id || '');
++        setOpen(nextPrefs.onboardingCompleted !== true);
++      } catch {
++        if (alive) setOpen(false);
++      } finally {
++        if (alive) setReady(true);
++      }
++    })();
++    const onReopen = () => { setForced(true); setOpen(true); setError(''); };
++    window.addEventListener(REOPEN, onReopen);
++    return () => { alive = false; window.removeEventListener(REOPEN, onReopen); };
++  }, []);
++
++  const visible = ready && open && (forced || prefs?.onboardingCompleted !== true);
++  if (!visible) return null;
++
++  const create = async () => {
++    if (!selected || busy) return;
++    setBusy(true);
++    setError('');
++    try {
++      const channel = selected === 'custom' ? 'project:create-blank' : 'template:create';
++      const result = await hostRpc<CreateResult>(channel, selected === 'custom' ? {} : { templateId: selected });
++      const projectId = typeof result.projectId === 'string' ? result.projectId : '';
++      if (!PROJECT_ID.test(projectId)) throw new Error('bad project');
++      try {
++        if (result.prompt) localStorage.setItem('no996.openfilm.templatePrompt', String(result.prompt).slice(0, 600));
++        if (result.onboarding) localStorage.setItem('no996.openfilm.onboarding', JSON.stringify(result.onboarding).slice(0, 1200));
++      } catch { /* ignore */ }
++      setForced(false);
++      setOpen(false);
++      setPrefs((prev) => ({
++        onboardingCompleted: true,
++        defaultTemplateId: selected,
++        lastProjectId: projectId,
++        ...(prev ?? {}),
++      }));
++      openProject(projectId);
++    } catch (cause) {
++      setError(cause instanceof Error && cause.message ? cause.message.slice(0, 120) : t('onboarding.createFailed'));
++      setBusy(false);
++    }
++  };
++
++  const defaultName = prefs?.defaultTemplateId
++    ? (cards.find((c) => c.id === prefs.defaultTemplateId)?.productTitle
++      || cards.find((c) => c.id === prefs.defaultTemplateId)?.title
++      || prefs.defaultTemplateId)
++    : '';
++
++  return createPortal(
++    <div className="no996-bay-scrim" role="dialog" aria-modal="true" aria-labelledby="no996-onboarding-title">
++      <div className="no996-bay-stage">
++        <h1 id="no996-onboarding-title" className="no996-bay-title">{t('onboarding.title')}</h1>
++        <p className="no996-bay-sub">{t('onboarding.subtitle')}</p>
++        <div className="no996-bay-rule" aria-hidden />
++        <div className="no996-bay-grid" role="radiogroup" aria-label={t('onboarding.title')}>
++          {cards.map((card) => {
++            const active = selected === card.id;
++            const title = card.productTitle || card.title || card.id;
++            const blurb = card.productBlurb || card.description || '';
++            return (
++              <button
++                key={card.id}
++                type="button"
++                role="radio"
++                aria-checked={active}
++                data-active={active ? 'true' : 'false'}
++                disabled={busy}
++                className="no996-bay-card"
++                onClick={() => setSelected(card.id)}
++              >
++                <span className="no996-bay-card-title">{title}</span>
++                <span className="no996-bay-card-blurb">{blurb}</span>
++              </button>
++            );
++          })}
++        </div>
++        <div className="no996-bay-actions">
++          <div className="no996-bay-actions-row">
++            {forced && prefs?.onboardingCompleted ? (
++              <button
++                type="button"
++                className="no996-bay-quiet"
++                disabled={busy}
++                onClick={() => { setForced(false); setOpen(false); }}
++              >
++                {t('onboarding.cancel')}
++              </button>
++            ) : <span />}
++            <button
++              type="button"
++              className="no996-bay-cta"
++              disabled={!selected || busy}
++              onClick={() => { void create(); }}
++            >
++              {busy ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
++              {busy ? t('onboarding.creating') : t('onboarding.start')}
++            </button>
++          </div>
++          {prefs?.defaultTemplateId && defaultName ? (
++            <button
++              type="button"
++              className="no996-bay-quiet no996-bay-default"
++              disabled={busy}
++              onClick={() => setSelected(prefs.defaultTemplateId)}
++            >
++              {t('onboarding.useDefault').replace('{name}', defaultName)}
++            </button>
++          ) : null}
++        </div>
++        {error ? <p className="no996-bay-error">{error || t('onboarding.createFailed')}</p> : null}
++      </div>
++    </div>,
++    document.body,
++  );
++}
++
++export function reopenOnboarding() {
++  window.dispatchEvent(new Event(REOPEN));
++}
+diff --git a/apps/desktop/chat/src/components/ProjectStarters.tsx b/apps/desktop/chat/src/components/ProjectStarters.tsx
+index 640dfe1..0a3f1e6 100644
+--- a/apps/desktop/chat/src/components/ProjectStarters.tsx
++++ b/apps/desktop/chat/src/components/ProjectStarters.tsx
+@@ -1,23 +1,21 @@
+ 'use client';
+ 
+ /**
+- * The conversation column of an empty project, before anything has been said: the question, then the skills as
+- * cards, each its cover and its name, two to a row. A card names its skill in the message being written (Enter
+- * starts it, or a few words more say what to make with it), installed or not: as the library's Try now, the skill is
+- * given to that conversation, nothing installed. Under them, "More skills" opens the library's skills on Discover, all
+- * of OpenFilm's, and "Start from an example" the projects window's examples: one copied into a new project, or followed
+- * by the agent here.
++ * Empty conversation column: AI film-editor identity, next-step strip from Host
++ * onboarding, then the usual skill cards (kept quieter under the duty copy).
+  */
+ import React from 'react';
+ import { ChevronRight } from 'lucide-react';
+ import { useT, useUiLocale } from '@/i18n';
+ import { app, type StarterSkill } from '../app-bridge';
+-import { BrandLogo } from './BrandLogo';
+ 
+ /** Three rows of two: the most used skills, in their order; the rest are a click away in the library. */
+ const SHOWN = 6;
+ /** the cards as read last: another empty conversation shows them at once, read again behind them */
+ let lastRead: StarterSkill[] | null = null;
++const ONBOARDING_KEY = 'no996.openfilm.onboarding';
++
++type NextSteps = { title?: string; steps?: string[]; uploadHint?: string };
+ 
+ export function ProjectStarters({ onSkill }: {
+   /** Names the skill in the composer (unsent) and focuses it. */
+@@ -27,6 +25,7 @@ export function ProjectStarters({ onSkill }: {
+   const locale = useUiLocale();
+   /* null until read: the cards' places are kept meanwhile, so nothing below them moves when they arrive */
+   const [skills, setSkills] = React.useState<StarterSkill[] | null>(lastRead);
++  const [next, setNext] = React.useState<NextSteps | null>(null);
+   React.useEffect(() => {
+     let live = true;
+     void app.starterSkills().then((list) => {
+@@ -35,6 +34,17 @@ export function ProjectStarters({ onSkill }: {
+     }, () => { if (live) setSkills((was) => was ?? []); });
+     return () => { live = false; };
+   }, []);
++  React.useEffect(() => {
++    try {
++      const raw = localStorage.getItem(ONBOARDING_KEY);
++      if (!raw) return;
++      const parsed = JSON.parse(raw) as NextSteps;
++      if (parsed && (Array.isArray(parsed.steps) || typeof parsed.uploadHint === 'string')) {
++        setNext(parsed);
++      }
++      localStorage.removeItem(ONBOARDING_KEY);
++    } catch { /* ignore */ }
++  }, []);
+   const titleOf = (skill: StarterSkill) => {
+     const words = skill.title;
+     return (words ? words[locale] ?? words[locale.split('-')[0]!] ?? words.en : undefined) ?? skill.name;
+@@ -42,12 +52,45 @@ export function ProjectStarters({ onSkill }: {
+ 
+   return (
+     <div className="mx-auto w-full max-w-[420px] py-2">
+-      <div className="flex items-center justify-center gap-2.5">
+-        <BrandLogo size={22} />
+-        <h2 className="text-[19px] font-semibold tracking-[-0.02em] text-[var(--text)]">{t('starter.title')}</h2>
++      <div className="text-left">
++        <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--text)]">{t('editor.title')}</h2>
++        <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-muted)]">{t('editor.empty')}</p>
++      </div>
++
++      {next ? (
++        <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-2.5">
++          <div className="flex items-start justify-between gap-2">
++            <p className="text-[12.5px] font-medium text-[var(--text)]">{next.title || t('editor.nextTitle')}</p>
++            <button
++              type="button"
++              onClick={() => setNext(null)}
++              className="shrink-0 text-[11.5px] text-[var(--text-muted)] hover:text-[var(--text)]"
++            >
++              {t('editor.dismissNext')}
++            </button>
++          </div>
++          {Array.isArray(next.steps) && next.steps.length ? (
++            <ol className="mt-1.5 list-decimal space-y-1 pl-4 text-[12.5px] leading-snug text-[var(--text-muted)]">
++              {next.steps.slice(0, 4).map((step) => <li key={step}>{step}</li>)}
++            </ol>
++          ) : null}
++          {next.uploadHint ? (
++            <p className="mt-2 text-[12px] leading-snug text-[var(--text-muted)]">{next.uploadHint}</p>
++          ) : null}
++        </div>
++      ) : null}
++
++      <div
++        className="mt-4 rounded-lg border border-dashed px-3 py-2.5 text-[12.5px] leading-snug text-[var(--text-muted)]"
++        style={{ borderColor: 'color-mix(in srgb, var(--border) 80%, transparent)' }}
++      >
++        {t('editor.dropHint')}
+       </div>
+ 
+-      <ul className="mt-6 grid grid-cols-2 gap-2">
++      <p className="mt-5 text-[11.5px] font-medium uppercase tracking-[0.04em] text-[var(--text-faint)]">
++        {t('editor.skills')}
++      </p>
++      <ul className="mt-2 grid grid-cols-2 gap-2">
+         {skills
+           ? skills.map((skill) => (
+             <li key={skill.name} className="min-w-0">
+@@ -55,7 +98,7 @@ export function ProjectStarters({ onSkill }: {
+                 type="button"
+                 title={skill.description}
+                 onClick={() => onSkill({ name: skill.name, description: skill.description, title: titleOf(skill) })}
+-                className="flex h-14 w-full min-w-0 items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] p-2 text-left transition hover:border-[var(--border-strong)] hover:bg-[var(--bg-hover)]"
++                className="flex h-14 w-full min-w-0 items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] p-2 text-left transition-[border-color] duration-120 hover:border-[var(--border-strong)] hover:bg-[var(--bg-hover)]"
+               >
+                 <img src={skill.cover} alt="" loading="lazy" draggable={false} className="h-10 w-10 shrink-0 rounded-md bg-[var(--bg-hover)] object-cover" />
+                 <span className="line-clamp-2 min-w-0 flex-1 text-[13px] leading-snug text-[var(--text)]">{titleOf(skill)}</span>
 diff --git a/apps/desktop/chat/src/i18n/locales/en-US.ts b/apps/desktop/chat/src/i18n/locales/en-US.ts
-index b5a098a..0f33565 100644
+index b5a098a..5370d55 100644
 --- a/apps/desktop/chat/src/i18n/locales/en-US.ts
 +++ b/apps/desktop/chat/src/i18n/locales/en-US.ts
-@@ -130,6 +130,8 @@ export const enUS = {
+@@ -19,6 +19,25 @@ export const enUS = {
+     browserDownloading: 'Downloading the browser Studio draws pages in (about 100 MB, once)…',
+     browserFailed: 'The browser Studio draws pages in did not download: {error}',
+   },
++  onboarding: {
++    title: 'What kind of video are you cutting?',
++    subtitle: 'Pick a style to start. You can open this gate again anytime.',
++    start: 'Start with this',
++    creating: 'Creating…',
++    createFailed: 'Could not create the project. Try again.',
++    useDefault: 'Use last choice: {name}',
++    cancel: 'Not now',
++    reopen: 'Change film type',
++  },
++  editor: {
++    title: 'AI film editor',
++    empty: 'I am your film editor. Say the topic and length, or drop video, audio, or images here — I will put them in the project library and help you cut.',
++    dropHint: 'Drop footage here. I will add it to the project library.',
++    dropActive: 'Release to attach',
++    nextTitle: 'Next steps',
++    skills: 'Skills',
++    dismissNext: 'Got it',
++  },
+   act: {
+     waitingForYou: 'Waiting for you',
+     /* the app's own agent, after two minutes with nothing from the model (some think for minutes first) */
+@@ -130,6 +149,8 @@ export const enUS = {
      previewFailed: 'This file could not be read',
    },
    composer: {
@@ -572,7 +1190,16 @@ index b5a098a..0f33565 100644
      contextFull: 'This conversation is getting long. A new one will work better.',
      contextFullNew: 'New conversation',
      agentLoading: 'Loading…',
-@@ -244,6 +246,8 @@ export const enUS = {
+@@ -228,7 +249,7 @@ export const enUS = {
+     addAttachment: 'Add files',
+     close: 'Close',
+     composerPlaceholder: 'Say what to change. Type @ for a file, a skill, a moment or what you selected',
+-    composerPlaceholderBlank: 'Describe your film. Type @ to add a file or a skill',
++    composerPlaceholderBlank: 'Topic and length, or drop footage here. Type @ for a file or skill',
+     dismiss: 'Dismiss',
+     jumpToLatest: 'Jump to latest',
+     loadingMessages: 'Loading conversation…',
+@@ -244,6 +265,8 @@ export const enUS = {
      untitledSession: 'New chat',
    },
    projectMenu: {
@@ -648,10 +1275,36 @@ index da3793f..a9246a4 100644
      archived: '보관됨',
      asking: '답변 대기 중',
 diff --git a/apps/desktop/chat/src/i18n/locales/zh-CN.ts b/apps/desktop/chat/src/i18n/locales/zh-CN.ts
-index eccacdb..5552356 100644
+index eccacdb..d3ca72a 100644
 --- a/apps/desktop/chat/src/i18n/locales/zh-CN.ts
 +++ b/apps/desktop/chat/src/i18n/locales/zh-CN.ts
-@@ -130,6 +130,8 @@ export const zhCN: Words = {
+@@ -19,6 +19,25 @@ export const zhCN: Words = {
+     browserDownloading: '正在下载 Studio 绘制页面用的浏览器（约 100 MB，仅一次）…',
+     browserFailed: 'Studio 绘制页面用的浏览器没有下载成功：{error}',
+   },
++  onboarding: {
++    title: '你想剪哪种视频？',
++    subtitle: '选好后我会按这个风格开工；可随时再开引导。',
++    start: '用这个开工',
++    creating: '创建中…',
++    createFailed: '创建失败，请重试。',
++    useDefault: '用上次的{name}继续',
++    cancel: '先不用',
++    reopen: '重新选片型',
++  },
++  editor: {
++    title: 'AI 剪辑员工',
++    empty: '我是你的剪辑员工。先说主题和时长，或把视频/音频/图片拖进来，我会放进素材库再帮你剪。',
++    dropHint: '素材丢这里，我会放进项目素材库。',
++    dropActive: '松手即可附上',
++    nextTitle: '下一步',
++    skills: '常用技能',
++    dismissNext: '知道了',
++  },
+   act: {
+     waitingForYou: '在等你',
+     /* the app's own agent, after two minutes with nothing from the model (some think for minutes first) */
+@@ -130,6 +149,8 @@ export const zhCN: Words = {
      previewFailed: '无法读取此文件',
    },
    composer: {
@@ -660,7 +1313,16 @@ index eccacdb..5552356 100644
      contextFull: '这段对话已经很长了，开个新对话效果更好。',
      contextFullNew: '新对话',
      agentLoading: '正在加载…',
-@@ -243,6 +245,8 @@ export const zhCN: Words = {
+@@ -227,7 +248,7 @@ export const zhCN: Words = {
+     addAttachment: '添加文件',
+     close: '关闭',
+     composerPlaceholder: '说说要改什么。输入 @ 可指向文件、skill、某个时刻或当前选中的内容',
+-    composerPlaceholderBlank: '描述你的影片。输入 @ 可加入文件或 skill',
++    composerPlaceholderBlank: '说主题和时长，或把素材拖进来。输入 @ 可加文件或 skill',
+     dismiss: '关闭',
+     jumpToLatest: '跳到最新',
+     loadingMessages: '正在加载对话…',
+@@ -243,6 +264,8 @@ export const zhCN: Words = {
      untitledSession: '新对话',
    },
    projectMenu: {
@@ -858,6 +1520,361 @@ index a3c7f97..2d4085e 100644
 +  const effort = effortRaw ? (effortRaw.replace(/[（(][^）)]*[）)]/g, '').trim() || effortRaw) : null;
    return { model, effort };
  }
+diff --git a/packages/openfilm/studio/ui/src/components/ProjectView.tsx b/packages/openfilm/studio/ui/src/components/ProjectView.tsx
+index ac36b35..f8ba6f1 100644
+--- a/packages/openfilm/studio/ui/src/components/ProjectView.tsx
++++ b/packages/openfilm/studio/ui/src/components/ProjectView.tsx
+@@ -80,6 +80,7 @@ import { decodes, type PlayCheck } from '@/lib/decodes';
+ import { factsOfProbe, mediaListingOf, resourceKindOf, srcHitsAsset, warmProjectMedia, type MediaListing, type MediaProxy, type MediaResult, type MediaSources, type WorkspaceResource } from '@/lib/workspace-resources';
+ import { recycleRefusalOf } from '@/lib/recycle';
+ import { BrandLoadingScreen } from './BrandLoadingScreen';
++import { WorkbenchAccountControls } from './WorkbenchAccount';
+ import { SettingsModal } from './settings/SettingsModal';
+ import { useSettings } from './settings/use-settings';
+ import { DesktopDialog } from './DesktopDialog';
+@@ -4587,6 +4588,8 @@ export function ProjectView({ projectId, onProject, onLeave }: {
+               </Tooltip>
+               </>)}
+               <ExportTray ref={exportTrayRef} projectId={projectId} onError={toast.showError} />
++              {/* Workbench account chip (truncated) left of reload; detail panel opens on the right. */}
++              <WorkbenchAccountControls onSettings={setSettingsOpen} />
+               {/* the edit or the canvas, in the panes' place: the one shown, its icon and name, and a click for the other */}
+               <Tooltip label={[t(canvasOpen ? 'canvas.toEdit' : 'canvas.toCanvas'), keyHint('work-mode')].filter(Boolean).join(' · ')} side="bottom">
+                 <button type="button" aria-label={t(canvasOpen ? 'canvas.toEdit' : 'canvas.toCanvas')} data-work-mode={canvasOpen ? 'canvas' : 'edit'} disabled={Boolean(layoutDraft.draft)} onClick={() => setCanvasOpen(!canvasOpen)}
+diff --git a/packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx b/packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx
+new file mode 100644
+index 0000000..e9a36ac
+--- /dev/null
++++ b/packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx
+@@ -0,0 +1,328 @@
++/**
++ * Workbench account chip + right detail panel (no996 Host auth).
++ * Chip sits left of the page reload control in the title bar.
++ * Wallet numbers come from Host `account:balance` (workbench GET /account/balance),
++ * cached in preferences.json — same口径 as 清流 / 工作台-web.
++ */
++import * as React from 'react';
++import { createPortal } from 'react-dom';
++import { RefreshCw, Settings2, X } from 'lucide-react';
++import { Tooltip } from './Tooltip';
++import type { SettingsSection } from './settings/SettingsModal';
++import { useT } from '@/i18n';
++
++type Wallet = {
++  available_points?: number | null;
++  points_balance?: number | null;
++  period_points_balance?: number | null;
++  expert_points_balance?: number | null;
++  period_expires_at?: string | null;
++  cached_at?: string;
++  stale?: boolean;
++  source?: string;
++  message?: string;
++};
++
++type AuthStatus = {
++  loggedIn: boolean;
++  dev?: boolean;
++  account?: string;
++  displayName?: string;
++  credits?: number | null;
++  balance?: Wallet;
++};
++
++async function hostRpc<T>(channel: string, payload: Record<string, unknown> = {}): Promise<T> {
++  const response = await fetch('/__dsh/official-rpc', {
++    method: 'POST',
++    credentials: 'same-origin',
++    headers: { 'content-type': 'application/json' },
++    body: JSON.stringify({ channel, payload }),
++  });
++  if (!response.ok) {
++    let detail = '';
++    try { detail = (await response.text()).slice(0, 200); } catch { /* ignore */ }
++    throw new Error(detail || `HTTP ${response.status}`);
++  }
++  return response.json() as Promise<T>;
++}
++
++function labelOf(status: AuthStatus | null): string {
++  if (!status?.loggedIn) return '';
++  if (status.dev) return '开发模式';
++  return String(status.displayName || status.account || '已登录').trim().slice(0, 64);
++}
++
++function formatPoints(value: number | null | undefined): string {
++  if (typeof value === 'number' && Number.isFinite(value)) {
++    return new Intl.NumberFormat('zh-CN').format(value);
++  }
++  return '—';
++}
++
++function formatSyncedAt(iso?: string): string {
++  if (!iso) return '';
++  const ms = Date.parse(iso);
++  if (!Number.isFinite(ms)) return '';
++  try {
++    return new Date(ms).toLocaleString('zh-CN', { hour12: false });
++  } catch {
++    return '';
++  }
++}
++
++export function WorkbenchAccountControls({
++  className = '',
++  onSettings,
++}: {
++  className?: string;
++  /** Same entry as AppMenu → Settings; opens Studio SettingsModal. */
++  onSettings?: (section: SettingsSection) => void;
++}) {
++  const t = useT();
++  const [status, setStatus] = React.useState<AuthStatus | null>(null);
++  const [wallet, setWallet] = React.useState<Wallet | null>(null);
++  const [open, setOpen] = React.useState(false);
++  const [busy, setBusy] = React.useState(false);
++  const [walletBusy, setWalletBusy] = React.useState(false);
++  const walletBusyRef = React.useRef(false);
++  const name = labelOf(status);
++  const available = wallet?.available_points ?? status?.credits ?? null;
++  const hasPeriod = typeof wallet?.period_points_balance === 'number';
++
++  const refreshStatus = React.useCallback(() => {
++    void hostRpc<AuthStatus>('auth:status', {})
++      .then((next) => {
++        if (!next || typeof next !== 'object') {
++          setStatus(null);
++          return;
++        }
++        setStatus(next);
++        if (next.balance) setWallet((prev) => prev?.source === 'live' ? prev : next.balance ?? prev);
++      })
++      .catch(() => setStatus(null));
++  }, []);
++
++  const refreshWallet = React.useCallback(async (opts?: { soft?: boolean }) => {
++    if (walletBusyRef.current) return;
++    walletBusyRef.current = true;
++    setWalletBusy(true);
++    try {
++      // Soft open: serve prefs cache first, then pull live.
++      if (opts?.soft) {
++        const cached = await hostRpc<Wallet>('account:balance', { refresh: false });
++        if (cached && typeof cached === 'object') setWallet(cached);
++      }
++      const live = await hostRpc<Wallet>('account:balance', { refresh: true });
++      if (live && typeof live === 'object') setWallet(live);
++      refreshStatus();
++    } catch {
++      setWallet((prev) => prev ? { ...prev, stale: true, message: '积分同步失败' } : prev);
++    } finally {
++      walletBusyRef.current = false;
++      setWalletBusy(false);
++    }
++  }, [refreshStatus]);
++
++  React.useEffect(() => {
++    refreshStatus();
++    const timer = window.setInterval(refreshStatus, 15_000);
++    const onAuth = () => refreshStatus();
++    window.addEventListener('no996-auth-changed', onAuth);
++    return () => {
++      window.clearInterval(timer);
++      window.removeEventListener('no996-auth-changed', onAuth);
++    };
++  }, [refreshStatus]);
++
++  React.useEffect(() => {
++    if (!open) return;
++    void refreshWallet({ soft: true });
++    const onKey = (event: KeyboardEvent) => {
++      if (event.key === 'Escape') setOpen(false);
++    };
++    window.addEventListener('keydown', onKey);
++    return () => window.removeEventListener('keydown', onKey);
++  }, [open, refreshWallet]);
++
++  const logout = async () => {
++    if (busy || status?.dev) return;
++    setBusy(true);
++    try {
++      await hostRpc('auth:logout', {});
++      setStatus({ loggedIn: false });
++      setWallet(null);
++      setOpen(false);
++      try { window.dispatchEvent(new CustomEvent('no996-auth-changed', { detail: { loggedIn: false } })); } catch { /* ignore */ }
++      try {
++        if (window.parent !== window) {
++          window.parent.postMessage({ type: 'no996-openfilm:auth', version: 1, action: 'logged-out' }, '*');
++        }
++      } catch { /* ignore */ }
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  const synced = formatSyncedAt(wallet?.cached_at);
++  const periodExpires = wallet?.period_expires_at ? formatSyncedAt(wallet.period_expires_at) : '';
++
++  return (
++    <div className={`pointer-events-auto flex min-w-0 items-center gap-1 ${className}`} data-workbench-account="">
++      {name ? (
++        <button
++          type="button"
++          aria-haspopup="dialog"
++          aria-expanded={open}
++          aria-label={`账号 ${name}`}
++          title={typeof available === 'number' ? `${name} · ${formatPoints(available)} 积分` : name}
++          onClick={() => setOpen(true)}
++          className="flex h-[26px] max-w-[11rem] min-w-0 items-center gap-1.5 rounded-md border border-[var(--border-strong)] bg-[var(--bg-field)] px-2 text-[12px] text-[var(--text)] transition hover:bg-[var(--bg-hover)]"
++        >
++          <span className="min-w-0 truncate">{name}</span>
++          {typeof available === 'number' ? (
++            <span className="shrink-0 tabular-nums text-[11px] text-[var(--text-muted)]">{formatPoints(available)}</span>
++          ) : null}
++        </button>
++      ) : null}
++      <Tooltip label="刷新界面（重新加载工作台页面）" side="bottom">
++        <button
++          type="button"
++          aria-label="刷新界面"
++          onClick={() => location.reload()}
++          className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
++        >
++          <RefreshCw size={14} strokeWidth={1.9} />
++        </button>
++      </Tooltip>
++      {open && name ? createPortal(
++        <div className="fixed inset-0 z-[10060]" role="presentation">
++          <button
++            type="button"
++            aria-label="关闭账号面板"
++            className="absolute inset-0 bg-black/45"
++            onClick={() => setOpen(false)}
++          />
++          <aside
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="workbench-account-title"
++            className="absolute inset-y-0 right-0 flex w-[min(360px,92vw)] flex-col border-l border-[var(--border)] bg-[var(--bg-panel)] shadow-[-18px_0_48px_rgba(0,0,0,.35)]"
++            style={{ animation: 'workbench-account-in 180ms ease-out both' }}
++          >
++            <style>{`@keyframes workbench-account-in{from{transform:translateX(12px);opacity:.0}to{transform:none;opacity:1}}`}</style>
++            <header className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--border)] px-3">
++              <h2 id="workbench-account-title" className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-[var(--text)]">账号与积分</h2>
++              <Tooltip label="刷新资产">
++                <button
++                  type="button"
++                  aria-label="刷新资产"
++                  disabled={walletBusy}
++                  onClick={() => void refreshWallet()}
++                  className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)] disabled:opacity-45"
++                >
++                  <RefreshCw size={14} className={walletBusy ? 'animate-spin' : ''} />
++                </button>
++              </Tooltip>
++              <button
++                type="button"
++                aria-label="关闭"
++                onClick={() => setOpen(false)}
++                className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
++              >
++                <X size={15} />
++              </button>
++            </header>
++            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
++              <section className="min-w-0">
++                <div className="text-[11.5px] text-[var(--text-faint)]">当前登录</div>
++                <div className="mt-1 truncate text-[15px] font-medium text-[var(--text)]" title={name}>{name}</div>
++                {status?.account && status.account !== name ? (
++                  <div className="mt-0.5 truncate text-[12px] text-[var(--text-muted)]" title={status.account}>{status.account}</div>
++                ) : null}
++              </section>
++
++              <section className="rounded-md border border-[var(--border)] bg-[var(--bg-field)] px-3 py-3">
++                <div className="text-[11.5px] text-[var(--text-faint)]">可用积分</div>
++                <div className="mt-1 text-[22px] font-semibold tabular-nums tracking-tight text-[var(--text)]">
++                  {formatPoints(available)}
++                  <span className="ml-1 text-[12px] font-medium text-[var(--text-muted)]">点</span>
++                </div>
++                {wallet?.stale ? (
++                  <p className="mt-2 text-[12px] text-[var(--warn)]">{wallet.message || '显示的是本地缓存，线上可能已变化。'}</p>
++                ) : null}
++                {synced ? (
++                  <p className="mt-2 text-[11px] text-[var(--text-faint)]">最近同步 {synced}</p>
++                ) : (
++                  <p className="mt-2 text-[11px] text-[var(--text-faint)]">{walletBusy ? '正在同步…' : '尚未同步到工作台余额'}</p>
++                )}
++              </section>
++
++              <section className="grid grid-cols-2 gap-2">
++                {hasPeriod ? (
++                  <>
++                    <div className="rounded-md border border-[var(--border)] px-3 py-2.5">
++                      <div className="text-[11px] text-[var(--text-faint)]">本期积分</div>
++                      <div className="mt-1 text-[15px] font-semibold tabular-nums text-[var(--text)]">{formatPoints(wallet?.period_points_balance)}</div>
++                      <div className="mt-1 text-[11px] text-[var(--text-muted)]">{periodExpires ? `到期 ${periodExpires}` : '订阅发放，到期作废'}</div>
++                    </div>
++                    <div className="rounded-md border border-[var(--border)] px-3 py-2.5">
++                      <div className="text-[11px] text-[var(--text-faint)]">永久积分</div>
++                      <div className="mt-1 text-[15px] font-semibold tabular-nums text-[var(--text)]">{formatPoints(wallet?.points_balance)}</div>
++                    </div>
++                  </>
++                ) : (
++                  <div className="col-span-2 rounded-md border border-[var(--border)] px-3 py-2.5">
++                    <div className="text-[11px] text-[var(--text-faint)]">永久积分</div>
++                    <div className="mt-1 text-[15px] font-semibold tabular-nums text-[var(--text)]">{formatPoints(wallet?.points_balance ?? available)}</div>
++                  </div>
++                )}
++                <div className="col-span-2 rounded-md border border-[var(--border)] px-3 py-2.5">
++                  <div className="text-[11px] text-[var(--text-faint)]">专家 / 高级积分</div>
++                  <div className="mt-1 text-[15px] font-semibold tabular-nums text-[var(--text)]">{formatPoints(wallet?.expert_points_balance ?? 0)}</div>
++                </div>
++              </section>
++
++              {onSettings ? (
++                <button
++                  type="button"
++                  onClick={() => {
++                    setOpen(false);
++                    onSettings('general');
++                  }}
++                  className="flex w-full items-center gap-2.5 rounded-md border border-[var(--border-strong)] bg-[var(--bg-field)] px-3 py-2.5 text-left text-[13px] text-[var(--text)] transition hover:bg-[var(--bg-hover)]"
++                >
++                  <Settings2 size={15} strokeWidth={1.75} className="shrink-0 text-[var(--text-muted)]" aria-hidden />
++                  <span className="min-w-0 flex-1 font-medium">{t('settings.title')}</span>
++                  <span className="text-[11.5px] text-[var(--text-faint)]">外观 · 代理 · 快捷键</span>
++                </button>
++              ) : (
++                <p className="text-[12px] leading-relaxed text-[var(--text-muted)]">
++                  充值与流水将放在设置 → 账号。此处先看当前身份与余额缓存。
++                </p>
++              )}
++            </div>
++            <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-[var(--border)] px-4 py-3">
++              <button
++                type="button"
++                disabled={busy || status?.dev === true}
++                onClick={() => void logout()}
++                className="rounded-md border border-[var(--border-strong)] px-3 py-1.5 text-[12.5px] text-[var(--text)] transition hover:bg-[var(--bg-hover)] disabled:cursor-not-allowed disabled:opacity-45"
++              >
++                {status?.dev ? '开发模式无需退出' : busy ? '退出中…' : '退出登录'}
++              </button>
++              <button
++                type="button"
++                onClick={() => setOpen(false)}
++                className="rounded-md px-3 py-1.5 text-[12.5px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
++              >
++                关闭
++              </button>
++            </footer>
++          </aside>
++        </div>,
++        document.body,
++      ) : null}
++    </div>
++  );
++}
 diff --git a/packages/shared/src/contract.ts b/packages/shared/src/contract.ts
 index 340ad66..f60cc69 100644
 --- a/packages/shared/src/contract.ts

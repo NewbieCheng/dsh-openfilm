@@ -1,0 +1,409 @@
+diff --git a/apps/desktop/chat/src/components/OnboardingGate.tsx b/apps/desktop/chat/src/components/OnboardingGate.tsx
+new file mode 100644
+index 0000000..ec02cbf
+--- /dev/null
++++ b/apps/desktop/chat/src/components/OnboardingGate.tsx
+@@ -0,0 +1,403 @@
++/**
++ * First-step film-type gate — Film Bay stage.
++ * Centered workbench surface; Ember only on selection + primary CTA.
++ * One entrance motion; respects prefers-reduced-motion.
++ */
++import React from 'react';
++import { createPortal } from 'react-dom';
++import { Loader2 } from 'lucide-react';
++import { useT } from '@/i18n';
++
++type Prefs = {
++  onboardingCompleted: boolean;
++  defaultTemplateId: string;
++  lastProjectId: string;
++};
++
++type Card = {
++  id: string;
++  productTitle?: string;
++  productBlurb?: string;
++  title?: string;
++  description?: string;
++};
++
++type CreateResult = {
++  projectId?: string;
++  prompt?: string;
++  onboarding?: { title?: string; steps?: string[]; uploadHint?: string };
++};
++
++const REOPEN = 'no996-openfilm:reopen-onboarding';
++const EMBER = '#FF6400';
++const NAVY = '#051D43';
++const PANEL = '#12161f';
++const LINE = '#2a3344';
++const TEXT = '#f3eee4';
++const MUTE = '#8d90a6';
++const PROJECT_ID = /^[A-Za-z0-9_-]{6,40}$/;
++const ORDER = ['paper-texture', 'replica-film', 'sketchnote', 'motion-styles', 'custom'];
++
++const STYLE_ID = 'no996-bay-onboarding-css';
++
++function ensureStyles() {
++  if (typeof document === 'undefined' || document.getElementById(STYLE_ID)) return;
++  const style = document.createElement('style');
++  style.id = STYLE_ID;
++  style.textContent = `
++@keyframes no996-bay-in {
++  from { opacity: 0; transform: translateY(10px); }
++  to { opacity: 1; transform: none; }
++}
++.no996-bay-scrim {
++  position: fixed; inset: 0; z-index: 9000;
++  display: flex; align-items: center; justify-content: center;
++  padding: clamp(16px, 3vw, 36px);
++  background:
++    radial-gradient(90% 70% at 50% 35%, rgba(18,28,48,.7) 0%, transparent 58%),
++    linear-gradient(180deg, rgba(5,15,38,.82), rgba(5,8,16,.92));
++  font-family: inherit;
++}
++.no996-bay-stage {
++  width: min(1080px, 96vw);
++  border: 1px solid rgba(255,100,0,.22);
++  border-radius: 6px;
++  background: linear-gradient(180deg, rgba(255,255,255,.04), transparent 28%), ${PANEL};
++  padding: 26px 0 24px;
++  box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 28px 64px rgba(0,0,0,.55);
++  animation: no996-bay-in 220ms ease-out both;
++  text-align: center;
++}
++.no996-bay-title {
++  margin: 0;
++  padding: 0 32px;
++  font-size: 22px;
++  font-weight: 700;
++  letter-spacing: .02em;
++  color: ${TEXT};
++  line-height: 1.25;
++}
++.no996-bay-sub {
++  margin: 8px auto 0;
++  padding: 0 32px;
++  max-width: 32rem;
++  font-size: 13.5px;
++  line-height: 1.55;
++  color: ${MUTE};
++}
++.no996-bay-rule {
++  margin: 16px auto 0;
++  width: min(220px, 48%);
++  border-bottom: 2px dashed rgba(185,173,152,.35);
++}
++.no996-bay-grid {
++  display: flex;
++  flex-wrap: nowrap;
++  gap: 12px;
++  margin-top: 20px;
++  padding: 0 28px 6px;
++  overflow-x: auto;
++  overflow-y: hidden;
++  scroll-snap-type: x proximity;
++  text-align: left;
++  scrollbar-width: thin;
++  scrollbar-color: #3a4558 transparent;
++}
++.no996-bay-grid::-webkit-scrollbar { height: 6px; }
++.no996-bay-grid::-webkit-scrollbar-thumb { background: #3a4558; border-radius: 999px; }
++.no996-bay-card {
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++  flex: 1 1 0;
++  min-width: 148px;
++  max-width: 220px;
++  min-height: 128px;
++  padding: 14px 14px 12px;
++  border: 1px solid ${LINE};
++  border-top: 2px solid transparent;
++  border-radius: 4px;
++  background:
++    linear-gradient(rgba(255,255,255,.05), rgba(255,255,255,0)),
++    radial-gradient(rgba(243,238,228,.08) 1px, transparent 1.3px) 0 0 / 14px 14px,
++    #171c28;
++  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
++  color: ${TEXT};
++  cursor: pointer;
++  font: inherit;
++  text-align: left;
++  scroll-snap-align: start;
++  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
++}
++.no996-bay-card:hover:not(:disabled) { transform: translateY(-1px); }
++.no996-bay-card:disabled { opacity: .55; cursor: not-allowed; }
++.no996-bay-card[data-active="true"] {
++  border-color: rgba(255,100,0,.85);
++  border-top-color: ${EMBER};
++  background:
++    linear-gradient(rgba(255,255,255,.1), rgba(255,255,255,0)),
++    radial-gradient(rgba(243,238,228,.08) 1px, transparent 1.3px) 0 0 / 14px 14px,
++    linear-gradient(180deg, #2a1c16, #171c28);
++  box-shadow: 0 0 0 1px rgba(255,100,0,.35), inset 0 1px 0 rgba(255,180,100,.25);
++}
++.no996-bay-card:focus-visible {
++  outline: 2px solid ${EMBER};
++  outline-offset: 2px;
++}
++.no996-bay-card-title {
++  font-size: 15px;
++  font-weight: 700;
++  line-height: 1.3;
++  color: ${TEXT};
++}
++.no996-bay-card[data-active="true"] .no996-bay-card-title { color: #ffc28a; }
++.no996-bay-card-blurb {
++  font-size: 12.5px;
++  line-height: 1.5;
++  color: ${MUTE};
++  display: -webkit-box;
++  -webkit-line-clamp: 4;
++  -webkit-box-orient: vertical;
++  overflow: hidden;
++}
++.no996-bay-actions {
++  display: flex;
++  flex-direction: column;
++  align-items: stretch;
++  gap: 10px;
++  margin-top: 18px;
++  padding: 0 32px;
++}
++.no996-bay-actions-row {
++  display: flex;
++  flex-direction: row;
++  justify-content: space-between;
++  align-items: center;
++  gap: 16px;
++  width: 100%;
++}
++.no996-bay-cta {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  min-height: 44px;
++  min-width: 180px;
++  padding: 0 26px;
++  border: 0;
++  border-radius: 3px;
++  background: ${NAVY};
++  color: #fff;
++  font: 700 15px/1 inherit;
++  letter-spacing: .06em;
++  cursor: pointer;
++  transition: transform .15s ease, filter .15s ease, opacity .15s ease;
++}
++.no996-bay-cta:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
++.no996-bay-cta:active:not(:disabled) { transform: translateY(1px); filter: brightness(.96); }
++.no996-bay-cta:disabled { opacity: .45; cursor: not-allowed; transform: none; filter: none; }
++.no996-bay-quiet {
++  border: 0;
++  background: transparent;
++  color: ${MUTE};
++  font: 13.5px/1.4 inherit;
++  cursor: pointer;
++  padding: 8px 4px;
++  text-decoration: underline;
++  text-underline-offset: 3px;
++}
++.no996-bay-quiet:hover:not(:disabled) { color: ${TEXT}; }
++.no996-bay-quiet:disabled { opacity: .5; cursor: not-allowed; }
++.no996-bay-default {
++  text-align: center;
++  text-decoration: none;
++}
++.no996-bay-error {
++  margin: 12px 32px 0;
++  font-size: 12.5px;
++  color: #f08888;
++}
++@media (prefers-reduced-motion: reduce) {
++  .no996-bay-stage { animation: none !important; }
++  .no996-bay-card, .no996-bay-cta { transition: none !important; }
++}
++`;
++  document.head.appendChild(style);
++}
++
++async function hostRpc<T>(channel: string, payload: Record<string, unknown> = {}): Promise<T> {
++  const response = await fetch('/__dsh/official-rpc', {
++    method: 'POST',
++    credentials: 'same-origin',
++    headers: { 'content-type': 'application/json' },
++    body: JSON.stringify({ channel, payload }),
++  });
++  if (!response.ok) {
++    let detail = '';
++    try { detail = (await response.text()).slice(0, 200); } catch { /* ignore */ }
++    throw new Error(detail || `HTTP ${response.status}`);
++  }
++  return response.json() as Promise<T>;
++}
++
++function openProject(projectId: string) {
++  const next = `/projects/${projectId}`;
++  if (location.pathname !== next) location.assign(next);
++  else window.dispatchEvent(new Event('popstate'));
++}
++
++function sortCards(cards: Card[]) {
++  const rank = (id: string) => {
++    const i = ORDER.indexOf(id);
++    return i === -1 ? 100 + id.charCodeAt(0) : i;
++  };
++  return [...cards].sort((a, b) => rank(a.id) - rank(b.id));
++}
++
++export function OnboardingGate() {
++  const t = useT();
++  const [ready, setReady] = React.useState(false);
++  const [open, setOpen] = React.useState(false);
++  const [forced, setForced] = React.useState(false);
++  const [cards, setCards] = React.useState<Card[]>([]);
++  const [prefs, setPrefs] = React.useState<Prefs | null>(null);
++  const [selected, setSelected] = React.useState('');
++  const [busy, setBusy] = React.useState(false);
++  const [error, setError] = React.useState('');
++
++  React.useEffect(() => { ensureStyles(); }, []);
++
++  React.useEffect(() => {
++    let alive = true;
++    void (async () => {
++      try {
++        const listed = await hostRpc<{ templates?: Card[]; prefs?: Prefs }>('template:list', {});
++        if (!alive) return;
++        const nextPrefs = listed.prefs ?? {
++          onboardingCompleted: false,
++          defaultTemplateId: '',
++          lastProjectId: '',
++        };
++        const nextCards = sortCards(Array.isArray(listed.templates) ? listed.templates : []);
++        setPrefs(nextPrefs);
++        setCards(nextCards);
++        setSelected(nextPrefs.defaultTemplateId || nextCards[0]?.id || '');
++        setOpen(nextPrefs.onboardingCompleted !== true);
++      } catch {
++        if (alive) setOpen(false);
++      } finally {
++        if (alive) setReady(true);
++      }
++    })();
++    const onReopen = () => { setForced(true); setOpen(true); setError(''); };
++    window.addEventListener(REOPEN, onReopen);
++    return () => { alive = false; window.removeEventListener(REOPEN, onReopen); };
++  }, []);
++
++  const visible = ready && open && (forced || prefs?.onboardingCompleted !== true);
++  if (!visible) return null;
++
++  const create = async () => {
++    if (!selected || busy) return;
++    setBusy(true);
++    setError('');
++    try {
++      const channel = selected === 'custom' ? 'project:create-blank' : 'template:create';
++      const result = await hostRpc<CreateResult>(channel, selected === 'custom' ? {} : { templateId: selected });
++      const projectId = typeof result.projectId === 'string' ? result.projectId : '';
++      if (!PROJECT_ID.test(projectId)) throw new Error('bad project');
++      try {
++        if (result.prompt) localStorage.setItem('no996.openfilm.templatePrompt', String(result.prompt).slice(0, 600));
++        if (result.onboarding) localStorage.setItem('no996.openfilm.onboarding', JSON.stringify(result.onboarding).slice(0, 1200));
++      } catch { /* ignore */ }
++      setForced(false);
++      setOpen(false);
++      setPrefs((prev) => ({
++        onboardingCompleted: true,
++        defaultTemplateId: selected,
++        lastProjectId: projectId,
++        ...(prev ?? {}),
++      }));
++      openProject(projectId);
++    } catch (cause) {
++      setError(cause instanceof Error && cause.message ? cause.message.slice(0, 120) : t('onboarding.createFailed'));
++      setBusy(false);
++    }
++  };
++
++  const defaultName = prefs?.defaultTemplateId
++    ? (cards.find((c) => c.id === prefs.defaultTemplateId)?.productTitle
++      || cards.find((c) => c.id === prefs.defaultTemplateId)?.title
++      || prefs.defaultTemplateId)
++    : '';
++
++  return createPortal(
++    <div className="no996-bay-scrim" role="dialog" aria-modal="true" aria-labelledby="no996-onboarding-title">
++      <div className="no996-bay-stage">
++        <h1 id="no996-onboarding-title" className="no996-bay-title">{t('onboarding.title')}</h1>
++        <p className="no996-bay-sub">{t('onboarding.subtitle')}</p>
++        <div className="no996-bay-rule" aria-hidden />
++        <div className="no996-bay-grid" role="radiogroup" aria-label={t('onboarding.title')}>
++          {cards.map((card) => {
++            const active = selected === card.id;
++            const title = card.productTitle || card.title || card.id;
++            const blurb = card.productBlurb || card.description || '';
++            return (
++              <button
++                key={card.id}
++                type="button"
++                role="radio"
++                aria-checked={active}
++                data-active={active ? 'true' : 'false'}
++                disabled={busy}
++                className="no996-bay-card"
++                onClick={() => setSelected(card.id)}
++              >
++                <span className="no996-bay-card-title">{title}</span>
++                <span className="no996-bay-card-blurb">{blurb}</span>
++              </button>
++            );
++          })}
++        </div>
++        <div className="no996-bay-actions">
++          <div className="no996-bay-actions-row">
++            {forced && prefs?.onboardingCompleted ? (
++              <button
++                type="button"
++                className="no996-bay-quiet"
++                disabled={busy}
++                onClick={() => { setForced(false); setOpen(false); }}
++              >
++                {t('onboarding.cancel')}
++              </button>
++            ) : <span />}
++            <button
++              type="button"
++              className="no996-bay-cta"
++              disabled={!selected || busy}
++              onClick={() => { void create(); }}
++            >
++              {busy ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
++              {busy ? t('onboarding.creating') : t('onboarding.start')}
++            </button>
++          </div>
++          {prefs?.defaultTemplateId && defaultName ? (
++            <button
++              type="button"
++              className="no996-bay-quiet no996-bay-default"
++              disabled={busy}
++              onClick={() => setSelected(prefs.defaultTemplateId)}
++            >
++              {t('onboarding.useDefault').replace('{name}', defaultName)}
++            </button>
++          ) : null}
++        </div>
++        {error ? <p className="no996-bay-error">{error || t('onboarding.createFailed')}</p> : null}
++      </div>
++    </div>,
++    document.body,
++  );
++}
++
++export function reopenOnboarding() {
++  window.dispatchEvent(new Event(REOPEN));
++}

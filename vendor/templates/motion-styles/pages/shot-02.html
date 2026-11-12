@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>02 · 包豪斯</title>
+<style>html,body{margin:0;background:#111;overflow:hidden}#stage{position:relative;width:1920px;height:1080px;transform-origin:0 0}</style>
+<script src="../assets/motion.js"></script>
+</head>
+<body>
+<main id="stage">
+<style>
+  /* 父层做非整数缩放时，Chromium 会把文字栅格化成条带再拼接；
+     提升为独立合成层后，缩放发生在图层合成阶段，不会切字。 */
+  #frame { position: absolute; inset: 0; background: #F1E9DA; overflow: hidden; will-change: transform; }
+  #title { will-change: transform; backface-visibility: hidden; }
+  .band { position: absolute; left: 0; top: 120px; width: 1920px; height: 12px; background: #111; }
+  .block { position: absolute; top: 300px; width: 260px; height: 260px; }
+  .red { left: 260px; background: #D7261E; }
+  .blue { right: 260px; background: #1B3A8C; }
+  .disc { position: absolute; left: 860px; top: 560px; width: 200px; height: 200px; border-radius: 50%; background: #F2B705; }
+  h1 { position: absolute; left: 120px; top: 640px; margin: 0; font: 900 150px/0.95 "Noto Sans SC", "Microsoft YaHei", sans-serif; letter-spacing: -4px; color: #111; }
+  h1 .m-unit { margin-right: -2px; }
+  .sub { position: absolute; left: 126px; top: 820px; margin: 0; font: 500 26px/1 ui-monospace, monospace; letter-spacing: 6px; color: #6b6459; }
+  .num { position: absolute; right: 120px; bottom: 80px; font: 800 190px/1 ui-monospace, monospace; color: #D7261E; letter-spacing: -8px; }
+  .rule { position: absolute; left: 126px; top: 760px; width: 520px; height: 4px; background: #111; transform-origin: left center; }
+  .veil { position: absolute; inset: 0; background: #111; opacity: 0; pointer-events: none; }
+</style>
+<div id="stage-inner">
+  <div id="frame">
+    <div class="band" id="band"></div>
+    <div class="block red" id="b1"></div>
+    <div class="block blue" id="b2"></div>
+    <div class="disc" id="disc"></div>
+    <h1 id="title">动效语法</h1>
+    <p class="sub" id="sub">MOTION GRAMMAR / BAUHAUS 09</p>
+    <div class="rule" id="rule"></div>
+    <div class="num" id="num">0%</div>
+    <div class="veil" id="veil"></div>
+  </div>
+</div>
+<script>
+  // 这一镜是按 09-bauhaus 的 brief 重写的，不是上游样片的拷贝：
+  // 用动作库的弹簧、错峰、擦除、滚数与相机，证明"蒸馏"落到可执行的代码上。
+  const DURATION = 8;
+  const M = window.Motion;
+  M.split('#title', 'chars');
+
+  function draw(t) {
+    M.camera('#frame', { zoom: 1 + 0.025 * M.seg(t, 0, DURATION) });
+    M.reveal('#band', M.seg(t, 0.05, 0.5), { from: 'left' });
+    M.enter('#b1', t, 0.15, { x: -140, y: 0, scale: 0.82, spring: { zeta: 0.5 } });
+    M.enter('#b2', t, 0.3, { x: 140, y: 0, scale: 0.82, spring: { zeta: 0.5 } });
+    M.enter('#disc', t, 0.55, { y: 90, scale: 0.4, spring: true });
+    M.unitsIn('#title', t, 0.6, { step: 0.07, y: 44 });
+    M.enter('#sub', t, 1.1, { y: 16 });
+    M.count('#num', t, { from: 0, to: 100, start: 1.2, duration: 1.4, suffix: '%', group: false });
+    M.reveal('#rule', M.seg(t, 2.1, 0.45), { from: 'left' });
+    // 收尾：整幅压暗，给镜头墙一个明确的"这一镜结束"。
+    M.pose('#veil', { opacity: M.seg(t, DURATION - 0.7, 0.55) });
+  }
+</script>
+</main>
+<script>
+(function () {
+  var W = 1920, H = 1080;
+  function fit() {
+    var scale = Math.min(window.innerWidth / W, window.innerHeight / H);
+    var stage = document.getElementById("stage");
+    stage.style.transform = "translate(" + ((window.innerWidth - W * scale) / 2) + "px,"
+      + ((window.innerHeight - H * scale) / 2) + "px) scale(" + scale + ")";
+  }
+  fit();
+  window.addEventListener("resize", fit);
+  window.film = {
+    duration: DURATION, width: W, height: H, ready: Promise.resolve(),
+    frame: function (t) { return draw(t); },
+  };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "kit": "motionstyle",
+  "size": [
+    1920,
+    1080
+  ],
+  "wallTitle": "动效风格样片",
+  "wallBackdrop": "#151433",
+  "sectionTitle": "动效风格 · 2 组",
+  "sharedScripts": [
+    "_kit/motion/motion.js"
+  ]
+}

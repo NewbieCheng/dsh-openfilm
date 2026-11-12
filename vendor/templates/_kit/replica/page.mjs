@@ -33,6 +33,7 @@ ${inlineStyle}</head>
 ${content}
   </div>
 </main>
+<script src="../assets/motion.js"></script>
 <script src="../assets/scene.js"></script>
 <script>
   // 本镜头的可替换内容。配色在上方 stage 类名和本页 CSS 中修改。

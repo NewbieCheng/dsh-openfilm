@@ -16,6 +16,7 @@ window.__ModuleLoader__.load({
       studioTitle: 'OpenFilm Studio',
       presetReady: 'Video editing mode: loaded', presetMissing: 'Video editing mode: not loaded —',
       archiveBanner: 'This project conversation is archived; its messages stay hidden until restored.', archiveRestore: 'Restore conversation', archiveRebind: 'Start a new conversation',
+      authChecking: 'Checking sign-in…', loginTitle: 'Sign in', loggedIn: 'Signed in', logout: 'Sign out',
     };
     const zh = {
       panel: '视频创作',
@@ -25,6 +26,7 @@ window.__ModuleLoader__.load({
       studioTitle: 'OpenFilm 工作台',
       presetReady: '视频剪辑模式：已加载', presetMissing: '视频剪辑模式：未加载 —',
       archiveBanner: '这个项目的会话已归档，恢复前不显示历史消息。', archiveRestore: '恢复会话', archiveRebind: '新建会话',
+      authChecking: '正在确认登录状态…', loginTitle: '登录', loggedIn: '已登录', logout: '退出',
     };
     const Panel = createStudioPanel(React);
     // The real panel is rendered once and then only shown or hidden; `main`

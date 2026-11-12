@@ -37,7 +37,7 @@ function samePath(left, right) {
  * `rebind` is the only way to move a project to a new conversation, and it
  * leaves the archived Session and its history untouched.
  */
-export async function openProjectConversations(ctx, { z, archived, onFailure } = {}) {
+export async function openProjectConversations(ctx, { z, archived, onFailure, onCreated } = {}) {
   if (!ctx?.storageDomain?.open || !ctx?.sessionController?.create || !ctx?.sessionController?.list || !z?.object) {
     throw error('PROJECT_CONVERSATION_DEPENDENCY', 'storageDomain, sessionController and Zod are required');
   }
@@ -65,6 +65,16 @@ export async function openProjectConversations(ctx, { z, archived, onFailure } =
   }
   let closing = false;
   let closePromise;
+
+  /**
+   * Hand a just-created Session to the Host, before anything else uses it, so
+   * the default permission can be applied while the Session is live. Best
+   * effort: a Session left on DSH's own preset still works, it just asks more.
+   */
+  async function created(sessionId) {
+    if (typeof onCreated !== 'function') return;
+    try { await onCreated(sessionId); } catch { report('permission-default', { ok: false }); }
+  }
 
   function remember(projectId, projectPath, sessionId, extra = {}) {
     live.set(sessionId, { projectId, path: projectPath, available: true, archived: extra.archived === true });
@@ -266,6 +276,7 @@ export async function openProjectConversations(ctx, { z, archived, onFailure } =
         }
       }
       const sessionId = await createSession(canonical, workspace);
+      await created(sessionId);
       const seat = await seatSession(workspace, canonical, sessionId);
       degraded.set(projectId, seat.degraded);
       await titleSession(sessionId, canonical);
@@ -286,6 +297,7 @@ export async function openProjectConversations(ctx, { z, archived, onFailure } =
       const workspace = await ensureWorkspace(canonical);
       await markProjectOpened(canonical);
       const sessionId = await createSession(canonical, workspace);
+      await created(sessionId);
       const seat = await seatSession(workspace, canonical, sessionId);
       degraded.set(projectId, seat.degraded);
       await titleSession(sessionId, canonical);

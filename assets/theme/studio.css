@@ -1,0 +1,16 @@
+/* Studio editor overrides.
+ *
+ * The editor is shipped by the upstream npm package as a compiled dist and we
+ * have no source checkout for it, so this file is the sanctioned way to restyle
+ * it. Same rules as shell.css: stable anchors only, no layout rewrites, and a
+ * note in docs/UI-PLAYBOOK.md when a rule needs an upstream reason.
+ */
+::selection {
+  background: var(--n996-accent);
+  color: var(--n996-accent-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--n996-accent);
+  outline-offset: 2px;
+}

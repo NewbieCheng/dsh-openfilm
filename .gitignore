@@ -2,3 +2,11 @@ node_modules/
 *.log
 .codegraph/
 *.tgz
+# 真机转写验证用的临时 home（含 228 MB 权重），绝不提交
+.asr-home/
+.npm-cache/
+.tmp-frames/
+
+# 上游 checkout 缓存与开发态壳产物（不是发布内容）
+.upstream/
+.dev/

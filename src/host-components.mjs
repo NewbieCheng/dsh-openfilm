@@ -1,4 +1,23 @@
 import { spawn as nodeSpawn } from 'node:child_process';
+import { basename } from 'node:path';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+
+/**
+ * A binary shipped with the plugin beats PATH: a system ffmpeg can be an old
+ * distro build without the demuxers a phone produces. Both packages are
+ * optional dependencies, so absence is normal, not an error.
+ */
+function packagedBinary(name) {
+  try {
+    const loaded = require(name);
+    const candidate = loaded?.path ?? loaded?.default ?? loaded;
+    return typeof candidate === 'string' ? candidate : null;
+  } catch {
+    return null;
+  }
+}
 
 const DEFAULT_TIMEOUT_MS = 3000;
 const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024;
@@ -13,11 +32,12 @@ export function createHostComponentDetector({
   spawn = nodeSpawn,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   maxOutputBytes = DEFAULT_MAX_OUTPUT_BYTES,
+  resolve = packagedBinary,
 } = {}) {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2_147_483_647) throw new RangeError('invalid timeoutMs');
   if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 1) throw new RangeError('invalid maxOutputBytes');
 
-  function check(bin) {
+  function check(name, bin = resolve(name) ?? name) {
     return new Promise(resolve => {
       let child;
       let timer;
@@ -53,7 +73,10 @@ export function createHostComponentDetector({
         }
         child.on('close', (code, signal) => {
           if (code !== 0 || signal) return finish({ status: 'unusable', reason: 'exit' });
-          const signature = new RegExp(`^${bin} version[ \\t]+\\S+`, 'm');
+          // ffmpeg prints its program name, not the path we invoked, and never
+          // the .exe suffix on Windows ("ffmpeg version 6.1", not "ffmpeg.exe").
+          const program = basename(bin).replace(/\.exe$/i, '');
+          const signature = new RegExp(`^${program} version[ \\t]+\\S+`, 'm');
           const matches = output.some(chunks => signature.test(Buffer.concat(chunks).toString('utf8')));
           finish(matches ? { status: 'ok' } : { status: 'unusable', reason: 'version-mismatch' });
         });

@@ -1,0 +1,33 @@
+diff --git a/apps/desktop/chat/src/lib/local-agent-run.ts b/apps/desktop/chat/src/lib/local-agent-run.ts
+index 0ef8753..1fb2036 100644
+--- a/apps/desktop/chat/src/lib/local-agent-run.ts
++++ b/apps/desktop/chat/src/lib/local-agent-run.ts
+@@ -230,8 +230,16 @@ export function acpUpdateToEvent(
+       if (content?.type !== 'text' || !content.text) return null;
+       return { type: 'agent-text', turnNo: ctx.turnNo, partId: `${ctx.turnNo}:${ctx.part}`, text: content.text };
+     }
+-    case 'agent_thought_chunk':
+-      return { type: 'agent-thinking' };
++    /* dsh-openfilm: the bridging agent does report its reasoning, so carry the text through instead of
++     * dropping it — the transcript turns it into a "thought for 6s" block the person can open. */
++    case 'agent_thought_chunk': {
++      const content = update.content as { type?: string; text?: string } | undefined;
++      const text = content?.type === 'text' && content.text ? content.text : undefined;
++      return {
++        type: 'agent-thinking', turnNo: ctx.turnNo, partId: `thought:${ctx.turnNo}:${ctx.part}`,
++        ...(text ? { text } : {}),
++      };
++    }
+     case 'tool_call': {
+       const activity = localToolActivity(
+         update.title as string | undefined,
+@@ -246,6 +254,9 @@ export function acpUpdateToEvent(
+         turnNo: ctx.turnNo,
+         act: activity.act,
+         ...(activity.query ? { query: activity.query } : {}),
++        /* dsh-openfilm: the real tool name travels beside the act, so the row can say what ran. The
++           bridging agent knows it; the closed act only says what it meant for the film. */
++        ...(typeof update.toolName === 'string' && update.toolName ? { tool: String(update.toolName).slice(0, 80) } : {}),
+       };
+     }
+     case 'tool_call_update': {

@@ -135,5 +135,7 @@ const Scene = (() => {
     if (!video) frame(0);
   }
 
-  return { $, $$, range, ease, lerp, wave, pose, enter, text, escape, pills, mount };
+  // 动作库由 motion.js 提供（构建时发到本模板 assets/）。老镜头继续用上面的
+  // 原语；新镜头用 Scene.motion 拿到弹簧、相机、擦除、逐字、确定性随机。
+  return { $, $$, range, ease, lerp, wave, pose, enter, text, escape, pills, mount, motion: window.Motion };
 })();

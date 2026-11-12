@@ -1,0 +1,24 @@
+{
+  "name": "不加班剪辑",
+  "nameEn": "No996 Studio",
+  "slug": "no996-studio",
+  "vendor": "不加班",
+  "tagline": "把一句话剪成一支片",
+  "colors": {
+    "accent": "#ff6400",
+    "accentDeep": "#d84700",
+    "paper": "#f5f0e5",
+    "ink": "#18171c",
+    "night": "#051d43"
+  },
+  "links": {
+    "home": "https://bujiaban.top",
+    "support": "https://bujiaban.top"
+  },
+  "upstream": {
+    "name": "OpenFilm",
+    "version": "0.3.2",
+    "license": "MIT",
+    "notice": "OpenFilm 的版权、商标与第三方许可声明保留在 vendor/official-shell 与 THIRD_PARTY_NOTICES 中；本产品的名称与标识不代表上游背书。"
+  }
+}

@@ -6,6 +6,9 @@ import { createServer, request } from 'node:http';
 import { officialFacadeSource } from './official-facade.mjs';
 import { officialUploadSource } from './official-attachment.mjs';
 import { shellUiInjection, shellUiVersion } from './shell-extras.mjs';
+import { theme, themeSurfaceFor } from './theme.mjs';
+import { styleLabInjection } from './style-lab.mjs';
+import { replaceTitle } from './brand.mjs';
 
 // Upstream 5xx bodies are the only description of a Studio failure the person
 // can act on, and the page shows just the status. Keep the last few for
@@ -134,13 +137,15 @@ function fail(res, status = 403) {
  * retains its native file and process permissions; DSH workspace tool restrictions
  * do not constrain these APIs.
  */
-export async function startStudioProxy({ upstream, authenticateBrowser, webOrigin, desktop = false, officialShell = false, officialRpc, authorizeOfficialProject, attachOfficialEvents, log } = {}) {
+export async function startStudioProxy({ upstream, authenticateBrowser, webOrigin, desktop = false, officialShell = false, officialRpc, authorizeOfficialProject, attachOfficialEvents, readProjectFile, openProjectFile, log } = {}) {
   // A proxy without a logger is valid (tests, embedders); the calls are no-ops.
   const say = typeof log?.write === 'function' ? log : { write() {}, info() {}, warn() {}, error() {} };
   if (typeof officialShell !== 'boolean') throw new TypeError('officialShell must be a boolean');
   if (officialRpc !== undefined && typeof officialRpc !== 'function') throw new TypeError('officialRpc must be a function');
   if (authorizeOfficialProject !== undefined && typeof authorizeOfficialProject !== 'function') throw new TypeError('authorizeOfficialProject must be a function');
   if (attachOfficialEvents !== undefined && typeof attachOfficialEvents !== 'function') throw new TypeError('attachOfficialEvents must be a function');
+  if (readProjectFile !== undefined && typeof readProjectFile !== 'function') throw new TypeError('readProjectFile must be a function');
+  if (openProjectFile !== undefined && typeof openProjectFile !== 'function') throw new TypeError('openProjectFile must be a function');
   const web = new URL(webOrigin);
   if (desktop ? !['dsh-app://app', 'app://app'].includes(webOrigin) :
       web.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(web.hostname) || !web.port || web.origin !== webOrigin || web.username || web.password) throw new TypeError('Invalid DSH origin');
@@ -374,6 +379,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
             if (film && type.startsWith('text/html')) {
               value = value.replaceAll(`const EDITOR = ${JSON.stringify(editorUpstream.origin)};`, `const EDITOR = ${JSON.stringify(editorOrigin)};`);
             } else if (!film && type.startsWith('text/html') && !url.pathname.startsWith('/api/')) {
+              value = replaceTitle(value);
               diag.html += 1;
               diag.lastPath = url.pathname;
               diag.lastStatus = status;
@@ -458,7 +464,7 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
   });
   report(true);
 })();
-</script>${officialShell && officialPage ? shellUiInjection() : ''}<style>[data-app-menu]>[role="menuitem"]:not(:first-child),[data-community-menu]{display:none!important}</style>`;
+</script>${officialShell && officialPage ? shellUiInjection() : ''}${theme.injection(themeSurfaceFor(url.pathname, officialShell))}${styleLabInjection()}<style>[data-app-menu]>[role="menuitem"]:not(:first-child),[data-community-menu]{display:none!important}</style>`;
               value = value.replace(/<head(?:\s[^>]*)?>/i, match => match + host);
               if (value.includes('__no996Diag')) diag.injected += 1;
               else diag.refusals += 1;
@@ -490,6 +496,87 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
     const body = JSON.stringify({ version: shellUiVersion() });
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-length': Buffer.byteLength(body) });
     res.end(body);
+    return true;
+  }
+  // Pictures and products named in the transcript.
+  //
+  // The chat is a page on the editor origin, so a project-relative path there is
+  // resolved by the browser against /projects/... (Studio does not serve it) and a
+  // product link is offered to the system browser, where the same origin refuses it
+  // without the panel session (OF_SESSION_REQUIRED). Both are Host capabilities, not
+  // page ones: an image is read from a verified project, and a file is handed to the
+  // operating system. Neither route accepts a path it did not validate.
+  function projectFile(req, res) {
+    if (typeof readProjectFile !== 'function') return false;
+    let url;
+    try { url = new URL(req.url, 'http://proxy.invalid'); } catch { return false; }
+    if (url.pathname !== '/__dsh/project-file') return false;
+    const projectId = url.searchParams.get('projectId');
+    const relative = url.searchParams.get('path');
+    if (typeof authorizeOfficialProject !== 'function' || !['GET', 'HEAD'].includes(req.method) ||
+        !permitted(req, false) || !authenticated(req) ||
+        (req.headers.origin !== undefined && req.headers.origin !== editorOrigin) ||
+        (req.headers['sec-fetch-site'] !== undefined && !['same-origin', 'none'].includes(req.headers['sec-fetch-site'])) ||
+        url.searchParams.size !== 2 || typeof projectId !== 'string' || !/^[A-Za-z0-9_-]{6,40}$/.test(projectId) ||
+        typeof relative !== 'string' || !relative || relative.length > 400) {
+      fail(res); return true;
+    }
+    void (async () => {
+      try {
+        if (await authorizeOfficialProject(req, projectId) !== true) { fail(res); return; }
+        const image = await readProjectFile({ projectId, path: relative });
+        if (closed || res.destroyed || res.writableEnded) return;
+        res.writeHead(200, {
+          'content-type': image.type,
+          'content-length': image.bytes.byteLength,
+          'cache-control': 'private, max-age=60',
+          'x-content-type-options': 'nosniff',
+          // Even a picture is untrusted input: no scripts, no external loads.
+          'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'",
+          'referrer-policy': 'no-referrer',
+        });
+        res.end(req.method === 'HEAD' ? undefined : image.bytes);
+      } catch {
+        fail(res, 404);
+      }
+    })();
+    return true;
+  }
+  function openFile(req, res) {
+    if (typeof openProjectFile !== 'function') return false;
+    if (req.url !== '/__dsh/open-file') return false;
+    if (typeof authorizeOfficialProject !== 'function' || req.method !== 'POST' ||
+        !permitted(req, false) || !authenticated(req) ||
+        req.headers.origin !== editorOrigin || req.headers['sec-fetch-site'] !== 'same-origin' ||
+        !/^application\/json(?:\s*;|$)/i.test(String(req.headers['content-type'] || ''))) {
+      fail(res); return true;
+    }
+    void (async () => {
+      try {
+        const chunks = [];
+        let length = 0;
+        for await (const chunk of req) {
+          length += chunk.length;
+          // One project id and one path: anything larger is not this request.
+          if (length > 4096) { fail(res, 413); req.destroy(); return; }
+          chunks.push(chunk);
+        }
+        let value;
+        try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return fail(res, 400); }
+        const keys = value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value) : [];
+        if (!keys.includes('projectId') || !keys.includes('path') || keys.some(key => !['projectId', 'path', 'reveal'].includes(key)) ||
+            typeof value.projectId !== 'string' || !/^[A-Za-z0-9_-]{6,40}$/.test(value.projectId) ||
+            typeof value.path !== 'string' || !value.path || value.path.length > 400 ||
+            (value.reveal !== undefined && typeof value.reveal !== 'boolean')) {
+          return fail(res, 400);
+        }
+        if (await authorizeOfficialProject(req, value.projectId) !== true) { fail(res); return; }
+        await openProjectFile({ projectId: value.projectId, path: value.path, reveal: value.reveal === true });
+        if (!res.destroyed && !res.writableEnded) res.writeHead(204, { 'cache-control': 'no-store' }).end();
+      } catch {
+        if (!res.destroyed && !res.writableEnded) fail(res, 503);
+      }
+    })();
     return true;
   }
   // Fixed-channel official Chat RPC rides the existing authenticated editor
@@ -531,8 +618,19 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
         // page itself, it carries no project id, and gating it on a project made
         // the page's own logging fail with an empty 403 body.
         pendingChannel = value.channel;
+        // Auth is Host-held session state for this editor window — no project scope.
         const needsProject = value.channel !== 'template:list' && value.channel !== 'template:create'
-          && value.channel !== 'environment:check' && value.channel !== 'client:log';
+          && value.channel !== 'project:create-blank'
+          && value.channel !== 'prefs:get' && value.channel !== 'prefs:set'
+          && value.channel !== 'environment:check' && value.channel !== 'client:log'
+          && value.channel !== 'auth:status' && value.channel !== 'auth:logout' && value.channel !== 'auth:action'
+          && value.channel !== 'account:balance'
+          && value.channel !== 'auth:remember-get' && value.channel !== 'auth:remember-set' && value.channel !== 'auth:remember-clear'
+          // First-run wizard: no project exists yet, and the ASR routes are
+          // install/status only. Gating them on a project made the wizard's
+          // checks fail with an empty 403.
+          && value.channel !== 'system:check' && value.channel !== 'system:install'
+          && value.channel !== 'asr:status' && value.channel !== 'asr:install';
         if (needsProject && await authorizeOfficialProject(req, value.payload?.projectId) !== true) return fail(res);
         const result = await officialRpc(value.channel, value.payload);
         if (closed || res.destroyed || res.writableEnded) return;
@@ -643,7 +741,7 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
     })();
     return true;
   }
-  const editor = createServer((req, res) => { if (!officialEvents(req, res) && !officialUpload(req, res) && !shellVersion(req, res) && !officialBridge(req, res) && !desktopBridge(req, res)) forward(req, res, false); });
+  const editor = createServer((req, res) => { if (!officialEvents(req, res) && !officialUpload(req, res) && !shellVersion(req, res) && !projectFile(req, res) && !openFile(req, res) && !officialBridge(req, res) && !desktopBridge(req, res)) forward(req, res, false); });
   const film = createServer((req, res) => forward(req, res, true));
   film.on('upgrade', (_req, socket) => socket.destroy());
   editor.on('upgrade', (req, socket, head) => {

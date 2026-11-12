@@ -1,0 +1,13 @@
+/* Shared tokens for every surface we restyle.
+ *
+ * Brand colours are NOT here: they come from brand/brand.json and are emitted
+ * before this file by src/theme.mjs. This file only holds the shape of the
+ * design system (radii, rhythm, motion) so a rename never has to touch CSS.
+ */
+:root {
+  --n996-accent-ink: #ffffff;
+  --n996-radius-sm: 6px;
+  --n996-radius-lg: 14px;
+  --n996-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+  --n996-transition: 160ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}

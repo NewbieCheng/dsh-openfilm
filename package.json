@@ -1,6 +1,6 @@
 {
   "name": "dsh-openfilm",
-  "version": "0.9.0",
+  "version": "0.11.0",
   "description": "OpenFilm video studio as a DSH plugin: the official Studio + Chat shell, bridged to a DSH session.",
   "type": "module",
   "license": "MIT",
@@ -15,7 +15,24 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/dev.mjs",
     "templates:build": "node scripts/templates-build.mjs",
-    "templates:check": "node scripts/templates-build.mjs --check"
+    "templates:check": "node scripts/templates-build.mjs --check",
+    "motion:index": "node scripts/build-motion-index.mjs",
+    "login:city": "node scripts/build-login-city.mjs",
+    "frame:page": "node scripts/render-page-frame.mjs",
+    "frame:studio": "node scripts/studio-frame-check.mjs",
+    "studio:ui": "node scripts/studio-ui-check.mjs",
+    "onboard:preview": "node scripts/onboard-preview.mjs",
+    "smoke:system": "node scripts/system-smoke.mjs",
+    "dev:styles": "node scripts/dev-styles.mjs",
+    "brand:check": "node scripts/brand-check.mjs",
+    "docs:check": "node scripts/docs-check.mjs",
+    "patches:split": "node scripts/split-patch.mjs",
+    "patches:check": "node scripts/split-patch.mjs --check",
+    "upstream:status": "node scripts/upstream.mjs status",
+    "upstream:fetch": "node scripts/upstream.mjs fetch",
+    "upstream:verify": "node scripts/upstream.mjs verify",
+    "shell:dev": "node scripts/upstream.mjs shell:dev",
+    "shell:bake": "node scripts/theme-bake.mjs"
   },
   "devDependencies": {
     "esbuild": "0.24.2"
@@ -23,6 +40,11 @@
   "dependencies": {
     "openfilm": "https://registry.npmjs.org/openfilm/-/openfilm-0.3.2.tgz",
     "zod": "3.25.76"
+  },
+  "optionalDependencies": {
+    "ffmpeg-static": "5.3.0",
+    "ffprobe-static": "3.1.0",
+    "sherpa-onnx-node": "2.0.1"
   },
   "engines": {
     "node": ">=22.2"
@@ -42,6 +64,8 @@
     "index.js",
     "client.js",
     "assets",
+    "brand",
+    "patches",
     "skills",
     "src",
     "vendor",

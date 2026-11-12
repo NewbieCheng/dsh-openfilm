@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>动效风格样片</title>
+  <style>
+    /* 本机直开时显示镜头墙；OpenFilm 读取下方 iframe 的 at 与 #t 时间。 */
+    body > #shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
+    body:has(> #shots) { margin: 18px; background: #151433; }
+    #shots > iframe { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; border: 0; }
+  </style>
+</head>
+<body>
+  <section id="shots" title="动效风格 · 2 组">
+    <iframe id="shot-01" title="01 · 扁平矢量 · 一点成城" src="pages/shot-01.html#t=0,10" at="0.000"></iframe>
+    <iframe id="shot-02" title="02 · 包豪斯 · 动效语法" src="pages/shot-02.html#t=0,8" at="10.000"></iframe>
+  </section>
+</body>
+</html>

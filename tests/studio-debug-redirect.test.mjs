@@ -25,6 +25,33 @@ test('loopback debug console refuses unauthenticated project creation', async ()
   }
 });
 
+test('desktop auth console accepts dsh-app origin and rejects foreign sites', async () => {
+  const console_ = await startLocalConsole({
+    port: 0,
+    templates: async () => [],
+    authHandler: async raw => {
+      const value = JSON.parse(raw);
+      assert.equal(value.action, 'status');
+      return { status: 200, body: { loggedIn: false, baseUrl: 'https://worker.bujiaban.top' } };
+    },
+  });
+  try {
+    const ok = await fetch(`${console_.url}api/auth`, {
+      method: 'POST',
+      headers: { origin: 'dsh-app://app', 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'status' }),
+    });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(await ok.json(), { loggedIn: false, baseUrl: 'https://worker.bujiaban.top' });
+    const bad = await fetch(`${console_.url}api/auth`, {
+      method: 'POST',
+      headers: { origin: 'https://evil.example', 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'status' }),
+    });
+    assert.equal(bad.status, 403);
+  } finally { await console_.close(); }
+});
+
 test('the console answers a ticketed editor address for custom-scheme pages', async () => {
   // `dsh-app://app` cannot reach /api/... on the Host, so the panel asks this
   // loopback console instead. It must be readable cross-origin (no credential

@@ -1,11 +1,21 @@
 import { createStudioRuntime } from './studio-runtime.mjs';
 import { createHostComponentDetector } from './host-components.mjs';
 import { installTemplate, listTemplates } from './official-templates.mjs';
+import {
+  balanceCachePatch,
+  balanceFromPrefs,
+  clearBalanceCachePatch,
+  createPreferencesStore,
+  onboardingCopy,
+  productMeta,
+} from './preferences.mjs';
+import { createToolInstaller } from './tool-installer.mjs';
 import { readFileSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
+import { randomBytes } from 'node:crypto';
 
 // The running Host's own build identity. A plugin reload that re-imports this
 // module rewrites the marker; a stale marker proves the process kept old code.
@@ -31,6 +41,9 @@ import { createClipTool } from './clip-tool.mjs';
 import { createAssetsTool } from './assets-tool.mjs';
 import { createExportTool } from './export-tool.mjs';
 import { createCliTool } from './cli-tool.mjs';
+import { createTranscribeTool } from './transcribe-tool.mjs';
+import { createTranscribeService } from './transcribe-service.mjs';
+import { refineTranscript } from './asr-refine.mjs';
 import { resolveOfficialShell } from './official-shell.mjs';
 import { openOfficialChatStore } from './official-chat-store.mjs';
 import { createOfficialChatRpc } from './official-chat-rpc.mjs';
@@ -43,11 +56,15 @@ import { z } from 'zod';
 import { realpath } from 'node:fs/promises';
 import { registerTemplateBridge } from './template-bridge.mjs';
 import { registerArchiveBridge } from './archive-bridge.mjs';
+import { registerAuthBridge, dispatchAuthAction } from './auth-bridge.mjs';
+import { createWorkbenchAuth, parseAuthActionBody } from './workbench-auth.mjs';
+import { createLoginRememberStore } from './login-remember.mjs';
 import { createArchiveWatcher } from './workspace-archive.mjs';
 import { createPluginLog } from './plugin-log.mjs';
 import { createBridgeTrace } from './bridge-trace.mjs';
 import { openProjectPermissions, FULL_ACCESS, WORKSPACE_WRITE } from './official-permission.mjs';
 import { openTurnPolicy } from './official-turn-policy.mjs';
+import { createProjectFiles } from './project-files.mjs';
 
 /**
  * Host-only route and Studio lifecycle. `createProxy` receives the private
@@ -74,6 +91,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // The one live view of DSH's durable archive set. Optional: a profile without
   // the Workspace registry reports `available: false` instead of guessing.
   const archive = createArchiveWatcher(ctx);
+  const workbenchAuth = createWorkbenchAuth({ dev: process.env.NO996_OPENFILM_DEV === '1' });
+  const loginRemember = createLoginRememberStore();
   let conversationsPromise;
   let conversations;
   let permissionsPromise;
@@ -82,7 +101,10 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   let officialStorePromise;
   let lastProxy;
   let debugBridge;
-  const detectHostComponents = createHostComponentDetector();
+  // The installer's resolved path wins over PATH so a downloaded or packaged
+  // binary is what actually gets probed and, later, invoked.
+  const toolInstaller = createToolInstaller({ home: process.env.DSH_HOME || join(homedir(), '.dsh') });
+  const detectHostComponents = createHostComponentDetector({ resolve: name => toolInstaller.resolve(name) });
   let componentCheck;
   // Write the preset activation result once per Host start so it can be checked
   // without a browser session (see preset-report.mjs).
@@ -105,12 +127,36 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       templates: () => listTemplates(templatesRoot),
       // The right-side browser has no DSH cookie, so /editor hands it a one-use
       // ticket instead of a cookie-gated URL. Minted in-process, never logged.
+      // Desktop panel asks this before any Host bootstrap. Warm the Studio and
+      // mint a ticket here — returning null just because warm finished late is
+      // what produced `HTTP 503 @ dsh-app://app (console)` after login.
       editorUrl: async () => {
-        if (disposed || !lastProxy) return null;
+        if (disposed) return null;
         try {
-          const proxy = await lastProxy;
+          await runtime.ensureStarted();
+          if (disposed || !upstream) return null;
+          const proxy = await proxyFor(webOrigin);
           return proxy?.issueTicket?.()?.url ?? null;
         } catch { return null; }
+      },
+      // Desktop panel (`dsh-app://app`) cannot reach Host /api routes; auth goes
+      // through this loopback console. Tokens stay on the Host.
+      authHandler: async raw => {
+        if (disposed) return { status: 503, body: { error: 'UNAVAILABLE' } };
+        try {
+          const value = parseAuthActionBody(raw);
+          const result = await dispatchAuthAction(workbenchAuth, value);
+          return { status: 200, body: result };
+        } catch (error) {
+          const status = Number(error?.status) || 400;
+          return {
+            status: status >= 100 && status <= 599 ? status : 400,
+            body: {
+              error: String(error?.code || 'AUTH'),
+              message: String(error?.message || '请求失败').slice(0, 200),
+            },
+          };
+        }
       },
     });
     debugBridge.catch(() => { debugBridge = undefined; });
@@ -135,6 +181,39 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     if (disposed || upstream !== studio) throw new Error('Project unavailable');
     return { projectId, path };
   }
+  // Transcript files: an inline picture is read from a project Studio still lists,
+  // and a product is handed to the operating system instead of the browser. Both
+  // resolve the project through verifyOfficialProject, so a stale ID opens nothing.
+  const projectFiles = createProjectFiles({ resolveProject: verifyOfficialProject });
+  const preferences = createPreferencesStore();
+  const projectParentDir = async (proxy) => {
+    const projects = await proxy.listProjects().catch(() => []);
+    return projects.length ? dirname(projects[0].path) : join(homedir(), 'OpenFilm');
+  };
+  const createBlankOfficialProject = async (proxy) => {
+    const parentDir = await projectParentDir(proxy);
+    await mkdir(parentDir, { recursive: true });
+    const target = join(parentDir, `自定义-${randomBytes(3).toString('hex')}`);
+    await mkdir(target);
+    const project = await proxy.createProject(target);
+    if (!project || typeof project.id !== 'string' || typeof project.path !== 'string') {
+      throw Object.assign(new Error('Studio returned an invalid project'), { code: 'TEMPLATE_REGISTRATION_UNCERTAIN' });
+    }
+    return { projectId: project.id, path: project.path };
+  };
+  const finishOnboardingProject = async (templateId, created, presets) => {
+    const extra = {};
+    if (presets && presets.ratio !== undefined) extra.customRatio = presets.ratio;
+    if (presets && presets.seconds !== undefined) extra.customSeconds = Number(presets.seconds);
+    if (presets && presets.language !== undefined) extra.customLanguage = presets.language;
+    const prefs = await preferences.set({
+      onboardingCompleted: true,
+      defaultTemplateId: templateId,
+      lastProjectId: created.projectId,
+      ...extra,
+    });
+    return { ...created, prefs, onboarding: onboardingCopy(templateId, presets) };
+  };
   const officialStore = () => {
     if (disposed) throw new Error('Studio disposed');
     if (!officialStorePromise) {
@@ -143,6 +222,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     }
     return officialStorePromise;
   };
+  // A failure reason for the log, never a filesystem path (the log is shared).
+  const safeDetail = error => String(error?.message ?? '').replace(/[A-Za-z]:[\\/][^\s"']*/g, '[path]').slice(0, 160);
   const officialRpc = async (channel, payload) => {
     if (disposed) throw new Error('Studio disposed');
     if (channel === 'agent:prompt') {
@@ -163,14 +244,25 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       // for this project and the preset DSH itself reports as in force.
       const projectId = typeof payload?.projectId === 'string' ? payload.projectId : '';
       if (!/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw Object.assign(new Error('unknown project'), { code: 'PERMISSION_INPUT' });
-      await verifyOfficialProject(projectId);
-      const store = await permissions();
-      const sessionId = await boundSession(projectId);
-      const remembered = store.remembered(projectId) ?? null;
-      const current = sessionId ? store.current(sessionId) ?? null : null;
+      // The proxy resolved this project for this very request. Repeat it as
+      // defence in depth, but never let a second lookup cost the menu its row:
+      // a vanished row is indistinguishable from "no permission" in the page.
+      try { await verifyOfficialProject(projectId); }
+      catch (error) { void log.warn('permission-project-unverified', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40), detail: safeDetail(error) }); }
+      let store = null;
+      try { store = await permissions(); }
+      catch (error) { void log.warn('permission-store-failed', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40), detail: safeDetail(error) }); }
+      let sessionId = null;
+      try { sessionId = await boundSession(projectId); }
+      catch (error) { void log.warn('permission-session-failed', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40), detail: safeDetail(error) }); }
+      const remembered = store ? store.remembered(projectId) ?? null : null;
+      // The menu only draws the row when it has a value, so "no Session yet" (or
+      // a Session that DSH reports nothing for) must not read as "no permission":
+      // fall back to the decision and then to the default the bridge applies.
+      const current = (store && sessionId ? store.current(sessionId) : null) ?? remembered ?? FULL_ACCESS;
       return {
-        available: store.available(), decided: remembered !== null, remembered, current,
-        names: store.names(), fullAccess: FULL_ACCESS, workspace: WORKSPACE_WRITE,
+        available: store ? store.available() : false, decided: remembered !== null, remembered, current,
+        names: store ? store.names() : [], fullAccess: FULL_ACCESS, workspace: WORKSPACE_WRITE,
       };
     }
     if (channel === 'agent:permission-set') {
@@ -178,9 +270,18 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const preset = payload?.preset;
       if (!/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw Object.assign(new Error('unknown project'), { code: 'PERMISSION_INPUT' });
       if (preset !== FULL_ACCESS && preset !== WORKSPACE_WRITE) throw Object.assign(new Error('unknown preset'), { code: 'PERMISSION_INPUT' });
-      await verifyOfficialProject(projectId);
-      const store = await permissions();
-      const sessionId = await boundSession(projectId);
+      let store;
+      try {
+        await verifyOfficialProject(projectId);
+        store = await permissions();
+      } catch (error) {
+        // A structured failure the page can show beats a bare 503: the row is
+        // there, so the person who clicks it deserves a reason.
+        void log.warn('permission-set-unavailable', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40), detail: safeDetail(error) });
+        return { ok: false, preset: null, applied: false, error: String(error?.code ?? 'PERMISSION_STORE_UNAVAILABLE'), message: safeDetail(error) };
+      }
+      let sessionId = null;
+      try { sessionId = await boundSession(projectId); } catch { sessionId = null; }
       try {
         // Before the first message there is no Session to change, so the answer is
         // remembered and applied by `resume` on the next prompt.
@@ -224,19 +325,157 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       if (!componentCheck) componentCheck = detectHostComponents().finally(() => { componentCheck = undefined; });
       return componentCheck;
     }
-    if (channel === 'template:list') {
-      return { templates: await listTemplates(templatesRoot) };
+    if (
+      channel === 'auth:status' || channel === 'auth:logout' || channel === 'auth:action' || channel === 'account:balance'
+      || channel === 'auth:remember-get' || channel === 'auth:remember-set' || channel === 'auth:remember-clear'
+    ) {
+      // Login + account panel live inside the official shell. Tokens stay on Host.
+      if (channel === 'auth:remember-get') {
+        const remembered = await loginRemember.get();
+        return {
+          enabled: remembered.enabled === true && Boolean(remembered.account),
+          account: remembered.account || '',
+          // Password only for autofill on this machine's login form; never log it.
+          password: remembered.enabled ? (remembered.password || '') : '',
+        };
+      }
+      if (channel === 'auth:remember-set') {
+        const body = payload && typeof payload === 'object' ? payload : {};
+        if (body.enabled === false || body.clear === true) return loginRemember.clear();
+        await loginRemember.set({
+          account: body.account,
+          password: body.password,
+          enabled: body.enabled !== false,
+        });
+        return { ok: true, enabled: true, account: String(body.account || '').trim().slice(0, 160) };
+      }
+      if (channel === 'auth:remember-clear') {
+        return loginRemember.clear();
+      }
+      if (channel === 'auth:status') {
+        const status = await workbenchAuth.status();
+        const wallet = balanceFromPrefs(await preferences.get());
+        return {
+          loggedIn: status.loggedIn === true,
+          dev: status.dev === true,
+          account: typeof status.account === 'string' ? status.account : '',
+          displayName: typeof status.displayName === 'string' ? status.displayName : '',
+          // Chip uses cached available points (permanent + period). Fresh pull is account:balance.
+          credits: wallet.available_points,
+          balance: wallet,
+        };
+      }
+      if (channel === 'account:balance') {
+        const refresh = !(payload && typeof payload === 'object' && payload.refresh === false);
+        const cached = balanceFromPrefs(await preferences.get());
+        if (!refresh) return { ...cached, stale: false, source: 'cache' };
+        if (workbenchAuth.dev) {
+          const live = await workbenchAuth.balance();
+          await preferences.set(balanceCachePatch(live));
+          return { ...balanceFromPrefs(await preferences.get()), stale: false, source: 'dev', dev: true };
+        }
+        try {
+          const live = await workbenchAuth.balance();
+          await preferences.set(balanceCachePatch(live));
+          return { ...balanceFromPrefs(await preferences.get()), stale: false, source: 'live' };
+        } catch (error) {
+          return {
+            ...cached,
+            stale: true,
+            source: cached.cached_at ? 'cache' : 'none',
+            error: String(error?.code || 'BALANCE'),
+            message: String(error?.message || '积分暂不可用').slice(0, 200),
+          };
+        }
+      }
+      if (channel === 'auth:logout') {
+        // A dev session has nothing to log out of; clearing it would only bounce
+        // the person back to a gate that accepts nothing.
+        if (workbenchAuth.dev) return { loggedIn: true, dev: true };
+        await workbenchAuth.logout();
+        await preferences.set(clearBalanceCachePatch());
+        return { loggedIn: false };
+      }
+      if (workbenchAuth.dev) return { ok: true, dev: true };
+      const action = payload && typeof payload === 'object' ? payload : {};
+      try {
+        return await dispatchAuthAction(workbenchAuth, action);
+      } catch (error) {
+        // Page needs the workbench message, not a bare 503. Tokens never leave Host.
+        return {
+          ok: false,
+          error: String(error?.code || 'AUTH'),
+          message: String(error?.message || '请求失败').slice(0, 200),
+          ...(error?.details && typeof error.details === 'object' ? { details: error.details } : {}),
+        };
+      }
     }
-    if (channel === 'template:create') {
+    if (channel === 'system:check') return systemSnapshot();
+    if (channel === 'system:install') {
+      const tool = payload && typeof payload === 'object' && typeof payload.tool === 'string' ? payload.tool : 'all';
+      startSystemInstall(tool);
+      return systemSnapshot();
+    }
+    if (channel === 'asr:status' || channel === 'asr:install') {
+      // Same service as /api/no996-openfilm/asr, exposed over the one bridge the
+      // overlays are allowed to use. Install starts once and joins the download.
+      const state = await transcribeService.status();
+      if (channel === 'asr:install' && !state.ready) void transcribeService.setup().catch(() => undefined);
+      return {
+        ready: state.ready, dir: state.dir, bytesTotal: state.bytesTotal, bytesOnDisk: state.bytesOnDisk,
+        progress: state.progress, installing: state.installing || (channel === 'asr:install' && !state.ready),
+        engine: state.engine,
+      };
+    }
+    if (channel === 'prefs:get') {
+      return { prefs: await preferences.get() };
+    }
+    if (channel === 'prefs:set') {
+      const prefs = await preferences.set(payload && typeof payload === 'object' ? payload : {});
+      return { prefs };
+    }
+    if (channel === 'template:list') {
+      const templates = await listTemplates(templatesRoot);
+      const prefs = await preferences.get();
+      const cards = templates.map((item) => {
+        const meta = productMeta(item.id);
+        return meta ? { ...item, ...meta } : item;
+      });
+      const custom = productMeta('custom');
+      cards.push({
+        id: 'custom',
+        title: custom.productTitle,
+        description: custom.productBlurb,
+        mode: 'blank',
+        entry: '',
+        prompt: '',
+        ...custom,
+      });
+      return { templates: cards, prefs };
+    }
+    if (channel === 'template:create' || channel === 'project:create-blank') {
       const proxy = await lastProxy;
       if (!proxy || typeof proxy.createProject !== 'function') throw Object.assign(new Error('Studio is not ready'), { code: 'TEMPLATE_UNAVAILABLE' });
-      const chosen = (await listTemplates(templatesRoot)).find(item => item.id === payload?.templateId);
+      const templateId = channel === 'project:create-blank' ? 'custom' : payload?.templateId;
+      if (templateId === 'custom') {
+        const presets = payload && typeof payload === 'object'
+          ? { ratio: payload.ratio, seconds: payload.seconds, language: payload.language }
+          : undefined;
+        return finishOnboardingProject('custom', await createBlankOfficialProject(proxy), presets);
+      }
+      const chosen = (await listTemplates(templatesRoot)).find(item => item.id === templateId);
       if (!chosen) throw Object.assign(new Error('Unknown template'), { code: 'TEMPLATE_INPUT' });
       // New films live beside the user's existing ones; with no project yet, a
       // folder under the home directory keeps the same one-project-one-folder shape.
-      const projects = await proxy.listProjects().catch(() => []);
-      const parentDir = projects.length ? dirname(projects[0].path) : join(homedir(), 'OpenFilm');
-      return { ...(await installTemplate({ root: templatesRoot, id: chosen.id, parentDir, createProject: target => proxy.createProject(target), titleFor: () => chosen.title })), prompt: chosen.prompt };
+      const parentDir = await projectParentDir(proxy);
+      const created = await installTemplate({
+        root: templatesRoot,
+        id: chosen.id,
+        parentDir,
+        createProject: target => proxy.createProject(target),
+        titleFor: () => chosen.title,
+      });
+      return { ...(await finishOnboardingProject(chosen.id, created)), prompt: chosen.prompt };
     }
     // chat:load/save and the archive channels share the same Host-side state:
     // an archived project withholds history and refuses writes, and both
@@ -263,7 +502,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   };
   const projectConversations = () => {
     if (!conversationsPromise) {
-      conversationsPromise = openProjectConversations(ctx, { z, archived: id => archive.isArchived(id), onFailure: (event, fields) => { void log.warn(event, fields); } }).then(opened => { conversations = opened; return opened; });
+      conversationsPromise = openProjectConversations(ctx, { z, archived: id => archive.isArchived(id), onFailure: (event, fields) => { void log.warn(event, fields); }, onCreated: async sessionId => { try { const store = await permissions(); await store.applyDefault(sessionId); } catch { /* the default is an upgrade, never a precondition */ } } }).then(opened => { conversations = opened; return opened; });
       conversationsPromise.catch(() => { conversationsPromise = undefined; });
     }
     return conversationsPromise;
@@ -272,8 +511,11 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // that never opens a project never touches the permission domain.
   const permissions = () => {
     if (!permissionsPromise) {
-      permissionsPromise = openProjectPermissions(ctx, { z });
-      permissionsPromise.catch(() => { permissionsPromise = undefined; });
+      permissionsPromise = openProjectPermissions(ctx, { z, onFailure: (event, fields) => { void log.warn(event, fields); } });
+      permissionsPromise.catch(error => {
+        void log.warn('permission-store-open-failed', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40), detail: safeDetail(error) });
+        permissionsPromise = undefined;
+      });
     }
     return permissionsPromise;
   };
@@ -447,6 +689,112 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // startup. Opening a project in the video panel resolves or creates its
   // conversation, so a missing hint can never block the UI.
   const askAgent = createDshAskAgent({ llm: ctx.llm, agentDefaultModel: ctx.agentDefaultModel });
+
+  // Local transcription. The engine that hears runs on this CPU; the model that
+  // polishes product names is the session's. Registered here rather than with the
+  // other tools because that polish pass needs askAgent, which is built above the
+  // Studio runtime and below the tool list.
+  const transcribeService = createTranscribeService({ logger: log });
+  const unregisterTranscribe = ctx.tools.register(
+    createTranscribeTool({
+      isProjectAgent,
+      projectOf: projectOfAgent,
+      service: transcribeService,
+      refine: ({ segments, signal }) => refineTranscript({ ask: askAgent, segments, signal }),
+    }),
+    { when: ({ agent }) => isProjectAgent(agent) },
+  );
+  // The install path the panel can use without a chat turn: a fresh machine needs
+  // 228 MB of weights, and the person should be able to start that from the UI.
+  const unregisterTranscribeRoute = ctx.webServer.register({
+    kind: 'exact', path: '/api/no996-openfilm/asr',
+    async handler(req, res) {
+      res.setHeader('cache-control', 'no-store');
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end('{}'); return; }
+      const admission = ctx.connection.admit({ headers: req.headers });
+      if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('{}'); return; }
+      let action = 'status';
+      try {
+        const chunks = [];
+        for await (const chunk of req) { chunks.push(chunk); if (Buffer.concat(chunks).byteLength > 4096) break; }
+        const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+        if (parsed?.action === 'install') action = 'install';
+      } catch { /* a body we cannot read is a status request */ }
+      try {
+        const state = await transcribeService.status();
+        if (action === 'install' && !state.ready) void transcribeService.setup().catch(() => undefined);
+        res.writeHead(200).end(JSON.stringify({
+          ready: state.ready, dir: state.dir, bytesTotal: state.bytesTotal,
+          bytesOnDisk: state.bytesOnDisk, progress: state.progress,
+          installing: state.installing || (action === 'install' && !state.ready), engine: state.engine,
+        }));
+      } catch (error) {
+        res.writeHead(500).end(JSON.stringify({ error: String(error?.message || error).slice(0, 200) }));
+      }
+    },
+  });
+  // One view for the wizard: what is installed, what is downloading, what is
+  // already usable. The detector answers "can it run"; the installer answers
+  // "is something arriving and what went wrong".
+  const systemSnapshot = async () => {
+    const [components, installer, asrState] = await Promise.all([
+      detectHostComponents(),
+      toolInstaller.snapshot(),
+      transcribeService.status().catch(() => ({ ready: false })),
+    ]);
+    const asr = {
+      ready: asrState.ready === true,
+      bytesTotal: Number(asrState.bytesTotal) || 0,
+      bytesOnDisk: Number(asrState.bytesOnDisk) || 0,
+      progress: Number(asrState.progress) || 0,
+      installing: asrState.installing === true,
+      engine: typeof asrState.engine === 'string' ? asrState.engine : '',
+    };
+    return {
+      platform: components.platform,
+      tools: components.tools,
+      installer,
+      asr,
+      ready: components.tools.ffmpeg.status === 'ok' && components.tools.ffprobe.status === 'ok' && asr.ready,
+    };
+  };
+  const startSystemInstall = tool => {
+    if (tool === 'asr') { void transcribeService.setup().catch(() => undefined); return; }
+    const wanted = tool === 'ffmpeg' || tool === 'ffprobe' ? [tool] : ['ffmpeg', 'ffprobe'];
+    for (const item of wanted) void toolInstaller.install(item).catch(() => undefined);
+  };
+  const unregisterSystemCheck = ctx.webServer.register({
+    kind: 'exact', path: '/api/no996-openfilm/system/check',
+    async handler(req, res) {
+      res.setHeader('cache-control', 'no-store');
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end('{}'); return; }
+      const admission = ctx.connection.admit({ headers: req.headers });
+      if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('{}'); return; }
+      try { res.writeHead(200).end(JSON.stringify(await systemSnapshot())); }
+      catch (error) { res.writeHead(500).end(JSON.stringify({ error: String(error?.message || error).slice(0, 200) })); }
+    },
+  });
+  const unregisterSystemInstall = ctx.webServer.register({
+    kind: 'exact', path: '/api/no996-openfilm/system/install',
+    async handler(req, res) {
+      res.setHeader('cache-control', 'no-store');
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end('{}'); return; }
+      const admission = ctx.connection.admit({ headers: req.headers });
+      if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('{}'); return; }
+      let tool = 'all';
+      try {
+        const chunks = [];
+        for await (const chunk of req) { chunks.push(chunk); if (Buffer.concat(chunks).byteLength > 4096) break; }
+        const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+        if (typeof parsed?.tool === 'string') tool = parsed.tool;
+      } catch { /* an unreadable body installs everything */ }
+      try { startSystemInstall(tool); res.writeHead(200).end(JSON.stringify(await systemSnapshot())); }
+      catch (error) { res.writeHead(500).end(JSON.stringify({ error: String(error?.message || error).slice(0, 200) })); }
+    },
+  });
   const runtime = createStudioRuntime({ askAgent, ...(officialShell ? { resolveEditorDir: resolveOfficialShell } : {}), attach: async studio => {
     upstream = studio;
     return async () => {
@@ -473,7 +821,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const admission = ctx.connection.admit({ headers });
       return !('rejection' in admission) && admission.peer.id === ctx.connection.browserPeer.id;
     };
-    const pending = Promise.resolve().then(() => createProxy({ upstream, webOrigin: browserOrigin, authenticateBrowser, desktop, officialShell, log, ...(officialShell ? { officialRpc, authorizeOfficialProject, attachOfficialEvents } : {}) })).then(async next => {
+    const pending = Promise.resolve().then(() => createProxy({ upstream, webOrigin: browserOrigin, authenticateBrowser, desktop, officialShell, log, ...(officialShell ? { officialRpc, authorizeOfficialProject, attachOfficialEvents, readProjectFile: projectFiles.read, openProjectFile: projectFiles.open } : {}) })).then(async next => {
       if (!next || typeof next.bootstrap !== 'function' || typeof next.close !== 'function' || typeof next.editorOrigin !== 'string' || disposed) {
         await next?.close?.();
         throw new Error('Studio proxy is unavailable');
@@ -485,13 +833,44 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     pending.catch(() => { if (proxies.get(browserOrigin) === pending) proxies.delete(browserOrigin); });
     return pending;
   }
-  const unregisterTemplateBridge = registerTemplateBridge(ctx, {
+  // DSH webServer.register accepts ONE route and throws on duplicate path. If
+  // setup fails after a route is mounted, Cordis never gets a disposer and the
+  // path leaks — the next enable then fails with "duplicate exact route".
+  // Track every route disposer and roll back on throw; dispose sync-unregisters
+  // routes before any await so a re-enable cannot race a leftover path.
+  const routeDisposers = [];
+  const trackRoute = dispose => {
+    routeDisposers.push(dispose);
+    return dispose;
+  };
+  const rollbackRoutes = () => {
+    while (routeDisposers.length) {
+      try { routeDisposers.pop()(); } catch { /* already gone */ }
+    }
+  };
+  let unregisterTemplateBridge;
+  let unregisterAuthBridge;
+  let unregisterArchiveBridge;
+  let unregister;
+  let unregisterAttachment;
+  let unregisterClientLog;
+  let unregisterBootstrap;
+  let unregisterStandalone;
+  let unregisterTemplatesPage;
+  let unregisterDebugUrl;
+  try {
+  unregisterTemplateBridge = trackRoute(registerTemplateBridge(ctx, {
     webOrigin,
     list: () => listTemplates(templatesRoot),
     create: templateId => officialRpc('template:create', { templateId }),
     isDisposed: () => disposed,
-  });
-  const unregisterArchiveBridge = registerArchiveBridge(ctx, {
+  }));
+  unregisterAuthBridge = trackRoute(registerAuthBridge(ctx, {
+    webOrigin,
+    auth: workbenchAuth,
+    isDisposed: () => disposed,
+  }));
+  unregisterArchiveBridge = trackRoute(registerArchiveBridge(ctx, {
     webOrigin,
     state: archiveState,
     archive: async projectId => {
@@ -513,8 +892,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       return { sessionId, archived: false, available: archive.available };
     },
     isDisposed: () => disposed,
-  });
-  const unregister = ctx.webServer.register({
+  }));
+  unregister = trackRoute(ctx.webServer.register({
     kind: 'exact', path: '/api/no996-openfilm/diagnose',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -578,37 +957,38 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       });
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
     },
-  });
+  }));
   // A picture the agent made, served to the panel that shows it.
-//
-// The frame tool stores what Studio drew as a DSH attachment (`sha256:<hex>` under
-// <DSH_HOME>/attachments/v1/objects). The chat transcript then points at it with
-// `![](/api/no996-openfilm/attachment?id=<hex>)`, which is this route: the panel's own origin,
-// a validated 64-hex id, and a path that cannot leave the object store.
-const unregisterAttachment = ctx.webServer.register({
-  kind: 'exact', path: '/api/no996-openfilm/attachment',
-  async handler(req, res) {
-    res.setHeader('cache-control', 'private, max-age=600');
-    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { allow: 'GET, HEAD' }).end(); return; }
-    const admission = ctx.connection.admit({ headers: req.headers });
-    if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end(); return; }
-    const raw = String(new URL(req.url ?? '/', 'http://localhost').searchParams.get('id') ?? '').trim().toLowerCase();
-    const id = raw.replace(/^sha256:/, '');
-    if (!/^[a-f0-9]{64}$/.test(id)) { res.writeHead(400, { 'content-type': 'text/plain' }).end('bad attachment id'); return; }
-    const home = process.env.DSH_HOME || join(homedir(), '.dsh');
-    const file = join(home, 'attachments', 'v1', 'objects', id.slice(0, 2), id);
-    let bytes;
-    try { bytes = await readFile(file); } catch { res.writeHead(404, { 'content-type': 'text/plain' }).end('not found'); return; }
-    const type = bytes[0] === 0x89 && bytes[1] === 0x50 ? 'image/png'
-      : bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg'
-      : bytes.subarray(0, 4).toString('latin1') === 'RIFF' ? 'image/webp' : 'application/octet-stream';
-    res.writeHead(200, { 'content-type': type, 'content-length': bytes.byteLength }).end(req.method === 'HEAD' ? undefined : bytes);
-  },
-});
-const unregisterBootstrap = ctx.webServer.register({
-    // Page-side events worth keeping when a person reports "it broke": the
-    // recovery card appeared, the button was pressed. Enum-only, 512 bytes, and
-    // only from the authenticated DSH browser — this is not a general log sink.
+  //
+  // The frame tool stores what Studio drew as a DSH attachment (`sha256:<hex>` under
+  // <DSH_HOME>/attachments/v1/objects). The chat transcript then points at it with
+  // `![](/api/no996-openfilm/attachment?id=<hex>)`, which is this route: the panel's own origin,
+  // a validated 64-hex id, and a path that cannot leave the object store.
+  unregisterAttachment = trackRoute(ctx.webServer.register({
+    kind: 'exact', path: '/api/no996-openfilm/attachment',
+    async handler(req, res) {
+      res.setHeader('cache-control', 'private, max-age=600');
+      if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { allow: 'GET, HEAD' }).end(); return; }
+      const admission = ctx.connection.admit({ headers: req.headers });
+      if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end(); return; }
+      const raw = String(new URL(req.url ?? '/', 'http://localhost').searchParams.get('id') ?? '').trim().toLowerCase();
+      const id = raw.replace(/^sha256:/, '');
+      if (!/^[a-f0-9]{64}$/.test(id)) { res.writeHead(400, { 'content-type': 'text/plain' }).end('bad attachment id'); return; }
+      const home = process.env.DSH_HOME || join(homedir(), '.dsh');
+      const file = join(home, 'attachments', 'v1', 'objects', id.slice(0, 2), id);
+      let bytes;
+      try { bytes = await readFile(file); } catch { res.writeHead(404, { 'content-type': 'text/plain' }).end('not found'); return; }
+      const type = bytes[0] === 0x89 && bytes[1] === 0x50 ? 'image/png'
+        : bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg'
+        : bytes.subarray(0, 4).toString('latin1') === 'RIFF' ? 'image/webp' : 'application/octet-stream';
+      res.writeHead(200, { 'content-type': type, 'content-length': bytes.byteLength }).end(req.method === 'HEAD' ? undefined : bytes);
+    },
+  }));
+  // Page-side events worth keeping when a person reports "it broke": the
+  // recovery card appeared, the button was pressed. Enum-only, 512 bytes, and
+  // only from the authenticated DSH browser — this is not a general log sink.
+  // DSH register() takes one route only; client-log and bootstrap must be separate.
+  unregisterClientLog = trackRoute(ctx.webServer.register({
     kind: 'exact', path: '/api/no996-openfilm/client-log',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -633,7 +1013,8 @@ const unregisterBootstrap = ctx.webServer.register({
         finish(204);
       });
     },
-  }, {
+  }));
+  unregisterBootstrap = trackRoute(ctx.webServer.register({
     kind: 'exact', path: '/api/no996-openfilm/bootstrap',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -686,8 +1067,8 @@ const unregisterBootstrap = ctx.webServer.register({
         if (!res.writableEnded) res.end(`Studio is unavailable (${code})`);
       }
     },
-  });
-  const unregisterStandalone = ctx.webServer.register({
+  }));
+  unregisterStandalone = trackRoute(ctx.webServer.register({
     kind: 'exact', path: '/no996-openfilm/standalone',
     async handler(req, res) {
       // A plain browser window for layout work. Same DSH origin, so it uses the
@@ -718,8 +1099,8 @@ const unregisterBootstrap = ctx.webServer.register({
         + '</body></html>';
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-length': Buffer.byteLength(page) }).end(page);
     },
-  });
-  const unregisterTemplatesPage = ctx.webServer.register({
+  }));
+  unregisterTemplatesPage = trackRoute(ctx.webServer.register({
     kind: 'exact', path: '/no996-openfilm/templates',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -734,8 +1115,8 @@ const unregisterBootstrap = ctx.webServer.register({
       const html = `<!doctype html><meta charset=\"utf-8\"><title>OpenFilm 模板</title><style>body{font:14px system-ui,sans-serif;background:#171717;color:#e8e8e8;margin:24px}li{margin:16px 0;padding:12px;border:1px solid #333;border-radius:8px;list-style:none}button{margin-top:8px;padding:6px 12px;border-radius:6px;border:1px solid #555;background:#2a2a2a;color:inherit;cursor:pointer}p{margin:6px 0;opacity:.8}#msg{margin-top:16px;color:#f88}</style><h1>OpenFilm 模板</h1><ul>${cards || '<li>没有可用模板</li>'}</ul><div id=\"msg\"></div><script>document.addEventListener('click',async e=>{const b=e.target.closest('button[data-id]');if(!b)return;b.disabled=true;b.textContent='创建中…';try{const r=await fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'template:create',payload:{templateId:b.dataset.id}})});const d=await r.json();if(!d||!d.projectId)throw new Error((d&&d.error)||('HTTP '+r.status));if(d.prompt){try{localStorage.setItem('no996.openfilm.templatePrompt',d.prompt)}catch(_){}}location.href='/projects/'+d.projectId}catch(err){document.getElementById('msg').textContent='创建失败：'+(err&&err.message||err);b.disabled=false;b.textContent='用这个模板建项目'}})</script>`;
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(html) }).end(html);
     },
-  });
-  const unregisterDebugUrl = ctx.webServer.register({
+  }));
+  unregisterDebugUrl = trackRoute(ctx.webServer.register({
     kind: 'exact', path: '/api/no996-openfilm/debug-url',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -757,7 +1138,7 @@ const unregisterBootstrap = ctx.webServer.register({
         if (data.ticket) {
           if (!debugBridge) {
             debugBridge = redeemStudioSession(data.editorOrigin, data.ticket)
-              .then(cookie => startStudioDebug({ editorOrigin: data.editorOrigin, sessionCookie: cookie }));
+              .then(cookie => startStudioDebug({ editorOrigin: data.editorOrigin, sessionCookie: cookie, officialShell }));
             debugBridge.catch(() => { debugBridge = undefined; });
           }
           url = (await debugBridge).url;
@@ -768,7 +1149,11 @@ const unregisterBootstrap = ctx.webServer.register({
         if (!res.headersSent) res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' }).end('Studio is unavailable');
       }
     },
-  });
+  }));
+  } catch (error) {
+    rollbackRoutes();
+    throw error;
+  }
   log.info('host-start', { version: HOST_VERSION, officialShell, editorPort: Number(process.env.NO996_OPENFILM_EDITOR_PORT || 47822) });
   // Warm the editor port at assembly. Otherwise the proxy only exists after the
   // first bootstrap, so opening http://<host>:47822 directly (or pasting the
@@ -802,28 +1187,29 @@ const unregisterBootstrap = ctx.webServer.register({
   return async () => {
     const closingAt = Date.now();
     disposed = true;
-    unregisterContext();
-    unregisterGuide();
+    // Drop exact routes synchronously first. An async disposer that awaits
+    // Studio shutdown before unregister would let a re-enable collide on
+    // `/api/no996-openfilm/templates` (and siblings).
+    rollbackRoutes();
+    try { unregisterContext(); } catch { /* already gone */ }
+    try { unregisterTranscribe(); } catch { /* already gone */ }
+    try { unregisterTranscribeRoute(); } catch { /* already gone */ }
+    try { unregisterSystemCheck(); } catch { /* already gone */ }
+    try { unregisterSystemInstall(); } catch { /* already gone */ }
+    try { unregisterGuide(); } catch { /* already gone */ }
     for (const unregisterTool of unregisterFilmTools) {
       try { unregisterTool(); } catch { /* already removed */ }
     }
     // Stop answering approval questions before the stream that carries them goes
     // away, so nothing is left waiting on a listener that can never reply.
     try { unregisterApprovalBridge(); } catch { /* already removed */ }
-    approvals.close();
-    unregisterTemplateBridge();
-    unregisterArchiveBridge();
-    archive.close();
-    unregisterBootstrap();
-    unregisterStandalone();
-    unregisterTemplatesPage();
-    unregisterDebugUrl();
-    unregister();
+    try { approvals.close(); } catch { /* already closed */ }
+    try { archive.close(); } catch { /* already closed */ }
     const closingDebug = debugBridge;
     debugBridge = undefined;
     closingDebug?.then(bridge => bridge.close()).catch(() => {});
-    eventHub.close();
-    bridgeTrace.close();
+    try { eventHub.close(); } catch { /* already closed */ }
+    try { bridgeTrace.close(); } catch { /* already closed */ }
     const opened = await conversationsPromise?.catch(() => undefined);
     const chat = await officialStorePromise?.catch(() => undefined);
     try { await opened?.close(); }

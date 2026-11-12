@@ -5,7 +5,7 @@
     const h = React.createElement;
     return function StudioPanel({ t, startStudio }) {
       const HOST_HTTP = typeof window !== "undefined" && /^https?:$/.test(window.location.protocol);
-      const [state, setState] = React.useState({ status: "loading" });
+      const [state, setState] = React.useState({ status: "idle" });
       const [attempt, setAttempt] = React.useState(0);
       const [silent, setSilent] = React.useState(false);
       const [diag, setDiag] = React.useState(null);
@@ -29,7 +29,7 @@
         return () => {
           live = false;
         };
-      }, []);
+      }, [HOST_HTTP]);
       React.useEffect(() => {
         const controller = new AbortController();
         setState({ status: "loading" });
@@ -38,13 +38,13 @@
         const attemptOnce = (retries) => Promise.resolve().then(() => startStudio(controller.signal)).catch(async (error) => {
           const transient = /HTTP (404|503)\b/.test(String(error?.message || error));
           if (transient && retries > 0 && !controller.signal.aborted) {
-            await new Promise((resolve) => setTimeout(resolve, 1200));
+            await new Promise((resolve) => setTimeout(resolve, 1500));
             if (controller.signal.aborted) throw error;
             return attemptOnce(retries - 1);
           }
           throw error;
         });
-        attemptOnce(2).then((result) => {
+        attemptOnce(4).then((result) => {
           if (controller.signal.aborted) return;
           const target = new URL(result.editorOrigin);
           const desktop = window.location.hostname === "app" && ["dsh-app:", "app:"].includes(window.location.protocol);
@@ -212,7 +212,7 @@
         }
       };
       let studio;
-      if (state.status === "loading") {
+      if (state.status === "loading" || state.status === "idle") {
         studio = h(
           "div",
           { role: "status", style: { padding: 24, color: "var(--dsw-alias-label-secondary)" } },
@@ -384,7 +384,11 @@
         presetMissing: "Video editing mode: not loaded \u2014",
         archiveBanner: "This project conversation is archived; its messages stay hidden until restored.",
         archiveRestore: "Restore conversation",
-        archiveRebind: "Start a new conversation"
+        archiveRebind: "Start a new conversation",
+        authChecking: "Checking sign-in\u2026",
+        loginTitle: "Sign in",
+        loggedIn: "Signed in",
+        logout: "Sign out"
       };
       const zh = {
         panel: "\u89C6\u9891\u521B\u4F5C",
@@ -399,7 +403,11 @@
         presetMissing: "\u89C6\u9891\u526A\u8F91\u6A21\u5F0F\uFF1A\u672A\u52A0\u8F7D \u2014",
         archiveBanner: "\u8FD9\u4E2A\u9879\u76EE\u7684\u4F1A\u8BDD\u5DF2\u5F52\u6863\uFF0C\u6062\u590D\u524D\u4E0D\u663E\u793A\u5386\u53F2\u6D88\u606F\u3002",
         archiveRestore: "\u6062\u590D\u4F1A\u8BDD",
-        archiveRebind: "\u65B0\u5EFA\u4F1A\u8BDD"
+        archiveRebind: "\u65B0\u5EFA\u4F1A\u8BDD",
+        authChecking: "\u6B63\u5728\u786E\u8BA4\u767B\u5F55\u72B6\u6001\u2026",
+        loginTitle: "\u767B\u5F55",
+        loggedIn: "\u5DF2\u767B\u5F55",
+        logout: "\u9000\u51FA"
       };
       const Panel = createStudioPanel(React);
       const activation = createActivationStore();

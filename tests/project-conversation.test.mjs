@@ -206,3 +206,28 @@ test('binding a project marks it as shown, so the CLI never starts Studio for it
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('a created conversation is handed to the Host so its default permission applies', async () => {
+  // The default is full access, and it is applied while the Session is live:
+  // after this point the Session is a normal one that DSH itself can change.
+  const { ctx, records } = fixture();
+  const created = [];
+  const conversations = await openProjectConversations(ctx, { z, onCreated: async id => { created.push(id); } });
+  const sessionId = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
+  assert.deepEqual(created, [sessionId]);
+  assert.equal(records.get('proj123456').sessionId, sessionId);
+});
+
+test('a failing default-permission hook never blocks the conversation', async () => {
+  const { ctx } = fixture();
+  const failures = [];
+  const conversations = await openProjectConversations(ctx, {
+    z,
+    onCreated: () => { throw new Error('permission service down'); },
+    onFailure: event => failures.push(event),
+  });
+  assert.equal(await conversations.resolve({ projectId: 'proj123456', path: projectPath }), 'session-1');
+  // The failure is reported (a Session on DSH's own preset still works) and the
+  // conversation exists either way.
+  assert.ok(failures.includes('permission-default'));
+});

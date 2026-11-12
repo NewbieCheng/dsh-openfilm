@@ -1,24 +1,41 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { shellUiInjection, shellUiVersion } from '../src/shell-extras.mjs';
 
 const html = shellUiInjection();
-const body = html.replace(/^<script>/, '').replace(/<\/script>$/, '');
+const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1]);
+const body = scripts.join('\n');
 
-test('the injected shell UI is one balanced script that parses as JavaScript', () => {
-  // It is spliced into an existing <head>, so a stray </script> or a broken
-  // expression would break the whole page rather than just the picker.
+test('the injected shell UI is balanced scripts that parse as JavaScript', () => {
+  // Spliced into an existing <head>; a stray </script> or broken expression
+  // would break the whole page rather than just the overlays.
   assert.match(html, /^<script>/);
   assert.match(html, /<\/script>$/);
-  assert.equal((html.match(/<\/script>/g) || []).length, 1);
+  assert.equal((html.match(/<\/script>/g) || []).length, 3);
+  assert.equal(scripts.length, 3);
   assert.match(body, /no996-template-picker/);
   assert.match(body, /\/__dsh\/official-rpc/);
   assert.match(body, /__dsh\/shell-version/);
   assert.match(body, /function watchVersion\(\)/);
-  assert.doesNotMatch(html, /\$\{/);
-  // Throws on a syntax error, which is exactly the failure mode we cannot see
-  // without a browser.
-  new Function(body);
+  assert.match(body, /no996-shell-login/);
+  assert.match(body, /auth:action/);
+  assert.match(body, /__NOF_MOUNT_CITY__/);
+  // The city block is generated upstream code and legitimately uses template literals;
+  // the hand-written blocks must not contain unresolved placeholders.
+  assert.doesNotMatch(scripts.filter(script => !script.includes('__NOF_MOUNT_CITY__')).join('\n'), /\$\{/);
+  for (const script of scripts) new Function(script);
+});
+
+test('the login city module is generated and mountable', () => {
+  const city = readFileSync(new URL('../assets/login-city.js', import.meta.url), 'utf8');
+  assert.match(city, /window\.__NOF_MOUNT_CITY__ = async function \(root\)/);
+  assert.match(city, /const renderAt = async \(t\) =>/);
+  // 登录页要隐藏内置太阳/光芒，改画会东升西落的日与月。
+  assert.match(city, /id', 'nof-sun'/);
+  assert.match(city, /id', 'nof-rays'/);
+  // file:// 与 dsh-app:// 下都没有可 fetch 的源，cues 必须内联。
+  assert.doesNotMatch(city, /fetch\(/);
 });
 
 test('picker lists templates beside the disabled original suggestion', () => {
@@ -27,14 +44,9 @@ test('picker lists templates beside the disabled original suggestion', () => {
   assert.match(body, /el\.textContent='选择模板'/);
   assert.match(body, /wrap\.nextElementSibling!==host/);
   assert.match(body, /holder\.cloneNode\(true\)/);
-  assert.match(body, /location\.reload\(\)/);
-  assert.match(body, /刷新界面/);
-  assert.match(body, /function placeReload\(\)/);
-  assert.match(body, /data-no996-in/);
-  assert.match(body, /'剪辑'/);
-  assert.match(body, /bar\.style\.flexWrap='nowrap'/);
-  assert.match(body, /bar\.insertBefore\(reload,child\)/);
-  assert.match(body, /function findHeaderBar\(el\)/);
+  // Account chip + reload moved into OpenFilm React (WorkbenchAccountControls).
+  assert.match(body, /WorkbenchAccountControls/);
+  assert.match(body, /data-workbench-account/);
   assert.match(body, /基于 OpenFilm 开发/);
   assert.match(body, /function tuneAbout\(\)/);
   assert.match(body, /'GitHub'/);
@@ -47,23 +59,50 @@ test('picker lists templates beside the disabled original suggestion', () => {
   assert.match(body, /items\.forEach/);
   assert.match(body, /aria-checked/);
   assert.match(body, /cancel\.textContent='取消'/);
+  assert.match(body, /create\.textContent='用这个开工'/);
+  assert.match(body, /你想剪哪种视频？/);
+  assert.match(body, /#FF6400/);
+  assert.match(body, /no996-bay-in/);
   assert.match(body, /no996-template-modal/);
   assert.match(body, /role','dialog'|aria-modal/);
   assert.match(body, /no996-template-picker/);
   assert.match(body, /whiteSpace='nowrap'/);
   assert.match(body, /function disableExtras\(\)/);
   assert.match(body, /'更多技能','从示例开始'/);
-  assert.match(body, /repeat\(auto-fill,minmax\(190px,1fr\)\)/);
+  assert.match(body, /no996-bay-rail/);
+  assert.match(body, /min\(1080px,96vw\)/);
   assert.match(body, /openFlag/);
+  assert.doesNotMatch(body, /create\.style\.cssText=[\s\S]{0,200}#3b82f6/);
   assert.doesNotMatch(body, /rpc\('editor:link'/);
   assert.match(body, /wrap\.style\.display='none';[\s\S]{0,120}location\.href/);
   assert.doesNotMatch(body, /wrap\.style\.cssText='position:fixed/);
 });
 
-test('the picker only talks over the fixed bridge channels', () => {
+test('the overlays only talk over the fixed bridge channels', () => {
   const channels = [...body.matchAll(/rpc\('([^']+)'/g)].map(match => match[1]);
-  assert.deepEqual([...new Set(channels)].sort(), ['client:log', 'template:create', 'template:list']);
-  // No project path or session identity may be constructed in the page.
+  assert.deepEqual([...new Set(channels)].sort(), [
+    'asr:install',
+    'auth:action',
+    'auth:remember-clear',
+    'auth:remember-get',
+    'auth:remember-set',
+    'auth:status',
+    'client:log',
+    'environment:check',
+    'prefs:get',
+    'project:create-blank',
+    'system:check',
+    'system:install',
+    'template:create',
+    'template:list',
+  ]);
+  // Account chip lives in OpenFilm React; login overlay still talks auth over the bridge.
+  assert.doesNotMatch(body, /id='no996-account'/);
+  assert.match(body, /auth:status/);
+  assert.match(body, /no996-openfilm:auth/);
+  assert.match(body, /no996-auth-changed/);
+  // Compact login uses the white brand mark, not a floating panel chip.
+  assert.match(body, /logo-symbol-white|今天不加班AI 深色模式Logo|dark 白橙/);
   assert.doesNotMatch(body, /sessionId|projectPath|\/api\/no996-openfilm/);
 });
 

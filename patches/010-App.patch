@@ -1,0 +1,76 @@
+diff --git a/apps/desktop/chat/src/App.tsx b/apps/desktop/chat/src/App.tsx
+index 9c7041b..0abcab7 100644
+--- a/apps/desktop/chat/src/App.tsx
++++ b/apps/desktop/chat/src/App.tsx
+@@ -10,6 +10,7 @@ import { ArrowDown, Coins, CornerDownLeft, LibraryBig, Loader2, Plus, Square } f
+ import { buildPromptDisplay, type Turn } from '@openfilm/shared';
+ import { useT, useUiLocale } from '@/i18n';
+ import { ConversationBar } from '@/components/ConversationSessionBar';
++import { OnboardingGate } from '@/components/OnboardingGate';
+ import { ProjectConversation, TurnUndoContext, primeStoredTranscript } from '@/components/ProjectConversation';
+ import type { ProjectVersion } from '@/components/project-version';
+ import { ProjectStarters } from '@/components/ProjectStarters';
+@@ -69,6 +70,7 @@ import { studioRefsFromTransfer, transferHasStudioRefs } from '@/lib/studio-tran
+ import { agentModelSummary, agentOptions, currentAgent, effectivePrefs, offeredOption, useLocalAgents } from '@/state/local-agent-store';
+ import { useLiveActivityFromStore } from '@/lib/live-activity';
+ import { loadLastSession, loadSessions, newSession, saveLastSession, saveSessions } from '@/lib/local-sessions';
++import { deleteChatSession } from '@/lib/chat-store';
+ import type { ProjectSessionItem } from '@/lib/project-sessions';
+ import { conversationAgent, conversationPrefs, keptPrefs } from '@/lib/conversation-agent';
+ import { AGENT_DEFINITIONS, isAgentId } from '../../src/agent-definitions.mjs';
+@@ -156,6 +158,8 @@ export function App({ initialProject, initialSelection, initialFfmpeg }: {
+           onPick={onProject ? (skill) => app.useSkill?.(skill) : undefined}
+           onMake={onProject ? () => window.dispatchEvent(new Event(MAKE_SKILL)) : undefined} />
+       ) : null}
++      {/* First-run film-type gate: Host prefs; full-shell portal; reopen via no996-openfilm:reopen-onboarding. */}
++      <OnboardingGate />
+       {/* shell.css owns the single line below the window's top bar. The seam on the right is the resize handle. */}
+       <Divider />
+       <div className="flex min-h-0 flex-1 flex-col">
+@@ -964,6 +968,13 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+   const onSelectSession = (id: string) => { setSessionId(id); composerRef.current?.focus(); };
+   const onRenameSession = (id: string, title: string) => editSession(id, { title });
+   const onPinSession = (id: string, pinned: boolean) => editSession(id, { pinned });
++  /* deleted for good: the record and every turn it held go, and a new conversation takes its place */
++  const onDeleteSession = (id: string) => {
++    if (running.has(id)) return;
++    deleteChatSession(projectKey, id);
++    setSessions((list) => list.filter((s) => s.id !== id));
++    if (id === sessionId) setSessionId(newSession().id);
++  };
+   /* the conversation shown, archived: a new one in its place */
+   const onArchiveSession = (id: string, archived: boolean) => {
+     if (archived && running.has(id)) return;
+@@ -996,6 +1007,11 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+ 
+   const editComposerCard = (
+     <div className="flex flex-col gap-1">
++      {dropping ? (
++        <p className="px-0.5 text-[12px] font-medium leading-snug transition-colors duration-120" style={{ color: '#FF6400' }}>
++          {t('editor.dropActive')}
++        </p>
++      ) : null}
+       <div
+         /* a file from the disk dropped on the card is brought along, a pill where it was let go (on the words) or at
+            the cursor; Studio's things dropped on it become pills too */
+@@ -1028,9 +1044,10 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+           attachFiles(filesFromTransfer(event.dataTransfer), { x: event.clientX, y: event.clientY });
+         }}
+         data-prompt-shell=""
+-        className={`rounded-[12px] border bg-[var(--bg-raised)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-colors duration-200 ${
+-          dropping ? 'border-[var(--accent)]' : 'border-[var(--border)] focus-within:border-[var(--text-faint)]'
++        className={`rounded-[12px] border bg-[var(--bg-raised)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-[border-color] duration-120 ${
++          dropping ? '' : 'border-[var(--border)] focus-within:border-[var(--text-faint)]'
+         }`}
++        style={dropping ? { borderColor: '#FF6400' } : undefined}
+       >
+         {openedFile ? <AttachmentPreview item={openedFile} onClose={() => setOpenedFile(null)} /> : null}
+         <div className="flex items-end gap-1 py-2.5 pl-3.5 pr-2">
+@@ -1132,6 +1149,7 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+                   onRenameSession={onRenameSession}
+                   onPinSession={onPinSession}
+                   onArchiveSession={onArchiveSession}
++                  onDeleteSession={onDeleteSession}
+                 />
+                 <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                   {/* the first message well below the session bar, as a chat app opens a conversation; the last well above

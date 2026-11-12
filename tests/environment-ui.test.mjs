@@ -23,20 +23,23 @@ function setup(clipboard) {
   const root = new Element('root');
   const document = { documentElement: root, createElement: tag => new Element(tag) };
   const fetch = (url, options) => new Promise((resolve, reject) => requests.push({ url, options, resolve, reject }));
-  vm.runInNewContext(script, { document, fetch, navigator: { clipboard }, Promise });
+  const window = { addEventListener() {} };
+  vm.runInNewContext(script, { document, fetch, navigator: { clipboard }, Promise, window });
   const panel = root.children[0];
   const [heading, status, guide, actions, pathArea, feedback, fallback] = panel.children;
   const [details, installed, notInstalled, copy, check, skip] = actions.children;
   const pathInput = pathArea.children[0].children[0];
-  return { requests, panel, status, guide, feedback, fallback, details, installed, notInstalled, pathArea, pathInput, copy, check, skip };
+  // 面板不再在页面加载时自动探测：检查由调用方显式触发（向导、错误、或用户点检查）。
+  const start = () => window.__no996CheckTools();
+  return { requests, panel, status, guide, feedback, fallback, details, installed, notInstalled, pathArea, pathInput, copy, check, skip, start };
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function result(req, platform, ffmpeg, ffprobe) {
   req.resolve({ ok: true, json: async () => ({ platform, tools: { ffmpeg: { status: ffmpeg }, ffprobe: { status: ffprobe } } }) });
 }
 
-test('startup visibly checks fresh RPC and shows the healthy result', async () => {
-  const ui = setup();
+test('an explicit check fetches fresh RPC and shows the healthy result', async () => {
+  const ui = setup(); ui.start();
   assert.equal(ui.panel.style.display, 'block');
   assert.match(ui.status.textContent, /正在检查/);
   assert.equal(ui.requests[0].url, '/__dsh/official-rpc');
@@ -54,7 +57,7 @@ test('startup visibly checks fresh RPC and shows the healthy result', async () =
 
 test('all platforms show accurate issues and manual guidance, recheck fetches anew', async () => {
   for (const platform of ['win32', 'darwin', 'linux']) {
-    const ui = setup(); result(ui.requests[0], platform, 'missing', 'timeout'); await flush();
+    const ui = setup(); ui.start(); result(ui.requests[0], platform, 'missing', 'timeout'); await flush();
     assert.equal(ui.panel.style.display, 'block');
     assert.match(ui.status.textContent, /ffmpeg：未找到.*ffprobe：检查超时/);
     ui.details.click(); assert.equal(ui.guide.hidden, false);
@@ -68,20 +71,20 @@ test('all platforms show accurate issues and manual guidance, recheck fetches an
 });
 
 test('failure is not reported as missing and skip invalidates an in-flight check', async () => {
-  const ui = setup(); ui.requests[0].reject(new Error('offline')); await flush();
+  const ui = setup(); ui.start(); ui.requests[0].reject(new Error('offline')); await flush();
   assert.match(ui.status.textContent, /无法确定工具状态/); assert.doesNotMatch(ui.status.textContent, /未找到/);
   ui.check.click(); ui.skip.click(); result(ui.requests[1], 'linux', 'missing', 'unusable'); await flush();
   assert.equal(ui.panel.style.display, 'none');
 });
 
 test('invalid response is not mistaken for missing tools', async () => {
-  const ui = setup(); ui.requests[0].resolve({ ok: true, json: async () => ({}) }); await flush();
+  const ui = setup(); ui.start(); ui.requests[0].resolve({ ok: true, json: async () => ({}) }); await flush();
   assert.match(ui.status.textContent, /无法确定工具状态/);
 });
 
 test('installed path is only copied as data; missing path blocks copy', async () => {
   let copied = '';
-  const ui = setup({ writeText: text => { copied = text; return Promise.resolve(); } });
+  const ui = setup({ writeText: text => { copied = text; return Promise.resolve(); } }); ui.start();
   result(ui.requests[0], 'win32', 'missing', 'missing'); await flush();
   ui.installed.click(); assert.equal(ui.pathArea.hidden, false);
   ui.copy.click(); assert.equal(copied, ''); assert.match(ui.feedback.textContent, /输入/);
@@ -96,17 +99,17 @@ test('installed path is only copied as data; missing path blocks copy', async ()
 });
 
 test('HTTP errors are unknown rather than missing', async () => {
-  const ui = setup(); ui.requests[0].resolve({ ok: false, status: 403 }); await flush();
+  const ui = setup(); ui.start(); ui.requests[0].resolve({ ok: false, status: 403 }); await flush();
   assert.match(ui.status.textContent, /无法确定工具状态/); assert.doesNotMatch(ui.status.textContent, /未找到/);
 });
 
 test('clipboard failure offers selected safe prompt; success confirms copy', async () => {
-  const ui = setup({ writeText: () => Promise.reject(new Error('denied')) });
+  const ui = setup({ writeText: () => Promise.reject(new Error('denied')) }); ui.start();
   result(ui.requests[0], 'darwin', 'unusable', 'ok'); await flush(); ui.copy.click(); await flush();
   assert.equal(ui.fallback.hidden, false); assert.equal(ui.fallback.selected, true);
   assert.match(ui.fallback.value, /执行命令.*之前.*征求我的确认/);
   let copied = '';
-  const other = setup({ writeText: text => { copied = text; return Promise.resolve(); } });
+  const other = setup({ writeText: text => { copied = text; return Promise.resolve(); } }); other.start();
   result(other.requests[0], 'linux', 'missing', 'ok'); await flush(); other.copy.click(); await flush();
   assert.match(copied, /DeepSeek|OpenFilm/); assert.match(other.feedback.textContent, /已复制/);
 });

@@ -1,0 +1,45 @@
+diff --git a/apps/desktop/chat/src/components/Markdown.tsx b/apps/desktop/chat/src/components/Markdown.tsx
+index f1d0246..a90b4af 100644
+--- a/apps/desktop/chat/src/components/Markdown.tsx
++++ b/apps/desktop/chat/src/components/Markdown.tsx
+@@ -141,6 +141,9 @@ function inline(text: string): React.ReactNode[] {
+     }
+     if (piece.kind === 'strong') return <strong key={index} className="font-semibold">{withRefs(piece.text)}</strong>;
+     if (piece.kind === 'em') return <em key={index} className="italic">{withRefs(piece.text)}</em>;
++    /* dsh-openfilm: a picture in the transcript, drawn in place — a rendered frame or a contact sheet
++       reads as an image, and clicking it opens the full-size preview. */
++    if (piece.kind === 'image') return <InlinePicture key={index} src={piece.href} />;
+     if (piece.kind === 'link' && audioLinkPath(piece.href)) return <AudioLink key={index} href={piece.href} text={piece.text} />;
+     if (piece.kind === 'link') {
+       return (
+@@ -200,6 +203,30 @@ function AgentRefPill({ studioRef }: { studioRef: StudioRef }) {
+   );
+ }
+ 
++/**
++ * dsh-openfilm: ![](url) drawn as a picture.
++ *
++ * The frame an agent renders is the thing the person is looking at, so it belongs in the conversation
++ * rather than behind a link. Clicking opens the same full-size preview attachments use.
++ */
++function InlinePicture({ src }: { src: string }) {
++  const t = useT();
++  const [open, setOpen] = React.useState(false);
++  const [failed, setFailed] = React.useState(false);
++  const name = src.split(/[\\/]/).pop() ?? src;
++  if (failed) {
++    return <span role="alert" className="break-all text-[12px] text-[var(--text-faint)]">{t('assets.previewFailed')} · {name}</span>;
++  }
++  return <>
++    <button type="button" onClick={() => setOpen(true)} className="my-1.5 block max-w-full text-left">
++      {/* eslint-disable-next-line @next/next/no-img-element */}
++      <img src={src} alt={name} draggable={false} loading="lazy" onError={() => setFailed(true)}
++        className="max-h-[420px] w-auto max-w-full rounded-[6px] border border-[var(--border)] object-contain" />
++    </button>
++    {open ? <AttachmentPreview item={{ name, kind: 'document', url: src }} onClose={() => setOpen(false)} /> : null}
++  </>;
++}
++
+ /** A local audition is streamed by Studio, with its existing project and real-file boundary checks. */
+ function AudioLink({ href, text }: { href: string; text: string }) {
+   const folder = React.useContext(ProjectFolderContext);

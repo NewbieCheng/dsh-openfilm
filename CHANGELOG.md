@@ -1,5 +1,101 @@
 # 更新记录
 
+## 0.11.0 —— 自有品牌与样式产线
+
+- 文档收敛：`AGENTS.md` 28.9 KB → 9.1 KB；删除 `HANDOVER.md`×2、`PROGRESS.md`、`HOT-RELOAD.md` 与 4 份已实现/被取代的 `计划-*`；新增 `docs/UI-PLAYBOOK.md`（改哪一层）、`docs/UPSTREAM.md`（补丁与升级）、`docs/BRAND.md`（品牌边界）。
+- 样式产线：`assets/theme/{tokens,shell,studio}.css` + `src/theme.mjs`（surface 注册表、mtime 缓存、`NO996_OPENFILM_THEME=0` 关断）；代理与 47821 调试窗口按页面注入；发版前 `npm run shell:bake` 把同一份 CSS 烘焙进 `vendor/official-shell/ui` 并重算 manifest。
+- 样式工作台：`assets/style-lab.js`（Shadow DOM，点选元素、显示选择器/计算样式、复制改动说明），仅 `NO996_OPENFILM_STYLE_LAB=1` 时注入。
+- 上游补丁系列化：`patches/` 一个源文件一个补丁 + `series.json`；`scripts/upstream.mjs` 提供 `status / fetch / verify / shell:dev`；`npm run patches:check` 校验系列与 `patch.diff` 一致。
+- 品牌层：`brand/brand.json` + `src/brand.mjs`（校验、`--n996-*` 变量、归属声明不可缺）+ `npm run brand:check`。
+- 新增命令：`dev:styles`、`docs:check`、`brand:check`、`patches:split`、`patches:check`、`upstream:status|fetch|verify`、`shell:dev`、`shell:bake`。
+- 新增测试：theme、brand、style-lab、theme-bake、theme-injection、upstream/patch-series、docs-check。
+
+## 0.10.0
+
+**首次启动引导与开发者模式**
+
+- 组件检测不再随页面加载自动探测：`assets/shell-ui.js` 只在 `__no996CheckTools()`、`no996-check-tools` 事件或首次启动向导里检查，正常进入工作台不再弹右下角提示。
+- 首次启动向导（`prefs.onboardingCompleted !== true` 时出现）：第 1 步列 ffmpeg/ffprobe/转写模型，缺的组件直接给出状态并自动开始下载转写模型（走 `asr:install` 桥通道），第 2 步选片型（四个模板 + 自定义）。
+- 自定义画布与时长落进 prefs（`customRatio` / `customSeconds`），非法值拒绝；`project:create-blank` 会保存并回传。
+- 开发者模式：`NO996_OPENFILM_DEV=1` 时 `createWorkbenchAuth` 返回本地 `dev@local` 会话（不写 token、不连账号服务），账号条显示「开发模式」并隐藏退出按钮。
+- 新增桥通道 `asr:status` / `asr:install`；注入层不再直连 `/api`。
+- `ffprobe-static` 进可选依赖；组件探测优先用随包的 `ffmpeg-static` / `ffprobe-static`（按 basename 认版本），装齐的机器第一次启动就是就绪状态，不再依赖 PATH。
+- 新增 `src/tool-installer.mjs`：随包缺二进制时下载 ffmpeg（GitHub release）或 ffmpeg-static/ffprobe-static 包内二进制，写进 `$DSH_HOME/no996-openfilm/tools`，带进度、错误与单飞重试。
+- Host 新增 `POST /api/no996-openfilm/system/check` 与 `/system/install`，同一份装配也走 `system:check` / `system:install` 桥通道；向导据此显示下载百分比与「重试安装」。
+- 修代理白名单：`system:check` / `system:install` / `asr:status` / `asr:install` 在还没有项目时不要求项目作用域（此前被 `authorizeOfficialProject` 判 403，真机上向导只能走回退路径）；补了回归测试。
+- 向导自定义项新增语言（中文/English），与画布、时长一起存进 prefs；两页按钮统一右下角、主动作最右。（未发布）—— 本地口播转写
+
+> 本版包含 0.9.1 尚未发布的那一批（登录迁进官方壳等），以本节为准。
+
+### 改：片型选择面板 Film Bay 工位感
+
+注入「模板」弹窗与官方 `OnboardingGate` 统一：台面加宽至约 1080、**一行等分片型轨**（不够才微横滑）、登录条同款点阵纸感 + Ember 顶线/内光、海军底 + 橙踢脚「用这个开工」；去掉蓝 CTA 与 4+1 残缺网格。
+
+### 新：官方壳第一步引导（Batch O1）+ AI 剪辑员工栏头/空态（Batch O2）
+
+本机首次进创作台先选片型（口播讲堂 / 知识大赏 / 手绘笔记 / 自定义空白），完成后不再挡路；会话栏可「重新选片型」。右侧对话定位为 **AI 剪辑员工**（栏头、空态、拖放提示）。实现进官方 chat 源码 + `vendor/official-shell`，不是 DOM 注入主路径。
+
+- Host：`$DSH_HOME/no996-openfilm/preferences.json`；RPC `prefs:get` / `prefs:set`；`template:list` 带产品名与 prefs；`template:create` / `project:create-blank` 写偏好并返回 `onboarding` 文案载荷。
+- 上游 O1：`OnboardingGate` 全壳遮罩。
+- 上游 O2：栏头 `AI 剪辑员工`；空态职责文案 + 虚线拖放提示；拖入时 Ember 描边；占位符改「说主题/拖素材」。
+- 补丁文件 **17 → 19**（新增 `OnboardingGate.tsx`，改 `ProjectStarters.tsx`）。
+- 真机验收仍待。界面口径见 `docs/UI-PLAYBOOK.md`，批次状态见 `docs/ROADMAP.md`。
+
+### 新：`openfilm_transcribe`，把口播视频变成带时间码的文稿
+
+Host 侧新增一个工具：给一个本机视频/音频路径，返回逐段时间码 + 全文，**全程本机 CPU、不上传**。SenseVoice-small int8（sherpa-onnx Node 绑定）+ ffmpeg 抽 16 kHz 单声道 + RMS 能量切段；权重首次使用时下载 228 MB 到 `$DSH_HOME/no996-openfilm/models`，之后只读本地。
+
+- 首次调用自动开始下载且**不阻塞这一轮**：`status` 看进度、`setup` 手动触发、面板/控制台可 `POST /api/no996-openfilm/asr`、命令行 `node scripts/asr-models.mjs fetch`；下载写 `.part` 再改名并校验大小与 sha256。
+- 两个样本实测（Windows 11 / Node 24.20 / 纯 CPU）：5.632 s 音轨 **RTF 0.085**（含 1.55 s 一次性模型加载）；19.176 s、三处静音间隔 → **3 段，RTF 0.039**，段界与静音吻合；二次调用命中缓存 **2 ms** 返回。
+- 默认由会话模型校对同音字与专名，**时间码不变**；返回长度不符或请求失败时保留原文并写明原因（`refine: false` 可关）。
+- 无音轨 / 超 3 小时 / 全静音 / 空结果各有独立失败码，拒绝发生在抽 PCM 之前；视频不进 Node 堆，音频按段读取。
+
+> 源码 + 单测（63 项新增）+ 真机引擎已验证；**macOS 与面板一键安装按钮未验证**。详见 `docs/TRANSCRIBE.md`。
+### 新：动效生产协议 + 动作库 + 风格/镜头卡素材库
+
+- `docs/MOTION.md`：七道闸门（接单→分镜→**定调帧**→量产→声音→帧检→交付）与完成契约；新增 skill `openfilm-motion`；预设系统提示明确「闸门之间不停机、导出并回读输出才算完成」。
+- `vendor/templates/_kit/motion/motion.js`：闭式阻尼弹簧（zeta 0.61 ≈ 9% 过冲）、落体挤压、确定性随机（禁 `Math.random`）、相机/取逆、擦除、逐字、滚数、2× 画布与颗粒；构建时发到各模板 `assets/motion.js`，`Scene.motion` 暴露给镜头脚本。**旧 19 镜默认值不变**。
+- 收录 `vendor/motion/styles`（14 种风格，MIT，含 brief/prompt/样片）与 `vendor/motion/shotcards`（124 张镜头卡，Apache-2.0，含 recipe）；索引 `docs/STYLES.md`、`docs/SHOT-CARDS.md`。样片的上游依赖（node_modules/three/film.js）在索引里逐条注明，**不声称自包含**。
+- 测试：动作库数学/确定性 6 项；协议与素材库 9 项；官方 film 解析器覆盖 `motion-styles`。
+- 登录首页改版：换成纸张打卡卡 + 底部「一天」时间轴，背景用 01 扁平矢量样片的城市与公交（`scripts/build-login-city.mjs` 生成 `assets/login-city.js`）。时间轴默认播放、可暂停/拖动；暂停时背景一起冻结；`prefers-reduced-motion` 下默认暂停。天色随 9:00→18:00 从亮到暖再到深蓝星空，走完一天切黑淡入下一天。
+- 登录页的太阳改成会走的日/月：沿弧线从东（右）升到西（左）落，傍晚太阳淡出、月亮淡入；样片内置的固定太阳与光芒在挂载后移除。
+- 登录页性能：背景 30fps + 半分辨率栅格化、天色合成到一层渐变（不再叠 5 层全屏 opacity）、页面隐藏时停画、时间轴指针改 `transform`、文字只在分钟/分段变化时写入、去掉播放钮的 `backdrop-filter`。无头 Chromium 验证：2.5 秒内 151 帧、p95 16.7ms、无 long task；自动播放 09:11→09:15、暂停后 09:15 不变、注册态字段与登录验证码弹层正常。
+- 新增模板 `motion-styles`（1920×1080），两种镜头来源（Studio 级已验：临时 home 装模板 → `openProject` → `GET /api/projects/:id/media?what=frame` 出图，t=2 与 t=15.5 均正常）：
+  - 直封上游样片：01 扁平矢量（内联 cues、去外部字体、`window.film` 契约、视口缩放）；
+  - 按 brief 重写：02 包豪斯（`shot-02.scene.html`，用 `Motion` 的弹簧/错峰/擦除/滚数/相机）。
+  - 无头 Chromium 抽帧 t=2/5.5/6 无报错，同 t 两次渲染字节一致；修掉父层非整数缩放导致的文字条带接缝（`will-change: transform`）。
+  - 真实 GUI 已验：官方 shell 的片型选择器列出「动效风格样片」；Studio 编辑器打开该项目，时间轴为 shot-01 10s + shot-02 8s，画布 1920×1080。脚本 `frame:page` / `frame:studio` / `studio:ui`。
+
+## 0.9.1（未发布）
+
+### 修：启用失败 `duplicate exact route "/api/no996-openfilm/templates"`
+
+**根因**：DSH `webServer.register` 每次只收一条路由；`client-log` 与 `bootstrap` 曾被塞进同一次调用（第二条被忽略），且装配中途抛错时已注册的 `/api/no996-openfilm/templates` 不会回滚，再次启用就撞车。
+
+**修法**：两条路由分开注册；所有 exact 路由纳入 `trackRoute`，失败即 `rollbackRoutes`；dispose 同步先卸路由再关 Studio。
+
+### 改：登录迁进官方壳，紧凑遮罩 + 白 logo
+
+面板不再单独占一整页 React 登录。`assets/shell-login.js` 注入官方 iframe：左上角白 logo、缩小纸张与时间线，矮高度自动收起 timeline，避免遮挡 DSH 内容。账号条仍在顶栏；退出只重开壳内遮罩，不拆 Studio。
+
+### 修：产物链接不再把系统浏览器带进 `OF_SESSION_REQUIRED`
+
+**现象**：对话里的「成片 `手绘笔记-….mp4`」一点，系统浏览器打开 `127.0.0.1:47822/projects/…mp4`，同时报「无法打开 OpenFilm 工作台 (OF_SESSION_REQUIRED)」。项目素材、音乐、说明文档的链接同理。
+
+**根因**：助手写的是项目相对路径（`<手绘笔记-….mp4>`、`<assets/notebook.js>`）。官方聊天把这类链接按页面地址解析到编辑器源，再由桌面外壳交给系统浏览器；而那个浏览器没有面板会话 cookie，代理当然拒绝。不是 OpenFilm 内核的 bug，是「把项目内路径当成网页地址」这条链路。
+
+**修法**：`assets/shell-ui.js` 在页面捕获这类点击，改为向 Host 发一次打开请求；Host 用 Studio 的项目列表验明项目、把路径限制在项目目录内，再交给操作系统的默认应用（Shift/Alt 点击 = 在文件夹中定位）。新增 `POST /__dsh/open-file`（见 `src/studio-proxy.mjs`）与 `src/project-files.mjs`。
+
+### 修：截图路径在对话里直接出图，可点开大图
+
+**现象**：`![私域运营 · 逐帧接触表](<.film/cache/look/….png>)` 在官方聊天里只显示成一截蓝色链接，看不到图。
+
+**根因（两条叠加）**：0.9.0 的内联图片补丁只把**空标签**的 `![](url)` 当作图片，带文字的还是链接；就算标签为空，相对路径也会被解析成 `/projects/….png`，Studio 并不提供这个地址。
+
+**修法**：新增 `GET /__dsh/project-file?projectId=…&path=…`，只读已登记项目里的位图（限 24 MiB、禁 SVG），由页面把图片画在链接旁边；点击打开大图浮层，可「用默认应用打开 / 在文件夹中显示」。已渲染出来但地址失效的 `<img>` 也会被改写到同一路由。
+
+> 源码与单测已验证；真实 GUI 验收（面板刷新后点产物、看截图）尚未完成，按 `docs/TEST-CHECKLIST.md` 复核。
+
 ## 0.9.0
 
 ### 新：工具调用显示真名
@@ -54,7 +150,7 @@
 
 ### 文档
 
-- 新增 `docs/HANDOVER.md`（接手第一站）、`docs/ROADMAP.md`（一份路线图，不再按版本碎片化；0.9.1 定为账号与登录）；
+- 新增 `docs/HANDOVER.md`（接手第一站，0.11 起并入 `docs/DEVELOPMENT.md`）、`docs/ROADMAP.md`（一份路线图，不再按版本碎片化；0.9.1 定为账号与登录）；
 - 重写 `docs/DEVELOPMENT.md`（25KB → 14KB，事实更新到 0.9.0）；
 - 删除 10 份已实现的过期计划文档（`PLAN-0.4.0`、`PLAN-0.5.0`、`PLAN-0.7.0-AGENT`、`DESIGN-0.7.0`、`AGENT-CHAT-PLAN`、`PLAN-0.8.0 ×2`、`PLAN-0.9.0 ×2`、`DISCUSS-0.10.0`），决策历史仍在 `docs/NOTES.md`。
 
@@ -309,7 +405,7 @@ Host 侧改动需要**重启 DSH**；界面刷新用 Ctrl+Shift+R 即可。旧�
 - `src/shell-extras.mjs` 只剩一个读取器，真正的脚本在 `assets/shell-ui.js`，**每次页面渲染读盘**（mtime 缓存）。
 - 结果：改注入 UI → 保存 → 刷新页面，不需要 build、不需要重载插件（实测同一装配下注入内容 44430 → 44450 字节）。
 - 新增 `npm run dev`：监听客户端源码自动 rebuild；监听 `src/*.mjs` 自动 **touch 整个 Host 模块图**（加载器只重新求值 mtime 变了的模块，未被 touch 的引入方会继续用旧 import）。
-- 教程：`docs/HOT-RELOAD.md`。
+- 教程：`docs/DEVELOPMENT.md` §8（0.11 起合并原 `HOT-RELOAD.md`）。
 
 ## 0.5.1
 

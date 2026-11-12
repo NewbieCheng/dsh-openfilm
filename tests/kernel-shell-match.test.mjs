@@ -75,4 +75,18 @@ test('the shell snapshot declares its one upstream patch, or none at all', () =>
   assert.match(diff, /toolName/, 'and the bridge must be able to pass it in');
   assert.match(diff, /kind: 'image'/, 'an empty-label markdown link is a picture');
   assert.match(diff, /InlinePicture/, 'and the transcript draws it');
+
+  // First-run film-type gate (Batch O1): Host prefs + four cards live in chat source.
+  assert.ok(manifest.patch.files.includes('apps/desktop/chat/src/components/OnboardingGate.tsx'),
+    'the patch must include OnboardingGate');
+  assert.match(diff, /no996-openfilm:reopen-onboarding/, 'the gate must be reopenable');
+  assert.match(diff, /project:create-blank/, 'custom blank must create via Host RPC');
+
+  // AI film editor chrome (Batch O2): pane identity + empty/drop copy.
+  assert.ok(manifest.patch.files.includes('apps/desktop/chat/src/components/ProjectStarters.tsx'),
+    'the patch must include ProjectStarters');
+  // Pane bar no longer repeats editor.title — empty-state h2 keeps the name.
+  assert.doesNotMatch(diff, /data-editor-title/, 'pane bar must not duplicate the empty-state title');
+  assert.match(diff, /editor\.dropHint/, 'empty/drop copy must point at the composer');
+  assert.match(diff, /AI 剪辑员工/, 'zh-CN must name the editor');
 });

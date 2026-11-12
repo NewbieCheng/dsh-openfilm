@@ -1,0 +1,80 @@
+diff --git a/apps/desktop/chat/src/components/AgentActivityRow.tsx b/apps/desktop/chat/src/components/AgentActivityRow.tsx
+index 69c82b6..3c278ed 100644
+--- a/apps/desktop/chat/src/components/AgentActivityRow.tsx
++++ b/apps/desktop/chat/src/components/AgentActivityRow.tsx
+@@ -45,6 +45,8 @@ export interface AgentActivityItem {
+   query?: string;
+   /** A local agent's file name or command (no quotes: it is not film content). */
+   detail?: string;
++  /** dsh-openfilm: the real tool that ran (`openfilm_frame`, `web_search`), when the agent named it. */
++  tool?: string;
+   plan?: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed' }>;
+   /** The question the agent asks the user (chat.ask). */
+   ask?: { question: string; options: Array<{ label: string; description?: string }>; answer?: string; status?: 'answered' | 'skipped' | 'timeout' };
+@@ -181,32 +183,37 @@ export function formatWorkDuration(ms: number): string {
+ }
+ 
+ /**
+- * The agent thought for a while (only a local Codex / Claude Code reports this).
++ * The agent thought for a while and its reasoning is known.
+  *
+- * While thinking, one shimmering row; then "Thought for 6s", which opens to the agent's own reasoning in
+- * muted gray. That text is written for itself, so it starts closed, as Codex and Claude Code show it.
++ * dsh-openfilm: the reasoning is shown, not hidden — a bridging agent reports it, and a person watching
++ * a film get edited wants to see what the agent weighed. It starts open (a "thought for 16s" header with
++ * the text under it), and collapses to that header when the turn moves on: what was thought stays one
++ * click away without taking the screen after the fact.
+  */
+ function ThoughtRow({ item }: { item: AgentActivityItem }) {
+   const t = useT();
+-  const [open, setOpen] = React.useState(false);
+-  if (item.pending) {
+-    return <div className="py-1 text-[14px] leading-relaxed"><span className="text-sweep">{t('agent.thinking')}</span></div>;
+-  }
++  const [open, setOpen] = React.useState(true);
+   const ms = item.startedAt != null && item.endedAt != null ? item.endedAt - item.startedAt : null;
+-  const label = ms != null && ms >= 1000
+-    ? t('turnFrame.thought').replace('{t}', formatWorkDuration(ms))
+-    : t('turnFrame.thoughtShort');
+   const text = (item.text ?? '').trim();
+-  if (!text) return <div className="py-1 text-[14px] leading-relaxed text-[var(--text-faint)]">{label}</div>;
++  if (item.pending && !text) {
++    return <div className="py-1 text-[14px] leading-relaxed"><span className="text-sweep">{t('agent.thinking')}</span></div>;
++  }
++  const label = item.pending
++    ? t('agent.thinking')
++    : ms != null && ms >= 1000
++      ? t('turnFrame.thought').replace('{t}', formatWorkDuration(ms))
++      : t('turnFrame.thoughtShort');
++  /* A thought with no text says nothing: drop the row instead of leaving an empty "思考 0s" behind. */
++  if (!text) return null;
+   return (
+-    <div className="min-w-0 py-1">
++    <div data-thought={item.id} className="min-w-0 py-1">
+       <button
+         type="button"
+         aria-expanded={open}
+         onClick={() => setOpen((value) => !value)}
+         className="flex items-center gap-1.5 text-[14px] leading-relaxed text-[var(--text-faint)] hover:text-[var(--text)]"
+       >
+-        {label}
++        {item.pending ? <span className="text-sweep">{label}</span> : label}
+         <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+       </button>
+       {open ? (
+@@ -409,6 +416,15 @@ function ActRow({ item }: { item: AgentActivityItem }) {
+           className="flex h-6 max-w-full min-w-0 items-center gap-1.5 text-left"
+         >
+           <ActivityLabel label={item.label} pending={!!item.pending} />
++          {/* dsh-openfilm: what actually ran, next to what it meant for the film. A bridging agent
++              reports the tool name; without it the row only says "已检查影片" and the person cannot
++              tell which tool was called. */}
++          {item.tool ? (
++            <span data-tool-name={item.tool} title={item.tool}
++              className="min-w-0 shrink-0 truncate rounded-[4px] bg-[var(--border)] px-1.5 py-0.5 font-mono text-[11px] leading-none text-[var(--text-faint)]">
++              {item.tool}
++            </span>
++          ) : null}
+           {item.query ? (
+             <span className="min-w-0 truncate text-[var(--text-faint)] opacity-80" title={item.query}>
+               “{item.query}”

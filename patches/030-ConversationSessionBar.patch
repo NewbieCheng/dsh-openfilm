@@ -1,0 +1,85 @@
+diff --git a/apps/desktop/chat/src/components/ConversationSessionBar.tsx b/apps/desktop/chat/src/components/ConversationSessionBar.tsx
+index 102217b..dfbd754 100644
+--- a/apps/desktop/chat/src/components/ConversationSessionBar.tsx
++++ b/apps/desktop/chat/src/components/ConversationSessionBar.tsx
+@@ -1,7 +1,7 @@
+ 'use client';
+ 
+ import React from 'react';
+-import { Archive, ArchiveRestore, ChevronDown, ChevronRight, MessageCircle, Pencil, Pin, PinOff, Plus, Search } from 'lucide-react';
++import { Archive, ArchiveRestore, ChevronDown, ChevronRight, MessageCircle, Pencil, Pin, PinOff, Plus, Search, Trash2 } from 'lucide-react';
+ import { limitTitleWidth, SESSION_TITLE_MAX_WIDTH } from '@openfilm/shared';
+ import { Popover, keepFocus } from './Popover';
+ import { Tooltip } from './Tooltip';
+@@ -17,6 +17,8 @@ interface SessionActions {
+   onRenameSession?: (id: string, title: string) => void;
+   onPinSession?: (id: string, pinned: boolean) => void;
+   onArchiveSession?: (id: string, archived: boolean) => void;
++  /** Delete a conversation for good: its record and every turn it holds. */
++  onDeleteSession?: (id: string) => void;
+ }
+ 
+ /** A title being renamed, in place: Enter or leaving keeps it, Esc lets it go (`onDone(null)`). */
+@@ -136,7 +138,7 @@ export function ConversationBar({
+               aria-hidden={renaming || undefined} tabIndex={renaming ? -1 : undefined}
+               onClick={(event) => { event.stopPropagation(); popup.toggle(); }}
+               onDoubleClick={() => { if (onRenameSession) { popup.dismiss(); setRenaming(true); } }}
+-              className={`flex h-[22px] min-w-0 max-w-[16rem] items-center gap-1.5 rounded px-1.5 outline-none transition-colors hover:bg-[var(--bg-hover)] focus-visible:shadow-[inset_0_0_0_1px_var(--accent)] ${renaming ? 'invisible' : ''}`}
++              className={`flex h-[22px] min-w-0 max-w-[12rem] items-center gap-1.5 rounded px-1.5 outline-none transition-colors hover:bg-[var(--bg-hover)] focus-visible:shadow-[inset_0_0_0_1px_var(--accent)] ${renaming ? 'invisible' : ''}`}
+             >
+               <span className={`${PANE_TITLE} ${current?.title.trim() ? '' : 'text-[var(--text-faint)]'}`}>{label}</span>
+               {otherRunning || otherUnseen ? <StatusLight turnId={otherRunning} unseen={otherUnseen} /> : null}
+@@ -164,6 +166,13 @@ export function ConversationBar({
+         ) : null}
+       </div>
+       <span className="min-w-0 flex-1" />
++      <button
++        type="button"
++        onClick={() => window.dispatchEvent(new Event('no996-openfilm:reopen-onboarding'))}
++        className="shrink-0 rounded px-1.5 py-0.5 text-[11.5px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
++      >
++        {t('onboarding.reopen')}
++      </button>
+     </div>
+   );
+ }
+@@ -172,12 +181,20 @@ export function ConversationBar({
+ const ROW_BTN = menu.iconButton;
+ 
+ /** One conversation in the history: its title, a running one turning; each row has its own actions. */
+-function SessionRow({ item, label, active, turnId, unseen, onSelect, onRenameSession, onPinSession, onArchiveSession }: SessionActions & {
++function SessionRow({ item, label, active, turnId, unseen, onSelect, onRenameSession, onPinSession, onArchiveSession, onDeleteSession }: SessionActions & {
+   item: ProjectSessionItem; label: string; active: boolean; turnId: string | null; unseen?: 'done' | 'error'; onSelect: () => void;
+ }) {
+   const running = Boolean(turnId);
+   const t = useT();
+   const [renaming, setRenaming] = React.useState(false);
++  /* Deleting a conversation throws its turns away, so it takes two clicks: the second
++   * on the same row, within the time it takes to change one's mind. */
++  const [confirming, setConfirming] = React.useState(false);
++  React.useEffect(() => {
++    if (!confirming) return undefined;
++    const timer = window.setTimeout(() => setConfirming(false), 4000);
++    return () => window.clearTimeout(timer);
++  }, [confirming]);
+   const icon = item.pinned ? <Pin size={13} className={menu.rowIcon} /> : <MessageCircle size={13} className={menu.rowIcon} />;
+   return (
+     <div className={`group ${menu.row} ${active ? menu.active : ''} ${renaming ? menu.editing : ''}`}>
+@@ -221,6 +238,17 @@ function SessionRow({ item, label, active, turnId, unseen, onSelect, onRenameSes
+               </button>
+             </Tooltip>
+           ) : null}
++          {onDeleteSession ? (
++            <Tooltip label={t(confirming ? 'projectMenu.deleteConfirm' : 'projectMenu.delete')} side="bottom">
++              <button type="button" data-session-delete={item.id}
++                aria-label={t(confirming ? 'projectMenu.deleteConfirm' : 'projectMenu.delete')}
++                onMouseDown={keepFocus} disabled={running}
++                onClick={() => { if (!confirming) { setConfirming(true); return; } setConfirming(false); onDeleteSession(item.id); }}
++                className={`${ROW_BTN} ${confirming ? 'text-[var(--danger,#ef4444)]' : ''}`}>
++                <Trash2 size={13} />
++              </button>
++            </Tooltip>
++          ) : null}
+         </div>
+       )}
+     </div>

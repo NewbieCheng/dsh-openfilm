@@ -1,8 +1,9 @@
 # 模板与素材库
 
-三个随插件发布的模板：`paper-texture`（纸纹讲堂）、`replica-film`（复刻影片）、
-`sketchnote`（手绘笔记）。它们不再是三份手写页面，而是**数据 + 素材单元**经
-`scripts/templates-build.mjs` 生成的产物。
+四个随插件发布的模板：`paper-texture`（纸纹讲堂）、`replica-film`（复刻影片）、
+`sketchnote`（手绘笔记）、`motion-styles`（动效风格样片）。前三个是**数据 + 素材单元**
+经 `scripts/templates-build.mjs` 生成的产物；`motion-styles` 是**整片样片**的直接封装
+（见文末「动效风格样片」）。
 
 ```
 vendor/templates/
@@ -31,13 +32,14 @@ OpenFilm 把页面当**静态 HTML** 渲染：没有打包器、没有模块加�
 代价是改了源必须重新生成（`npm run templates:build`）。这一点有测试兜底：
 `npm run templates:check` 在页面与源不一致时退出码为 1，CI/提交前跑一次即可。
 
-## 三个模板的模型不同，不要套用同一套思路
+## 四个模板的模型不同，不要套用同一套思路
 
 | 模板 | 模型 | 可编辑的东西 |
 |---|---|---|
 | `paper-texture` | **静态页**：同一画面在整个镜头里不动 | `shots/*.json` 的 `copy`（文案）与 `vars`（字号/位置） |
 | `replica-film` | **内容 + 动画**：每个镜头有自己的画面块和 `draw(t)` | `shots/<id>.json` 的 `copy`；`shots/<id>.content.html`（画面块）；`shots/<id>.anim.js`（动效） |
 | `sketchnote` | **一场戏多窗口**：七个镜头是同一张纸面的七个时间窗 | `assets/notebook-config.js`（内容）+ `shots/*.json`（窗口） |
+| `motion-styles` | **整片样片直封**：一个镜头 = 一支上游 10 秒样片 | `shots/*.json` 的 `style`（样片 slug）与 `duration`；画面改 `vendor/motion/styles/demos/<slug>/index.html` |
 
 `sketchnote` 的 `notebook.js` 按**绝对时间**绘制整场戏，页面只声明 `START` /
 `DURATION`。窗口写错时画面看着正常、内容却错位，所以有一个测试专门校验七个
@@ -122,6 +124,38 @@ npm run templates:build          # 重新生成所有模板页面与镜头墙
 npm run templates:check          # 只校验是否与源一致（不一致退出码 1）
 node --test tests/templates-kit.test.mjs   # 模板专项：标记/样式/选择器/时间轴/自包含
 ```
+
+## 动效风格样片（motion-styles）
+
+与另外三个模板的模型不同：它不做版式拼装，而是把 `vendor/motion/styles/demos/<slug>`
+里**上游整片样片**包成 OpenFilm 页面。样片本身就是「给定 t 画一帧」（`window.renderAt`），
+所以页面组装器 `_kit/motionstyle/page.mjs` 只做三件事：
+
+1. 把样片要 fetch 的 JSON（`cues.json` 等）内联进页面（`file://` 下 fetch 会被拒绝）；
+2. 去掉 `/assets` 字体链接，缺失字体走系统回退（**字形与上游成片不同**，这是已知差异）；
+3. 包上 `window.film = { duration, width, height, ready, frame }` 与视口缩放。
+
+两种镜头来源：
+
+1. **直接封装样片**（`style`）：样片能单文件运行时用它，绘制逻辑一行不动；
+2. **按 brief 重写**（`scene`）：样片缺素材/要 three.js 时用它，场景文件里用
+   `Motion` 的词汇自己画。第二镜（包豪斯）就是这种，见 `shots/shot-02.scene.html`。
+
+```sh
+# 封装样片
+{ "id": "shot-02", "title": "…", "duration": 10, "style": "01-flat-vector" }
+# 自写场景
+{ "id": "shot-02", "title": "…", "duration": 8, "scene": "shot-02.scene.html" }
+npm run templates:build motion-styles
+```
+
+自写场景里 `DURATION` 与 `draw(t)` 是契约：页面外壳会把 `window.film.frame` 转给它。
+父层做非整数缩放时记得给文字容器 `will-change: transform`（否则 Chromium 会把字
+栅格化成条带再拼接，抽帧能看到横向接缝）。
+
+约束：样片必须能**单文件运行**（内联 module）或只依赖同目录的 JSON。依赖 `js/` 子模块、
+`/node_modules`、three.js 的样片（05/07/10/19/22）不能直接搬——先按 `docs/MOTION.md`
+的引擎契约决定是内联打包还是重写。
 
 ## 优化记录（0.6.0）
 

@@ -1,0 +1,19 @@
+/* Official desktop shell overrides.
+ *
+ * Rules for this file:
+ * - Scope every rule to a stable anchor (`[data-*]`, `[role]`, semantic tags).
+ *   Never target generated/hashed class names from the Vite build.
+ * - No layout rewrites here. If a change needs new structure, it belongs in the
+ *   upstream source patch (see docs/UI-PLAYBOOK.md).
+ * - Keep it small. This file is injected in development and baked into the
+ *   vendored build at packaging time.
+ */
+::selection {
+  background: var(--n996-accent);
+  color: var(--n996-accent-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--n996-accent);
+  outline-offset: 2px;
+}

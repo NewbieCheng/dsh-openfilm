@@ -1,5 +1,6 @@
 {
   "kit": "replica",
   "size": [1080, 1920],
-  "wallTitle": "复刻影片"
+  "wallTitle": "复刻影片",
+  "sharedScripts": ["_kit/motion/motion.js"]
 }

@@ -1,0 +1,340 @@
+diff --git a/apps/desktop/chat/src/components/ModelPopover.tsx b/apps/desktop/chat/src/components/ModelPopover.tsx
+index 6800d48..4c9f535 100644
+--- a/apps/desktop/chat/src/components/ModelPopover.tsx
++++ b/apps/desktop/chat/src/components/ModelPopover.tsx
+@@ -4,16 +4,11 @@
+  *
+  * The menu opens on a heading with a button to Settings → Agents, then lists the agents switched on there (none when
+  * only one is: there is nothing to choose, and the heading names it instead), then its model and effort, always, and
+- * its speed when it has one (agent-menu-rows.ts), each with its value; pointing at a row opens its choices in a side
+- * menu beside it. Choosing leaves both open (a model and an effort are often changed together); a click elsewhere
+- * closes them.
+- *
+- * The chat is a view of its own and nothing can be drawn outside it, and the two never cover each other: the side menu
+- * takes the room beside the card (a long name wraps to fit), the card slides left to make that room, and in a narrow
+- * chat the card narrows to half of it.
++ * its speed when it has one (agent-menu-rows.ts), each with its value. dsh-openfilm: choosing a row replaces the menu
++ * with that row's choices — one card, one level at a time, the way DSH's own menus work — and the back arrow returns;
++ * picking a choice applies it and returns as well.
+  */
+ import React from 'react';
+-import { createPortal } from 'react-dom';
+ import { Check, ChevronDown, ChevronRight, KeyRound, Settings } from 'lucide-react';
+ import { keepFocus, Popover } from './Popover';
+ import { useT } from '@/i18n';
+@@ -23,19 +18,18 @@ import { BrandLogo } from '@/components/BrandLogo';
+ import { POPOVER_CHROME } from '@/components/ComposerCard';
+ import { desktopBridge, type LocalAgentId, type RosterAgent } from '@/lib/desktop-bridge';
+ import { agentModelSummary, agentOptions, currentAgent, effectivePrefs, offeredChoices, offeredOption, optionLabel, optionValue, shownAgents, useLocalAgents } from '@/state/local-agent-store';
+-import { chatLayer } from '@/lib/chat-layer';
+ import { isSpeed, menuOptions, type MenuOption } from '@/lib/agent-menu-rows';
+ 
+-/** the card, wider when it lists the agents; the side menu's least width; the gap between them; the window's margin */
++/** the card, wider when it lists the agents; the narrowest it gets in a narrow chat */
+ const CARD_W = 236;
+ const CARD_W_ONE_AGENT = 204;
+-const SIDE_MIN_W = 156;
+-/** the narrowest the card gets in a narrow chat */
+ const CARD_MIN_W = 150;
+-const SIDE_GAP = 2;
++/** the choices level gets the room a full model name needs */
++const CARD_MAX_W = 460;
+ const EDGE = 8;
+-/** how long a side menu stays once the pointer leaves its row (to cross the gap into it) */
+-const SIDE_CLOSE_MS = 120;
++/** the choices level: tall enough for a model list, and it scrolls past that */
++const CHOICE_MAX_H = 'min(58vh, 380px)';
++
+ 
+ const ROW_BASE =
+   'flex min-h-[28px] w-full items-center gap-2 rounded-[6px] px-2.5 text-[13px] font-normal tracking-normal text-left outline-none transition';
+@@ -49,6 +43,28 @@ function rowChoices(agent: LocalAgentId, o: Option, chosen: unknown): NonNullabl
+   return offeredChoices(agent, o, chosen);
+ }
+ 
++/**
++ * The choices, split where their names group them.
++ *
++ * The Host names a model `<group> / <model>` (official-model-catalog.mjs), so a
++ * flat list repeats the group on every line and cuts the model name to fit. This
++ * turns that into what DSH's own menu shows: a heading per group, and each model
++ * named in full under it. A name with no separator is its own label.
++ */
++function groupChoices(choices: NonNullable<Option['options']>): Array<{
++  choice: NonNullable<Option['options']>[number]; group: string; label: string; heading: string | null;
++}> {
++  let last = '';
++  return choices.map((choice) => {
++    const at = choice.name.indexOf(' / ');
++    const group = at > 0 ? choice.name.slice(0, at) : '';
++    const label = at > 0 ? choice.name.slice(at + 3) : choice.name;
++    const heading = group && group !== last ? group : null;
++    if (heading) last = group;
++    return { choice, group, label, heading };
++  });
++}
++
+ /** Why the agent could not be started for its settings, as it said, on a few lines; none when it started and offered none. */
+ function failureReason(error: { text: string } | undefined): string | null {
+   if (!error || error.text === 'no options') return null;
+@@ -94,30 +110,11 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+ } = {}) {
+   const t = useT();
+   const [open, setOpen] = React.useState(false);
+-  /** the option whose side menu is open */
++  /** the row whose choices are shown: the menu holds one level at a time */
+   const [side, setSide] = React.useState<string | null>(null);
+-  /** how far the card has slid left to make room for a side menu; kept within the window on resize */
+-  const [cardShift, setCardShift] = React.useState(0);
+-  const [sideStyle, setSideStyle] = React.useState<React.CSSProperties | null>(null);
+   const cardRef = React.useRef<HTMLDivElement | null>(null);
+-  const sideRef = React.useRef<HTMLDivElement | null>(null);
+   const rowRefs = React.useRef<Record<string, HTMLElement | null>>({});
+-  const closeTimer = React.useRef<number | null>(null);
+-  const stopTimer = () => { if (closeTimer.current) { window.clearTimeout(closeTimer.current); closeTimer.current = null; } };
+-  const showSide = (id: string) => { stopTimer(); setSide(id); };
+-  const hideSideSoon = () => { stopTimer(); closeTimer.current = window.setTimeout(() => setSide(null), SIDE_CLOSE_MS); };
+-  React.useEffect(() => { if (!open) { stopTimer(); setSide(null); setCardShift(0); } }, [open]);
+-  React.useEffect(() => stopTimer, []);
+-  /* the window's width while open: the card and the side menu share it */
+-  const [windowW, setWindowW] = React.useState(() => window.innerWidth);
+-  React.useEffect(() => {
+-    if (!open) return;
+-    const read = () => setWindowW(window.innerWidth);
+-    read();
+-    window.addEventListener('resize', read);
+-    return () => window.removeEventListener('resize', read);
+-  }, [open]);
+-  const room = windowW - 2 * EDGE - SIDE_GAP;
++  React.useEffect(() => { if (!open) setSide(null); }, [open]);
+ 
+   const la = useLocalAgents();
+   const { hydrate, refresh, ensureOptions } = la;
+@@ -141,8 +138,10 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+   const summary = agentModelSummary(options, prefs);
+   const triggerModel = summary.model;
+   const triggerEffort = rows.some((o) => o.category === 'thought_level' && !o.fixed) ? summary.effort : null;
+-  const valueOf = (o: Option) => (o.fixed ? (optionLabel(options, o.id, optionValue(options, prefs, o.id)) ?? o.options![0]!.name)
+-    : (o.category === 'model' ? triggerModel : null) ?? optionLabel(options, o.id, optionValue(options, prefs, o.id)) ?? '');
++  /* the model row says the model alone too: the group is the heading one level down */
++  const modelOnly = (text: string) => (text.includes(' / ') ? text.slice(text.indexOf(' / ') + 3) : text);
++  const valueOf = (o: Option) => (o.fixed ? modelOnly(optionLabel(options, o.id, optionValue(options, prefs, o.id)) ?? o.options![0]!.name)
++    : (o.category === 'model' ? triggerModel : null) ?? modelOnly(optionLabel(options, o.id, optionValue(options, prefs, o.id)) ?? ''));
+   const rowLabel = (o: Option) => (o.category === 'model' ? t('composer.model') : o.category === 'thought_level' ? t('composer.effort') : isSpeed(o) ? t('composer.speed') : o.name);
+   const nameOf = (a: RosterAgent) => (a.id === 'byok' ? t('composer.agentOwnKey') : a.name);
+ 
+@@ -169,81 +168,28 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+   /* a fixed row's one value is already the one in use */
+   const pickChoice = (o: Option, value: unknown) => { if (!o.fixed) { la.setPref(agent, o.id, value); onPref?.(agent, o.id, value); } };
+ 
+-  /* Keep the side menu beside its row and inside the window, including when an agent adds choices while it is open
+-     or the window's height changes. Measure again after width/height constraints change the rendered menu. */
+-  const sidePainted = sideStyle !== null;
+-  React.useLayoutEffect(() => {
+-    const card = cardRef.current;
+-    const row = choosing ? rowRefs.current[choosing.id] : null;
+-    const el = sideRef.current;
+-    if (!open || !choosing || !card || !row || !el) { setSideStyle(null); return; }
+-    const update = () => {
+-      const c = card.getBoundingClientRect();
+-      const width = window.innerWidth;
+-      const height = window.innerHeight;
+-      const sideMax = Math.max(0, width - 2 * EDGE - SIDE_GAP - c.width);
+-      const minWidth = Math.min(SIDE_MIN_W, sideMax);
+-      const maxHeight = Math.max(0, height - 2 * EDGE);
+-      const w = Math.min(sideMax, Math.max(minWidth, el.offsetWidth));
+-      const h = Math.min(el.offsetHeight, maxHeight);
+-      const baseLeft = c.left + cardShift;
+-      let shift = Math.min(cardShift, Math.max(0, baseLeft - EDGE));
+-      let left = c.right + cardShift - shift + SIDE_GAP;
+-      const need = left + w - (width - EDGE);
+-      if (need > 0) {
+-        const slide = Math.min(need, Math.max(0, baseLeft - shift - EDGE));
+-        shift += slide;
+-        left -= slide;
+-      }
+-      if (shift !== cardShift) setCardShift(shift);
+-      left = Math.max(EDGE, Math.min(left, width - EDGE - w));
+-      const top = Math.max(EDGE, Math.min(row.getBoundingClientRect().top - 4, height - EDGE - h));
+-      setSideStyle((previous) => previous?.left === left && previous.top === top && previous.minWidth === minWidth
+-        && previous.maxWidth === sideMax && previous.maxHeight === maxHeight ? previous
+-        : { position: 'fixed', left, top, zIndex: 10001, minWidth, width: 'max-content', maxWidth: sideMax, maxHeight });
+-    };
+-    update();
+-    const observer = new ResizeObserver(update);
+-    observer.observe(el);
+-    observer.observe(card);
+-    observer.observe(row);
+-    // The parent Popover also moves on resize/scroll. Read after its React update has committed.
+-    let frame = 0;
+-    const schedule = () => {
+-      window.cancelAnimationFrame(frame);
+-      frame = window.requestAnimationFrame(update);
+-    };
+-    window.addEventListener('resize', schedule);
+-    window.addEventListener('scroll', schedule, true);
+-    return () => {
+-      observer.disconnect();
+-      window.cancelAnimationFrame(frame);
+-      window.removeEventListener('resize', schedule);
+-      window.removeEventListener('scroll', schedule, true);
++  /* The choices level: a long list (models above all) gets a search box over it, and
++     the box empties itself when the level changes so it never hides a fresh list. */
++  const [query, setQuery] = React.useState('');
++  React.useEffect(() => { setQuery(''); }, [side]);
++  /* Escape steps back one level instead of closing the whole menu: captured first, so
++     the popover's own Escape (close everything) only sees the second press. */
++  React.useEffect(() => {
++    if (!side) return;
++    const onKey = (event: KeyboardEvent) => {
++      if (event.key !== 'Escape') return;
++      event.stopImmediatePropagation();
++      setSide(null);
+     };
+-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the open row
+-  }, [open, choosing?.id, cardShift, sidePainted, room]);
+-
+-  const sideMenu = open && choosing && typeof document !== 'undefined' ? createPortal(
+-    <div ref={sideRef} onMouseEnter={() => showSide(choosing.id)} onMouseLeave={hideSideSoon}
+-      style={{ ...POPOVER_CHROME, padding: 4, overflowY: 'auto', ...(sideStyle ?? { position: 'fixed', left: -9999, top: 0 }) }}>
+-      {/* The model's maker for OpenFilm, then its name; the choices follow Settings' order and visibility. */}
+-      {rowChoices(agent, choosing, chosenValue(choosing)).map((choice) => {
+-        const selected = chosenValue(choosing) === choice.value;
+-        return (
+-          <button key={String(choice.value)} type="button" onMouseDown={keepFocus}
+-            disabled={choice.disabled} title={choice.disabled ? t('composer.modelUnavailableInfo') : undefined}
+-            onClick={() => pickChoice(choosing, choice.value)} className={`${ROW} disabled:cursor-default disabled:opacity-50`}>
+-            {agent === 'openfilm' && choosing.category === 'model' ? <span className="flex w-4 shrink-0 justify-center text-[var(--text-muted)]"><AgentIcon id={String(choice.value).startsWith('anthropic/') ? 'claude' : String(choice.value).startsWith('openai/') ? 'codex' : 'deepseek'} size={14} /></span> : null}
+-            <span className="min-w-0 flex-1 truncate text-[var(--text)]">{choice.name}</span>
+-            {choice.disabled ? <span className="text-[11px] text-[var(--text-muted)]">{t('composer.modelUnavailable')}</span> : null}
+-            <Check size={13} className={`ml-2 shrink-0 text-[var(--text)] ${selected ? '' : 'invisible'}`} />
+-          </button>
+-        );
+-      })}
+-    </div>,
+-    chatLayer(),
+-  ) : null;
++    window.addEventListener('keydown', onKey, true);
++    return () => window.removeEventListener('keydown', onKey, true);
++  }, [side]);
++  const choices = choosing ? rowChoices(agent, choosing, chosenValue(choosing)) : [];
++  const needle = query.trim().toLowerCase();
++  const visibleChoices = needle ? choices.filter((choice) => choice.name.toLowerCase().includes(needle)) : choices;
++  const offerSearch = choices.length > 8 || choosing?.category === 'model';
++  const searchPlaceholder = t('composer.searchModel');
++  const noMatch = t('composer.searchNoMatch');
+ 
+   return (
+     <>
+@@ -253,7 +199,6 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+       placement={placement}
+       align={align}
+       bare
+-      insideRefs={[sideRef]}
+       trigger={
+         <Tooltip label={t('composer.model')}>
+           <button type="button" onMouseDown={keepFocus}
+@@ -270,8 +215,64 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+         </Tooltip>
+       }
+     >
+-      <div ref={cardRef} style={{ ...POPOVER_CHROME, width: Math.min(shown.length > 1 ? CARD_W : CARD_W_ONE_AGENT, Math.max(CARD_MIN_W, Math.floor(room / 2))), padding: 4, transform: cardShift ? `translateX(-${cardShift}px)` : undefined }}>
+-        {shown.length === 0 && la.roster ? (
++      <div ref={cardRef} style={{
++        ...POPOVER_CHROME,
++        /* The choices level sizes itself to its own text: 思考强度 is four short rows and
++           must not be drawn as wide as a model list. The cap is where a long model name
++           starts wrapping instead of widening the card. */
++        ...(choosing
++          ? { width: 'max-content', minWidth: CARD_W, maxWidth: Math.min(Math.floor(window.innerWidth * 0.72), CARD_MAX_W) }
++          : { width: Math.min(shown.length > 1 ? CARD_W : CARD_W_ONE_AGENT, Math.max(CARD_MIN_W, Math.floor(window.innerWidth / 2))) }),
++        padding: 4,
++      }}>
++        {choosing ? (
++          <>
++            {/* one level at a time: the choices replace the rows; Escape steps back */}
++            <div className="flex items-center pb-0.5 pl-2.5 pr-0.5 pt-0.5">
++              <span data-agent-option-level-label={choosing.id} className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-faint)]">{rowLabel(choosing)}</span>
++            </div>
++            <div data-agent-option-level={choosing.id}>
++              {offerSearch ? (
++                <div className="mb-1 px-0.5">
++                  {/* No keepFocus here: it calls preventDefault, which is exactly what
++                      stopped this field from ever taking the caret. */}
++                  <input type="search" data-agent-search="" autoFocus value={query}
++                    onChange={(event) => setQuery(event.target.value)}
++                    onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Escape') setSide(null); }}
++                    placeholder={searchPlaceholder} aria-label={searchPlaceholder} spellCheck={false}
++                    className="h-7 w-full rounded-[6px] border border-[var(--border)] bg-transparent px-2 text-[12.5px] text-[var(--text)] outline-none placeholder:text-[var(--text-faint)] focus-visible:border-[var(--text-faint)]" />
++                </div>
++              ) : null}
++              <div style={{ maxHeight: CHOICE_MAX_H, overflowY: 'auto' }}>
++                {visibleChoices.length === 0 ? (
++                  <p className="px-2.5 py-2 text-[12px] text-[var(--text-muted)]">{noMatch}</p>
++                ) : groupChoices(visibleChoices).map(({ choice, group, label, heading }) => {
++                  const selected = chosenValue(choosing) === choice.value;
++                  return (
++                    <React.Fragment key={String(choice.value)}>
++                      {/* dsh-openfilm: a long list is grouped by whose models they are, the way
++                          DSH's own menu is, so a name is short enough to read in full. */}
++                      {heading ? (
++                        <div data-agent-choice-group={heading} className="px-2.5 pb-0.5 pt-2 text-[11px] font-medium text-[var(--text-faint)]">{heading}</div>
++                      ) : null}
++                      <button type="button" data-agent-choice={String(choice.value)}
++                        disabled={choice.disabled} title={choice.disabled ? t('composer.modelUnavailableInfo') : choice.name}
++                        onMouseDown={keepFocus}
++                        onClick={() => { pickChoice(choosing, choice.value); setSide(null); }}
++                        className={`${ROW} items-start py-1 disabled:cursor-default disabled:opacity-50`}>
++                        {agent === 'openfilm' && choosing.category === 'model' ? <span className="mt-0.5 flex w-4 shrink-0 justify-center text-[var(--text-muted)]"><AgentIcon id={String(choice.value).startsWith('anthropic/') ? 'claude' : String(choice.value).startsWith('openai/') ? 'codex' : 'deepseek'} size={14} /></span> : null}
++                        {/* The whole name, wrapped rather than cut: a model named in full is the point of this level. */}
++                        <span className="min-w-0 flex-1 whitespace-normal break-words text-[var(--text)] leading-snug">{label}</span>
++                        {choice.disabled ? <span className="shrink-0 text-[11px] text-[var(--text-muted)]">{t('composer.modelUnavailable')}</span> : null}
++                        <Check size={13} className={`mt-0.5 ml-2 shrink-0 text-[var(--text)] ${selected ? '' : 'invisible'}`} />
++                      </button>
++                    </React.Fragment>
++                  );
++                })}
++              </div>
++            </div>
++          </>
++        ) : shown.length === 0 && la.roster ? (
+           <div className="px-2.5 py-2 text-[12.5px] leading-relaxed text-[var(--text-muted)]">
+             {t('composer.agentNoneShown')}{' '}
+             <button type="button" onMouseDown={keepFocus} onClick={openSettings} className="text-[var(--text)] underline underline-offset-2">{t('composer.openSettings')}</button>
+@@ -282,7 +283,7 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+             <div className="flex items-center gap-2 pb-0.5 pl-2.5 pr-0.5 pt-0.5">
+               <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-faint)]">{shown.length > 1 ? t('composer.agentSection') : current ? nameOf(current) : t('composer.agentSection')}</span>
+               <Tooltip label={t('composer.openSettings')}>
+-                <button type="button" aria-label={t('composer.openSettings')} onMouseDown={keepFocus} onMouseEnter={hideSideSoon} onClick={openSettings}
++                <button type="button" aria-label={t('composer.openSettings')} onMouseDown={keepFocus} onClick={openSettings}
+                   className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-[var(--text-faint)] outline-none transition hover:bg-[var(--bg-hover)] hover:text-[var(--text)] focus-visible:bg-[var(--bg-hover)]">
+                   <Settings size={13} />
+                 </button>
+@@ -293,7 +294,7 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+                 {shown.map((a) => {
+                   const status = statusOf(a);
+                   return (
+-                    <button key={a.id} type="button" onMouseDown={keepFocus} onMouseEnter={hideSideSoon} onClick={() => chooseAgent(a)} className={ROW}>
++                    <button key={a.id} type="button" onMouseDown={keepFocus} onClick={() => chooseAgent(a)} className={ROW}>
+                       <span className={`flex w-4 shrink-0 justify-center ${status ? 'text-[var(--text-faint)]' : 'text-[var(--text)]'}`}><ChatAgentIcon id={a.id} /></span>
+                       <span className={`min-w-0 flex-1 truncate ${status ? 'text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>{nameOf(a)}</span>
+                       {agent === a.id && !status ? <Check size={13} className="shrink-0 text-[var(--text)]" />
+@@ -325,8 +326,8 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+               <React.Fragment key={o.id}>
+                 {i > 0 ? <div className="mx-1 my-0.5 h-px bg-[var(--border)]" /> : null}
+                 <button type="button" data-agent-option={o.id} ref={(el) => { rowRefs.current[o.id] = el; }} aria-haspopup="menu" aria-expanded={side === o.id}
+-                  onMouseDown={keepFocus} onMouseEnter={() => showSide(o.id)} onMouseLeave={hideSideSoon} onFocus={() => showSide(o.id)}
+-                  onClick={() => showSide(o.id)}
++                  onMouseDown={keepFocus}
++                  onClick={() => setSide(o.id)}
+                   className={`${ROW_BASE} ${side === o.id ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'}`}>
+                   <span className="shrink-0 text-[var(--text)]">{rowLabel(o)}</span>
+                   <span className="min-w-0 flex-1 truncate text-right text-[var(--text-muted)]">{valueOf(o)}</span>
+@@ -338,7 +339,6 @@ export function ModelPopover({ placement = 'bottom', align = 'start', agent: con
+         )}
+       </div>
+     </Popover>
+-    {sideMenu}
+     </>
+   );
+ }

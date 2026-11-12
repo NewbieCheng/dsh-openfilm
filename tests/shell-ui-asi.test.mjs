@@ -151,10 +151,11 @@ test('the load test really would catch the bug it exists for', () => {
   assert.doesNotThrow(() => new Function(fixed)());
 });
 
-test('the injected block stays inside one script tag', async () => {
+test('the injected blocks are balanced script tags', async () => {
   const injection = await shellUiInjection();
   assert.equal(typeof injection, 'string');
   assert.match(injection, /^<script>/);
   assert.match(injection, /<\/script>$/);
-  assert.equal(injection.split('</script').length, 2);
+  assert.equal(injection.split('</script').length, 4);
+  assert.match(injection, /__NOF_MOUNT_CITY__/);
 });

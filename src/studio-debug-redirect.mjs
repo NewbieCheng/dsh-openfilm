@@ -15,6 +15,7 @@ export function startLocalConsole({
   port = Number(process.env.NO996_OPENFILM_DEBUG_PORT || 47821),
   templates = async () => [],
   editorUrl = () => null,
+  authHandler = null,
 } = {}) {
   const escape = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 
@@ -94,6 +95,48 @@ document.addEventListener('click', async (event) => {
         const target = new URL(location);
         const body = JSON.stringify({ origin: target.origin, ticket: target.hash.replace(/^#/, '') });
         res.writeHead(200, { ...cors, 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
+        return;
+      }
+      if (url.pathname === '/api/auth' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        // Desktop panel auth path. Same loopback reason as /api/studio-url.
+        // Origin is restricted to the DSH desktop surfaces (or absent); arbitrary
+        // websites must not POST passwords here. Tokens still never leave Host.
+        const origin = String(req.headers.origin || '');
+        const allowedOrigin = !origin || origin === 'dsh-app://app' || origin === 'app://app' || origin === 'null';
+        const cors = {
+          'access-control-allow-origin': allowedOrigin ? (origin || 'dsh-app://app') : 'null',
+          'access-control-allow-methods': 'POST, OPTIONS',
+          'access-control-allow-headers': 'content-type',
+          'access-control-max-age': '600',
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+        };
+        if (req.method === 'OPTIONS') { res.writeHead(204, cors).end(); return; }
+        if (!allowedOrigin) {
+          res.writeHead(403, { ...cors, 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: 'ORIGIN' }));
+          return;
+        }
+        if (typeof authHandler !== 'function') {
+          res.writeHead(503, { ...cors, 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: 'UNAVAILABLE' }));
+          return;
+        }
+        try {
+          let size = 0;
+          const chunks = [];
+          for await (const chunk of req) {
+            size += chunk.length;
+            if (size > 64 * 1024) {
+              res.writeHead(413, { ...cors, 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: 'BODY_LIMIT' }));
+              return;
+            }
+            chunks.push(chunk);
+          }
+          const result = await authHandler(Buffer.concat(chunks).toString('utf8'));
+          const body = JSON.stringify(result.body);
+          res.writeHead(result.status, { ...cors, 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
+        } catch {
+          res.writeHead(503, { ...cors, 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: 'UNAVAILABLE' }));
+        }
         return;
       }
       if (url.pathname === '/create' && req.method === 'POST') {

@@ -7,6 +7,8 @@ description: How to cut an OpenFilm film well — shot grammar, pacing, subtitle
 
 这份技能只讲「怎么剪得好」，命令与文件格式以 `openfilm_guide` 为准（它读的是内核随包手册，永远和版本一致）。
 
+> **要做一支片 / 要重做画面 / 要换风格**：先加载 `openfilm-motion`，按 `docs/MOTION.md` 的七道闸门走完再回到这里抠剪辑细节。只改字幕、只换素材、只调音量时用本技能即可。
+
 ## 一条片子的骨架
 
 1. **先看再动**：`openfilm_film`（结构）+ `openfilm_frame`（画面）→ 才知道有什么、缺什么。

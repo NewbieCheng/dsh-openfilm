@@ -4,6 +4,10 @@
  * resizer, so this panel renders nothing beside it. Templates are offered from
  * inside that shell (injected picker) instead of a separate home page: one
  * surface, no "choose a template" detour before the editor.
+ *
+ * Workbench login lives inside the official shell (`assets/shell-login.js`),
+ * not as a separate panel page. This panel always boots Studio; the shell
+ * overlays a compact gate until Host auth is ready. Tokens never reach here.
  */
 
 /** Shared project-URL guard. The injected template picker and the standalone
@@ -18,7 +22,7 @@ export function createStudioPanel(React) {
   const h = React.createElement;
   return function StudioPanel({ t, startStudio }) {
     const HOST_HTTP = typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol);
-    const [state, setState] = React.useState({ status: 'loading' });
+    const [state, setState] = React.useState({ status: 'idle' });
     const [attempt, setAttempt] = React.useState(0);
     const [silent, setSilent] = React.useState(false);
     const [diag, setDiag] = React.useState(null);
@@ -50,7 +54,7 @@ export function createStudioPanel(React) {
         .then(data => { if (live && data?.preset) setPreset(data.preset); })
         .catch(() => {});
       return () => { live = false; };
-    }, []);
+    }, [HOST_HTTP]);
 
     React.useEffect(() => {
       const controller = new AbortController();
@@ -60,18 +64,20 @@ export function createStudioPanel(React) {
       // A plugin reload removes the route for a moment; a request landing in that
       // gap returns 404, and the panel used to keep that error until someone
       // pressed 重试. Two quiet retries cover the gap without hiding real faults.
+      // Desktop console can 503 while Studio is still warming; give it a few
+      // quiet retries before surfacing the error (AGENTS §10).
       const attemptOnce = retries => Promise.resolve()
         .then(() => startStudio(controller.signal))
         .catch(async error => {
           const transient = /HTTP (404|503)\b/.test(String(error?.message || error));
           if (transient && retries > 0 && !controller.signal.aborted) {
-            await new Promise(resolve => setTimeout(resolve, 1200));
+            await new Promise(resolve => setTimeout(resolve, 1500));
             if (controller.signal.aborted) throw error;
             return attemptOnce(retries - 1);
           }
           throw error;
         });
-      attemptOnce(2).then(result => {
+      attemptOnce(4).then(result => {
         if (controller.signal.aborted) return;
         const target = new URL(result.editorOrigin);
         const desktop = window.location.hostname === 'app' && ['dsh-app:', 'app:'].includes(window.location.protocol);
@@ -117,6 +123,8 @@ export function createStudioPanel(React) {
           setHealth(null);
           setAttempt(value => value + 1);
         }
+        // Login/logout are handled inside the official shell overlay. Keep the
+        // iframe up so logout only reopens the compact gate, never tears Studio down.
         if (data && typeof data === 'object' && data.type === 'no996-openfilm:project' && data.version === 1 && typeof data.projectId === 'string') {
           try {
             if (/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId)) {
@@ -218,7 +226,7 @@ export function createStudioPanel(React) {
     };
 
     let studio;
-    if (state.status === 'loading') {
+    if (state.status === 'loading' || state.status === 'idle') {
       studio = h('div', { role: 'status', style: { padding: 24, color: 'var(--dsw-alias-label-secondary)' } },
         t('studioLoading'),
         preset && !preset.ok ? h('p', { style: { margin: '8px 0 0', fontSize: 12, opacity: 0.8 } }, `${t('presetMissing')} ${String(preset.detail || '').slice(0, 120)}`) : null);
