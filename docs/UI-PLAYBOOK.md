@@ -144,8 +144,8 @@ src/theme.mjs             ← 读取 + 注入（按 surface 注册表）
 
 | 扩展点 | 能加什么 | 用途 |
 |---|---|---|
-| `sidebar.workspaces.session.row.action` | 行悬停时的一个图标按钮 | 「在剪辑素材区打开」 |
-| `sidebar.workspaces.session.menu.item` | 右键 / ⋯ 菜单项（带 `sessionId`、`displayTitle`、`useMenuOpenState`） | 同一动作的菜单入口 |
+| `sidebar.workspaces.session.row.action` | 行悬停时的一个图标按钮 | 「在剪辑素材区打开」（0.13.0 已用） |
+| `sidebar.workspaces.session.menu.item` | 右键 / ⋯ 菜单项（带 `sessionId`、`displayTitle`、`useMenuOpenState`） | 同一动作的菜单入口（0.13.0 已用，`MenuItemButton` + `separatorBefore`） |
 | `sidebar.session.row.trailing` / `hover` / `leading` | 行尾非交互图标 / 悬停扩展 / 行首 | 标记项目对话 |
 | `sidebar.workspaces.directoryFlow` | 目录选择交互（已被组合包占用） | 不用 |
 

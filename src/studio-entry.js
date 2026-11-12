@@ -1,6 +1,8 @@
 import { createStudioPanel } from './studio-panel.mjs';
 import { createActivationStore } from './panel-keepalive.mjs';
 import { areaBus } from './area-bus.mjs';
+import { createAreaStore } from './area-store.mjs';
+import { createSessionActions } from './session-actions.mjs';
 
 window.__ModuleLoader__.load({
   id: 'dsh-openfilm',
@@ -117,6 +119,36 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'openfilm: dictionaries');
         const t = ctx.locale.bind(NS);
+        const primitives = (() => {
+          try { return require('@deepseek-ai/dsh-client-ui-primitives'); } catch { return {}; }
+        })();
+        const fetchArea = async () => {
+          // The desktop page (dsh-app://app) cannot reach /api/... at all; there
+          // no Session is known to be a project, so no row action appears.
+          if (DESKTOP_PROTOCOL) return { projects: [], hiddenSessionIds: [] };
+          const response = await fetch('/api/no996-openfilm/area', { credentials: 'same-origin', cache: 'no-store' });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        };
+        const areaStore = createAreaStore({ fetchArea });
+        areaStore.start();
+        const { RowAction, MenuItem } = createSessionActions(React, {
+          t,
+          store: areaStore,
+          primitives,
+          openInEditing: projectId => {
+            areaBus.navigate(projectId);
+            selectPanel();
+          },
+        });
+        // Additive only: the shipped list keeps every native affordance; these two
+        // entries appear on a project's Session row and in its ⋯ menu.
+        ctx.slots.inject('sidebar.workspaces.session.row.action', () => ctx.slots.register({
+          name: 'sidebar.workspaces.session.row.action', id: 'no996-openfilm-open-in-editing', order: 400, locale: NS,
+        }, RowAction));
+        ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
+          name: 'sidebar.workspaces.session.menu.item', id: 'no996-openfilm-open-in-editing', order: 400, locale: NS,
+        }, MenuItem));
         const selectPanel = () => {
           const layout = ctx.get?.('layout');
           if (!layout || typeof layout.selectPanel !== 'function') return false;
@@ -124,10 +156,6 @@ window.__ModuleLoader__.load({
         };
         ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL, locale: NS }, PanelSeat));
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PANEL, order: 21, locale: NS, label: () => t('panel') }, PanelIcon));
-        // `shell.overlay` is rendered for the whole frame lifetime, so the panel
-        // it hosts survives page switches instead of reloading Studio each time.
-        ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'no996-openfilm-panel', order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
-        ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL, locale: NS }, PanelSeat));
         // `shell.overlay` is rendered for the whole frame lifetime, so the panel
         // it hosts survives page switches instead of reloading Studio each time.
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'no996-openfilm-panel', order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));

@@ -9,9 +9,16 @@ const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'
 
 test('the shipped Workspace browser is never replaced', () => {
   const entry = read('src/studio-entry.js');
-  assert.doesNotMatch(entry, /sidebar\.workspaces/,
-    'occupying the slot replaces the native list, its pin/archive menus and its running state');
-  assert.equal(read('src/studio-entry.js').includes('AreaBrowser'), false);
+  assert.doesNotMatch(entry, /name: 'sidebar\.workspaces',/,
+    'occupying the single slot replaces the native list, its pin/archive menus and its running state');
+  assert.equal(entry.includes('priority: -100'), false);
+});
+
+test('the project entry is two native contributions, not a takeover', () => {
+  const entry = read('src/studio-entry.js');
+  assert.match(entry, /name: 'sidebar\.workspaces\.session\.row\.action'/);
+  assert.match(entry, /name: 'sidebar\.workspaces\.session\.menu\.item'/);
+  assert.equal((entry.match(/name: 'sidebar\.workspaces'/g) ?? []).length, 0);
 });
 
 test('the video panel is still the only conversation-area panel the plugin adds', () => {

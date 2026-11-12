@@ -448,6 +448,189 @@
     });
   }
 
+  // src/area-client.mjs
+  var AREA_MODES = Object.freeze(["edit", "work"]);
+  var ID = /^[A-Za-z0-9_-]{6,40}$/;
+  var SESSION = /^[A-Za-z0-9_-]{1,100}$/;
+  function lastSegment(path) {
+    if (typeof path !== "string") return "";
+    const parts = path.split(/[\\/]+/).filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : "";
+  }
+  function parseAreaPayload(value) {
+    let data = value;
+    if (typeof value === "string") {
+      try {
+        data = JSON.parse(value);
+      } catch {
+        data = null;
+      }
+    }
+    const projects = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const row of Array.isArray(data?.projects) ? data.projects : []) {
+      const projectId = typeof row?.projectId === "string" ? row.projectId : "";
+      const projectPath = typeof row?.path === "string" ? row.path : "";
+      if (!ID.test(projectId) || !projectPath || seen.has(projectId)) continue;
+      seen.add(projectId);
+      projects.push({
+        projectId,
+        path: projectPath,
+        name: typeof row.name === "string" && row.name ? row.name : lastSegment(projectPath),
+        sessionId: typeof row.sessionId === "string" && SESSION.test(row.sessionId) ? row.sessionId : null,
+        sessionTitle: typeof row.sessionTitle === "string" ? row.sessionTitle : ""
+      });
+    }
+    const hidden = [];
+    const seenHidden = /* @__PURE__ */ new Set();
+    for (const id of Array.isArray(data?.hiddenSessionIds) ? data.hiddenSessionIds : []) {
+      if (typeof id !== "string" || !id || seenHidden.has(id)) continue;
+      seenHidden.add(id);
+      hidden.push(id);
+    }
+    return { projects, hidden };
+  }
+
+  // src/area-store.mjs
+  function createAreaStore({ fetchArea, intervalMs = 2e4, now = () => Date.now() }) {
+    let payload = { projects: [], hidden: [] };
+    const bySession = /* @__PURE__ */ new Map();
+    const listeners = /* @__PURE__ */ new Set();
+    let started = false;
+    let lastAt = 0;
+    const publish = () => {
+      listeners.forEach((listener) => {
+        try {
+          listener();
+        } catch {
+        }
+      });
+    };
+    const absorb = (data) => {
+      payload = parseAreaPayload(data);
+      bySession.clear();
+      for (const project of payload.projects) {
+        if (project.sessionId) bySession.set(project.sessionId, project);
+      }
+      lastAt = now();
+      publish();
+    };
+    const load = () => fetchArea().then(absorb).catch(() => {
+    });
+    return {
+      start() {
+        if (started) return;
+        started = true;
+        void load();
+        setInterval(() => {
+          void load();
+        }, intervalMs);
+        window.addEventListener("focus", () => {
+          void load();
+        });
+      },
+      /** The project a Session belongs to, or null when it is an ordinary one. */
+      projectOf(sessionId) {
+        if (typeof sessionId !== "string" || bySession.size === 0) return null;
+        return bySession.get(sessionId) ?? null;
+      },
+      snapshot: () => payload,
+      lastUpdatedAt: () => lastAt,
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      }
+    };
+  }
+
+  // src/session-actions.mjs
+  var STYLE_TAG = "no996-openfilm-session-action";
+  var CSS = `
+.nof-session-action{width:20px;height:20px;padding:0;border:0;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-tertiary);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.nof-session-action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.nof-session-action:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
+.nof-session-action-menu{display:block;width:100%;padding:6px 8px;border:0;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-primary);text-align:left;font:inherit;font-size:12.5px;line-height:20px;cursor:pointer}
+.nof-session-action-menu:hover{background:var(--dsw-alias-interactive-bg-hover)}
+`;
+  function ensureSessionActionStyles(doc = typeof document === "undefined" ? void 0 : document) {
+    if (!doc || doc.querySelector(`style[data-no996="${STYLE_TAG}"]`)) return;
+    const tag = doc.createElement("style");
+    tag.dataset.no996 = STYLE_TAG;
+    tag.textContent = CSS;
+    doc.head.appendChild(tag);
+  }
+  function discoverRowButtonClass(doc = typeof document === "undefined" ? void 0 : document) {
+    if (!doc) return null;
+    const tag = doc.querySelector('style[data-plugin-css$="Rows.module.css"]');
+    const text = tag?.textContent ?? "";
+    const match = /\.([A-Za-z][\w-]*)_iconButton\b/.exec(text);
+    return match ? `${match[1]}_iconButton` : null;
+  }
+  function createSessionActions(React, deps) {
+    const { t, store, openInEditing, primitives } = deps;
+    const h = React.createElement;
+    const MenuItemButton = primitives?.MenuItemButton ?? null;
+    const buttonClass = discoverRowButtonClass() ?? "nof-session-action";
+    ensureSessionActionStyles();
+    const icon = () => h(
+      "svg",
+      {
+        width: 14,
+        height: 14,
+        viewBox: "0 0 24 24",
+        fill: "none",
+        "aria-hidden": true
+      },
+      h("rect", { x: 3.5, y: 5, width: 17, height: 13, rx: 2.5, stroke: "currentColor", strokeWidth: 1.6 }),
+      h("path", { d: "m10.5 9 4.5 2.6-4.5 2.6V9Z", fill: "currentColor" })
+    );
+    const useProject = (sessionId) => {
+      const [, bump] = React.useState(0);
+      React.useEffect(() => store.subscribe(() => bump((value) => value + 1)), []);
+      return store.projectOf(sessionId);
+    };
+    function RowAction({ sessionId }) {
+      const project = useProject(sessionId);
+      if (!project) return null;
+      const label = t("openInEditing");
+      return h("button", {
+        type: "button",
+        className: buttonClass,
+        title: label,
+        "aria-label": label,
+        onClick: (event) => {
+          event.stopPropagation();
+          openInEditing(project.projectId);
+        }
+      }, icon());
+    }
+    function MenuItem({ sessionId, useMenuOpenState }) {
+      const project = useProject(sessionId);
+      const setMenuOpen = typeof useMenuOpenState === "function" ? useMenuOpenState()[1] : () => {
+      };
+      if (!project) return null;
+      const label = t("openInEditing");
+      if (MenuItemButton) {
+        return h(MenuItemButton, {
+          separatorBefore: true,
+          onSelect: () => {
+            setMenuOpen(false);
+            openInEditing(project.projectId);
+          }
+        }, label);
+      }
+      return h("button", {
+        type: "button",
+        className: "nof-session-action-menu",
+        onClick: () => {
+          setMenuOpen(false);
+          openInEditing(project.projectId);
+        }
+      }, label);
+    }
+    return { RowAction, MenuItem };
+  }
+
   // src/studio-entry.js
   window.__ModuleLoader__.load({
     id: "dsh-openfilm",
@@ -582,6 +765,42 @@
         apply(ctx) {
           ctx.effect(() => ctx.locale.register(NS, { en, zh }), "openfilm: dictionaries");
           const t = ctx.locale.bind(NS);
+          const primitives = (() => {
+            try {
+              return require2("@deepseek-ai/dsh-client-ui-primitives");
+            } catch {
+              return {};
+            }
+          })();
+          const fetchArea = async () => {
+            if (DESKTOP_PROTOCOL) return { projects: [], hiddenSessionIds: [] };
+            const response = await fetch("/api/no996-openfilm/area", { credentials: "same-origin", cache: "no-store" });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+          };
+          const areaStore = createAreaStore({ fetchArea });
+          areaStore.start();
+          const { RowAction, MenuItem } = createSessionActions(React, {
+            t,
+            store: areaStore,
+            primitives,
+            openInEditing: (projectId) => {
+              areaBus.navigate(projectId);
+              selectPanel();
+            }
+          });
+          ctx.slots.inject("sidebar.workspaces.session.row.action", () => ctx.slots.register({
+            name: "sidebar.workspaces.session.row.action",
+            id: "no996-openfilm-open-in-editing",
+            order: 400,
+            locale: NS
+          }, RowAction));
+          ctx.slots.inject("sidebar.workspaces.session.menu.item", () => ctx.slots.register({
+            name: "sidebar.workspaces.session.menu.item",
+            id: "no996-openfilm-open-in-editing",
+            order: 400,
+            locale: NS
+          }, MenuItem));
           const selectPanel = () => {
             const layout = ctx.get?.("layout");
             if (!layout || typeof layout.selectPanel !== "function") return false;
@@ -594,8 +813,6 @@
           };
           ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PANEL, locale: NS }, PanelSeat));
           ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: PANEL, order: 21, locale: NS, label: () => t("panel") }, PanelIcon));
-          ctx.slots.inject("shell.overlay", () => ctx.slots.register({ name: "shell.overlay", id: "no996-openfilm-panel", order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
-          ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PANEL, locale: NS }, PanelSeat));
           ctx.slots.inject("shell.overlay", () => ctx.slots.register({ name: "shell.overlay", id: "no996-openfilm-panel", order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
         }
       };
