@@ -120,8 +120,14 @@ test('tokens are unique, expirable and revocable per project', () => {
   const second = tokens.mint({ projectId: 'proj123456', path: 'C:\\p', agent });
   assert.notEqual(first, second);
   assert.equal(tokens.resolve(first).projectId, 'proj123456');
+  // An actively used token slides forward instead of expiring at a fixed hour.
+  clock += 100;
+  assert.ok(tokens.resolve(first), 'a use inside the window refreshes it');
+  clock += 100;
+  assert.ok(tokens.resolve(first), 'and again');
+  // An unused token still expires.
   clock += 101;
-  assert.equal(tokens.resolve(first), undefined);
+  assert.equal(tokens.resolve(second), undefined);
   const third = tokens.mint({ projectId: 'proj123456', path: 'C:\\p', agent });
   tokens.revokeProject('proj123456');
   assert.equal(tokens.resolve(third), undefined);

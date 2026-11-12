@@ -144,7 +144,10 @@ export function createMcpTokens({ randomBytes, now = Date.now, ttlMs = 12 * 60 *
     resolve(token) {
       const entry = table.get(token);
       if (!entry) return undefined;
+      // Sliding lifetime: a Session that keeps working keeps its credential, so a
+      // child that lives across days does not lose its tools at an arbitrary hour.
       if (now() - entry.at > ttlMs) { table.delete(token); return undefined; }
+      entry.at = now();
       return entry;
     },
     revoke(token) { table.delete(token); },
