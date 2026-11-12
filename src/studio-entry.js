@@ -158,7 +158,10 @@ window.__ModuleLoader__.load({
           },
           report,
         });
-        projectFilter.start();
+        ctx.effect(() => {
+          projectFilter.start();
+          return () => projectFilter.stop();
+        }, 'openfilm: workspace type filter');
         ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL, locale: NS }, PanelSeat));
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PANEL, order: 21, locale: NS, label: () => t('panel') }, PanelIcon));
         // `shell.overlay` is rendered for the whole frame lifetime, so the panel

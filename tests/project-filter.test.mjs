@@ -57,9 +57,8 @@ test('project types hide every other row in one stylesheet', () => {
   assert.match(css, /\[class\*="_groupSection"\]/);
 });
 
-test('no project conversation means an empty list, not an unfiltered one', () => {
-  const css = buildFilterCss(FILTER_PROJECTS, new Set());
-  assert.match(css, /\[data-row-key\^="session:"\]\{display:none!important\}/);
+test('an empty set never blanks the list while the Host payload is missing', () => {
+  assert.equal(buildFilterCss(FILTER_PROJECTS, new Set()), '');
 });
 
 test('without a document the filter is inert instead of crashing', () => {

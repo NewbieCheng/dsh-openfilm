@@ -52,6 +52,9 @@ export function projectSessionIds(payload) {
 export function buildFilterCss(type, sessionIds) {
   if (type !== FILTER_PROJECTS) return '';
   const ids = [...new Set([...sessionIds])].sort();
+  // Never hide rows on an empty set: while the Host payload is still in flight
+  // (or has failed) this would blank the whole sidebar instead of leaving it be.
+  if (ids.length === 0) return '';
   const keepRows = ids.map(id => `:not([data-row-key="session:${id}"])`).join('');
   const keepSections = ids.map(id => `:not(:has([data-row-key="session:${id}"]))`).join('');
   return [
@@ -77,9 +80,21 @@ export function createProjectFilter({ store, storage, doc = typeof document === 
   let type = readProjectFilter(storage);
   let ids = projectSessionIds(store.snapshot());
 
+  // Reuse one stylesheet even if apply() runs twice (a hot reload), and clear
+  // anything an earlier build left behind: an old flag/attributes would keep
+  // hiding rows long after that instance stopped running.
+  for (const node of doc.querySelectorAll(`style[data-no996="${STYLE_TAG}"]`)) node.remove();
   const style = doc.createElement('style');
   style.dataset.no996 = STYLE_TAG;
   doc.head.appendChild(style);
+  const cleanupLegacy = () => {
+    try {
+      doc.documentElement.removeAttribute('data-no996-projects');
+      for (const node of doc.querySelectorAll('[data-no996-project]')) node.removeAttribute('data-no996-project');
+      for (const node of doc.querySelectorAll('[data-no996-filter-item]')) node.remove();
+    } catch { /* a menu being torn down */ }
+  };
+  cleanupLegacy();
 
   const apply = () => {
     doc.documentElement.setAttribute(FLAG, type === FILTER_PROJECTS ? 'projects' : 'all');
@@ -127,6 +142,7 @@ export function createProjectFilter({ store, storage, doc = typeof document === 
   let allItem;
   let projectsItem;
   const inject = () => {
+    cleanupLegacy();
     const list = doc.querySelector('[class*="viewOptionsMenu"]');
     if (!list || list.querySelector('[data-no996-section]')) return;
     const built = section(list);
@@ -159,6 +175,10 @@ export function createProjectFilter({ store, storage, doc = typeof document === 
 
   return {
     start() {
+      cleanupLegacy();
+      // A previous instance (hot reload) may have injected its own section; drop
+      // it once at start so the menu has exactly one.
+      try { for (const node of doc.querySelectorAll('[data-no996-section]')) node.remove(); } catch { /* torn down */ }
       apply();
       observer.observe(doc.body, { childList: true, subtree: true });
       store.subscribe(() => {

@@ -582,6 +582,7 @@
   function buildFilterCss(type, sessionIds) {
     if (type !== FILTER_PROJECTS) return "";
     const ids = [.../* @__PURE__ */ new Set([...sessionIds])].sort();
+    if (ids.length === 0) return "";
     const keepRows = ids.map((id) => `:not([data-row-key="session:${id}"])`).join("");
     const keepSections = ids.map((id) => `:not(:has([data-row-key="session:${id}"]))`).join("");
     return [
@@ -596,9 +597,19 @@
     }, getType: () => FILTER_ALL };
     let type = readProjectFilter(storage);
     let ids = projectSessionIds(store.snapshot());
+    for (const node of doc.querySelectorAll(`style[data-no996="${STYLE_TAG}"]`)) node.remove();
     const style = doc.createElement("style");
     style.dataset.no996 = STYLE_TAG;
     doc.head.appendChild(style);
+    const cleanupLegacy = () => {
+      try {
+        doc.documentElement.removeAttribute("data-no996-projects");
+        for (const node of doc.querySelectorAll("[data-no996-project]")) node.removeAttribute("data-no996-project");
+        for (const node of doc.querySelectorAll("[data-no996-filter-item]")) node.remove();
+      } catch {
+      }
+    };
+    cleanupLegacy();
     const apply = () => {
       doc.documentElement.setAttribute(FLAG, type === FILTER_PROJECTS ? "projects" : "all");
       style.textContent = buildFilterCss(type, ids);
@@ -641,6 +652,7 @@
     let allItem;
     let projectsItem;
     const inject = () => {
+      cleanupLegacy();
       const list = doc.querySelector('[class*="viewOptionsMenu"]');
       if (!list || list.querySelector("[data-no996-section]")) return;
       const built = section(list);
@@ -687,6 +699,11 @@
     });
     return {
       start() {
+        cleanupLegacy();
+        try {
+          for (const node of doc.querySelectorAll("[data-no996-section]")) node.remove();
+        } catch {
+        }
         apply();
         observer.observe(doc.body, { childList: true, subtree: true });
         store.subscribe(() => {
@@ -884,7 +901,10 @@
             },
             report
           });
-          projectFilter.start();
+          ctx.effect(() => {
+            projectFilter.start();
+            return () => projectFilter.stop();
+          }, "openfilm: workspace type filter");
           ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PANEL, locale: NS }, PanelSeat));
           ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: PANEL, order: 21, locale: NS, label: () => t("panel") }, PanelIcon));
           ctx.slots.inject("shell.overlay", () => ctx.slots.register({ name: "shell.overlay", id: "no996-openfilm-panel", order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
