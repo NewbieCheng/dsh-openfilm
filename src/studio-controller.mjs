@@ -871,6 +871,17 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     routeDisposers.push(dispose);
     return dispose;
   };
+  // Registering the same exact path twice throws inside the web registry; a
+  // management toggle can re-run this block in a Host that already has it.
+  const registerLocalRoute = route => {
+    try {
+      trackRoute(ctx.webServer.register(route));
+      return true;
+    } catch (error) {
+      void log.warn('route-already-mounted', { path: route.path, detail: String(error?.message ?? error).slice(0, 160) });
+      return false;
+    }
+  };
   const rollbackRoutes = () => {
     while (routeDisposers.length) {
       try { routeDisposers.pop()(); } catch { /* already gone */ }
@@ -926,7 +937,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // Read-only; registered only for the official shell, which owns the library.
   let unregisterArea;
   if (officialShell) {
-    unregisterArea = trackRoute(ctx.webServer.register(createAreaRoute({
+    unregisterArea = registerLocalRoute(createAreaRoute({
       admit: req => {
         const admission = ctx.connection.admit({ headers: req.headers });
         return !('rejection' in admission) && admission.peer.id === ctx.connection.browserPeer.id;
@@ -938,19 +949,19 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         return Array.isArray(page?.items) ? page.items : [];
       },
       log,
-    })));
+    }));
     // One line of evidence that the sidebar's data route is really mounted: a
     // 401/403 from outside cannot tell "mounted and refusing" from "missing".
     void log.info('area-route', { mounted: true, path: '/api/no996-openfilm/area' });
     // The browser half has no way to write to this log; without it a missing
     // menu item is indistinguishable from a browser that still runs old code.
-    unregisterArea = trackRoute(ctx.webServer.register(createClientLogRoute({
+    registerLocalRoute(createClientLogRoute({
       admit: req => {
         const admission = ctx.connection.admit({ headers: req.headers });
         return !('rejection' in admission) && admission.peer.id === ctx.connection.browserPeer.id;
       },
       log,
-    })));
+    }));
   }
   unregister = trackRoute(ctx.webServer.register({
     kind: 'exact', path: '/api/no996-openfilm/diagnose',
