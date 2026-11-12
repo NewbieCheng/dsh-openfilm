@@ -161,7 +161,11 @@ export function createAcpClient({ resolve = resolveAcpCommand, env = process.env
       const { command, args, shell = false } = resolve();
       // Extra flags (a per-spawn --patch overlay) ride after the launcher's own.
       if (Array.isArray(extraArgs) && extraArgs.length > 0) args.push(...extraArgs);
-      child = spawnChild(command, args, {
+      // Through a shell Node joins argv with spaces without quoting, so a path with
+      // a space (a temp dir under a user profile that has one) would split in two.
+      // Quote those tokens here; a plain spawn keeps the raw argument.
+      const spawnArgs = shell ? args.map(value => (/\s/.test(value) ? '"' + value + '"' : value)) : args;
+      child = spawnChild(command, spawnArgs, {
         cwd: env.NO996_OPENFILM_ACP_CWD || process.cwd(),
         env: { ...env },
         stdio: ['pipe', 'pipe', 'pipe'],

@@ -170,3 +170,18 @@ test('a prompt gets its own, much longer budget than control calls', async () =>
   assert.equal(listed, 'pending');
   await client.close();
 });
+
+test('a shell launcher quotes a flag value that contains a space', async () => {
+  const child = fakeChild({ answer: 'first' });
+  const seen = [];
+  const client = createAcpClient({
+    resolve: () => ({ command: 'C:\\Program Files\\dsh.cmd', args: ['--profile', 'acp'], shell: true }),
+    env: {},
+    args: ['--patch', 'C:\\Users\\A B\\Temp\\overlay.yml'],
+    spawnChild: (command, args) => { seen.push([command, args]); return child; },
+    requestTimeoutMs: 1000,
+  });
+  await client.start();
+  assert.deepEqual(seen[0][1], ['--profile', 'acp', '--patch', '"C:\\Users\\A B\\Temp\\overlay.yml"']);
+  await client.close();
+});
