@@ -114,3 +114,19 @@ test('a title without a projection falls back to the session title field', () =>
   });
   assert.equal(view.projects[0].sessionTitle, '手绘笔记');
 });
+
+test('a workspace opened on a project folder or its parent still counts as that project', () => {
+  const view = buildAreaView({
+    projects: [{ id: 'proj01', path: 'C:\\Work\\Demo\\film' }],
+    bindings: [],
+    sessions: [
+      { sessionId: 'inside', cwd: 'C:\\Work\\Demo\\film\\shots' },
+      { sessionId: 'parent', cwd: 'C:\\work\\demo' },
+      { sessionId: 'other', cwd: 'C:\\Work\\Other' },
+    ],
+  });
+  const hidden = new Set(view.hiddenSessionIds);
+  assert.equal(hidden.has('inside'), true, 'a session inside the project folder belongs to it');
+  assert.equal(hidden.has('parent'), true, 'so does the folder the project was created in');
+  assert.equal(hidden.has('other'), false);
+});

@@ -19,6 +19,27 @@ export function samePath(left, right) {
   return trim(left).replaceAll('\\', '/') === trim(right).replaceAll('\\', '/');
 }
 
+/**
+ * Whether `child` is `parent` or sits below it. A Workspace often points at the
+ * folder a project was created *in* (or the project folder itself), so path
+ * equality alone misses the conversations the user still calls "my project".
+ */
+export function withinPath(child, parent) {
+  if (typeof child !== 'string' || typeof parent !== 'string' || !child || !parent) return false;
+  const trim = value => value.replace(/[\\/]+$/, '');
+  const windows = process.platform === 'win32';
+  let left = trim(child).replaceAll('\\', '/');
+  let right = trim(parent).replaceAll('\\', '/');
+  if (windows) { left = left.toLowerCase(); right = right.toLowerCase(); }
+  return left === right || left.startsWith(right + '/');
+}
+
+/** Same folder, either direction: the Session's cwd is the project, below it,
+ * or the folder the project was created in. */
+export function relatedPath(left, right) {
+  return samePath(left, right) || withinPath(left, right) || withinPath(right, left);
+}
+
 /** The display name of a project: its folder, which is the name the user gave it. */
 export function projectName(path) {
   if (typeof path !== 'string') return '';
@@ -67,9 +88,11 @@ function titleOf(item) {
  * Build the one payload the sidebar draws.
  *
  * `hiddenSessionIds` is the union of every bound Session and every catalog
- * Session whose cwd is a project folder. The second half is what catches the
- * conversations older releases left unbound: they still belong to a project,
- * so they still must not appear in the Workspace list.
+ * Session whose cwd is a project folder — the folder itself, a folder below it,
+ * or the folder the project was created in. The second half is what catches the
+ * conversations older releases left unbound (and workspaces opened on the
+ * project's parent folder): they still belong to a project, so the "projects
+ * only" filter must keep them.
  *
  * Projects without a binding still ship a row — that is the "未开始" state the
  * user opens from the editing area.
@@ -94,7 +117,7 @@ export function buildAreaView({ projects, bindings, sessions } = {}) {
   for (const binding of bound) hidden.add(binding.sessionId);
   for (const item of catalog) {
     if (typeof item?.sessionId !== 'string') continue;
-    if (list.some(project => samePath(item.cwd, project.path))) hidden.add(item.sessionId);
+    if (list.some(project => relatedPath(item.cwd, project.path))) hidden.add(item.sessionId);
   }
   const rows = list.map(project => {
     const binding = byProject.get(project.projectId);
