@@ -38,10 +38,11 @@ export function createAreaStore({ fetchArea, intervalMs = 20000, now = () => Dat
       return bySession.get(sessionId) ?? null;
     },
     snapshot: () => payload,
+    getSnapshot: () => payload,
     lastUpdatedAt: () => lastAt,
     subscribe(listener) {
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      return () => { listeners.delete(listener); };
     },
   };
 }

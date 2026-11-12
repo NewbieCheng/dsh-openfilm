@@ -535,10 +535,13 @@
         return bySession.get(sessionId) ?? null;
       },
       snapshot: () => payload,
+      getSnapshot: () => payload,
       lastUpdatedAt: () => lastAt,
       subscribe(listener) {
         listeners.add(listener);
-        return () => listeners.delete(listener);
+        return () => {
+          listeners.delete(listener);
+        };
       }
     };
   }
@@ -795,12 +798,41 @@
             order: 400,
             locale: NS
           }, RowAction));
-          ctx.slots.inject("sidebar.workspaces.session.menu.item", () => ctx.slots.register({
-            name: "sidebar.workspaces.session.menu.item",
-            id: "no996-openfilm-open-in-editing",
-            order: 400,
-            locale: NS
-          }, MenuItem));
+          const menus = (() => {
+            try {
+              return ctx.get?.("contextMenus");
+            } catch {
+              return void 0;
+            }
+          })();
+          if (menus && typeof menus.register === "function") {
+            ctx.effect(() => menus.register({
+              id: "no996-openfilm.open-in-editing",
+              target: "session",
+              order: 350,
+              observe: () => [areaStore],
+              resolve: ({ sessionId }) => {
+                const project = areaStore.projectOf(sessionId);
+                if (!project) return [];
+                return [{
+                  id: "open-in-editing",
+                  label: t("openInEditing"),
+                  separatorBefore: true,
+                  run: () => {
+                    areaBus.navigate(project.projectId);
+                    selectPanel();
+                  }
+                }];
+              }
+            }), "openfilm: session menu");
+          } else {
+            ctx.slots.inject("sidebar.workspaces.session.menu.item", () => ctx.slots.register({
+              name: "sidebar.workspaces.session.menu.item",
+              id: "no996-openfilm-open-in-editing",
+              order: 400,
+              locale: NS
+            }, MenuItem));
+          }
           const selectPanel = () => {
             const layout = ctx.get?.("layout");
             if (!layout || typeof layout.selectPanel !== "function") return false;

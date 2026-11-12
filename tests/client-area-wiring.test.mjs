@@ -17,7 +17,10 @@ test('the shipped Workspace browser is never replaced', () => {
 test('the project entry is two native contributions, not a takeover', () => {
   const entry = read('src/studio-entry.js');
   assert.match(entry, /name: 'sidebar\.workspaces\.session\.row\.action'/);
-  assert.match(entry, /name: 'sidebar\.workspaces\.session\.menu\.item'/);
+  assert.match(entry, /menus\.register\(\{/, 'the menu item takes the structured path native items use');
+  assert.match(entry, /target: 'session'/);
+  assert.match(entry, /resolve: \(\{ sessionId \}\) => \{/, 'the item is resolved per Session');
+  assert.match(entry, /return \[\];/, 'an ordinary Session contributes no item');
   assert.equal((entry.match(/name: 'sidebar\.workspaces'/g) ?? []).length, 0);
 });
 

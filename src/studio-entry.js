@@ -146,9 +146,36 @@ window.__ModuleLoader__.load({
         ctx.slots.inject('sidebar.workspaces.session.row.action', () => ctx.slots.register({
           name: 'sidebar.workspaces.session.row.action', id: 'no996-openfilm-open-in-editing', order: 400, locale: NS,
         }, RowAction));
-        ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
-          name: 'sidebar.workspaces.session.menu.item', id: 'no996-openfilm-open-in-editing', order: 400, locale: NS,
-        }, MenuItem));
+        // The session menu's own items are structured contributions, not slot
+        // entries, and that is the path the shipped Pin/Rename/Archive rows take.
+        // Registering the same way is what guarantees the item is in the menu at
+        // all; the legacy slot is kept only for a build without the service.
+        const menus = (() => { try { return ctx.get?.('contextMenus'); } catch { return undefined; } })();
+        if (menus && typeof menus.register === 'function') {
+          ctx.effect(() => menus.register({
+            id: 'no996-openfilm.open-in-editing',
+            target: 'session',
+            order: 350,
+            observe: () => [areaStore],
+            resolve: ({ sessionId }) => {
+              const project = areaStore.projectOf(sessionId);
+              if (!project) return [];
+              return [{
+                id: 'open-in-editing',
+                label: t('openInEditing'),
+                separatorBefore: true,
+                run: () => {
+                  areaBus.navigate(project.projectId);
+                  selectPanel();
+                },
+              }];
+            },
+          }), 'openfilm: session menu');
+        } else {
+          ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
+            name: 'sidebar.workspaces.session.menu.item', id: 'no996-openfilm-open-in-editing', order: 400, locale: NS,
+          }, MenuItem));
+        }
         const selectPanel = () => {
           const layout = ctx.get?.('layout');
           if (!layout || typeof layout.selectPanel !== 'function') return false;
