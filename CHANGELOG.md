@@ -9,6 +9,7 @@
 - 影片工具跟着走：Host 新增 `/api/no996-openfilm/mcp`（MCP streamable-http：initialize / tools/list / tools/call / ping），`session/new` 时以 `mcpServers` 交给子进程；令牌按会话签发（Bearer），子进程退出或切换权限时吊销。真机探测确认子进程连上端点并完成 `initialize`。没有这一步，ACP 会话只有 dsh-base 工具，面板里的 `openfilm_*` 全部消失。
 - 编辑指令跟着项目走：ACP 会话拿不到 `openfilm-video-editing` 预设，改为在会话打开时写 `<项目>/AGENTS.md`（schema 见 `src/project-instructions.mjs`；8 KB 上限；已有文件绝不覆盖）。acp profile 自带 `@deepseek-ai/dsh-agent-instructions`，按 cwd 读取，所以面板里的助手与侧栏会话读到同一份规则。
 - 兜底：`NO996_OPENFILM_ACP=0` 回到旧的进程内桥；CLI 解析优先用桌面应用自带的 `resources/runtime/cli/bin/dsh.cmd`。
+- 真机侧证据（手动）：一轮真实回合经真 `dsh --profile acp` 与真模型跑通，模型调用 `mcp__no996-openfilm__openfilm_guide` 并把工具结果带回，`end_turn`；续聊（跨进程 `session/resume`）与模型/思考切换也在真子进程上验过。
 - 测试：`tests/acp-agent-service.test.mjs`（17 项，对着线级假代理，不碰真实模型）覆盖会话复用、模型/思考、图片两条路径、权限询问与拒绝、并发拒绝、cancel、预设随子进程生效、reset、MCP 传递；`tests/mcp-server.test.mjs`（9 项）覆盖 MCP 协议、令牌与错误形状。
 
 ## 0.13.0 —— 侧栏保持原生：撤销全部工作区定制

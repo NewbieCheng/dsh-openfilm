@@ -20,6 +20,8 @@ export const INSTRUCTIONS = `# OpenFilm 项目工作说明
 
 这个目录是一支 OpenFilm 影片的项目文件夹。\`film.html\` 就是影片本身；项目素材在同级目录里。
 
+影片工具在会话里的名字以 `mcp__no996-openfilm__` 开头（例如 `mcp__no996-openfilm__openfilm_clip`）；下文为简短起见只写后半段。
+
 ## 怎么做事
 
 1. **先读再改。** 改 \`film.html\` 之前先读它的当前内容；时间轴的增删改优先用本次会话的 \`openfilm_clip\`（它会读文件、拒绝锁定的轨道、原子保存），而不是手写大段 HTML。
