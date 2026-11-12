@@ -27,14 +27,17 @@ const HOST_VERSION = (() => { try { return String(JSON.parse(readFileSync(new UR
 
 const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.url));
 /** Page events the Host will record; anything else is refused. */
-const CLIENT_EVENTS = new Set(['recovery-shown', 'restart-click', 'picker-placed', 'session-expired', 'permission-shown', 'permission-chosen']);
+const CLIENT_EVENTS = new Set([
+  'recovery-shown', 'restart-click', 'picker-placed', 'session-expired', 'permission-shown', 'permission-chosen',
+  // evidence for the Workspace filter / area payload; see src/project-filter.mjs
+  'client-apply', 'store-loaded', 'filter-installed', 'filter-menu', 'filter-toggle',
+]);
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
 import { startLocalConsole } from './studio-debug-redirect.mjs';
 import { createDshAskAgent } from './dsh-ai.mjs';
 import { reportPresetStatus } from './preset-report.mjs';
 import { openProjectConversations } from './project-conversation.mjs';
 import { createAreaRoute } from './area-route.mjs';
-import { createClientLogRoute } from './client-log-route.mjs';
 import { createGuideTool } from './guide-tool.mjs';
 import { createStudioHttp } from './studio-http.mjs';
 import { createFrameTool } from './frame-tool.mjs';
@@ -730,7 +733,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   );
   // The install path the panel can use without a chat turn: a fresh machine needs
   // 228 MB of weights, and the person should be able to start that from the UI.
-  const unregisterTranscribeRoute = ctx.webServer.register({
+  const unregisterTranscribeRoute = registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/asr',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -792,7 +795,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     const wanted = tool === 'ffmpeg' || tool === 'ffprobe' ? [tool] : ['ffmpeg', 'ffprobe'];
     for (const item of wanted) void toolInstaller.install(item).catch(() => undefined);
   };
-  const unregisterSystemCheck = ctx.webServer.register({
+  const unregisterSystemCheck = registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/system/check',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -804,7 +807,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       catch (error) { res.writeHead(500).end(JSON.stringify({ error: String(error?.message || error).slice(0, 200) })); }
     },
   });
-  const unregisterSystemInstall = ctx.webServer.register({
+  const unregisterSystemInstall = registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/system/install',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -872,14 +875,12 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     return dispose;
   };
   // Registering the same exact path twice throws inside the web registry; a
-  // management toggle can re-run this block in a Host that already has it.
-  const registerLocalRoute = route => {
-    try {
-      trackRoute(ctx.webServer.register(route));
-      return true;
-    } catch (error) {
-      void log.warn('route-already-mounted', { path: route.path, detail: String(error?.message ?? error).slice(0, 160) });
-      return false;
+  // management toggle can re-run this block in a Host that already has it, and a
+  // throw here would mark the whole plugin as failed to activate.
+  const registerRoute = route => {
+    try { return ctx.webServer.register(route); } catch (error) {
+      void log.warn('route-already-mounted', { path: route?.path, detail: String(error?.message ?? error).slice(0, 160) });
+      return () => {};
     }
   };
   const rollbackRoutes = () => {
@@ -937,7 +938,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // Read-only; registered only for the official shell, which owns the library.
   let unregisterArea;
   if (officialShell) {
-    unregisterArea = registerLocalRoute(createAreaRoute({
+    unregisterArea = trackRoute(registerRoute(createAreaRoute({
       admit: req => {
         const admission = ctx.connection.admit({ headers: req.headers });
         return !('rejection' in admission) && admission.peer.id === ctx.connection.browserPeer.id;
@@ -949,21 +950,12 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         return Array.isArray(page?.items) ? page.items : [];
       },
       log,
-    }));
+    })));
     // One line of evidence that the sidebar's data route is really mounted: a
     // 401/403 from outside cannot tell "mounted and refusing" from "missing".
     void log.info('area-route', { mounted: true, path: '/api/no996-openfilm/area' });
-    // The browser half has no way to write to this log; without it a missing
-    // menu item is indistinguishable from a browser that still runs old code.
-    registerLocalRoute(createClientLogRoute({
-      admit: req => {
-        const admission = ctx.connection.admit({ headers: req.headers });
-        return !('rejection' in admission) && admission.peer.id === ctx.connection.browserPeer.id;
-      },
-      log,
-    }));
   }
-  unregister = trackRoute(ctx.webServer.register({
+  unregister = trackRoute(registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/diagnose',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -1034,7 +1026,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // <DSH_HOME>/attachments/v1/objects). The chat transcript then points at it with
   // `![](/api/no996-openfilm/attachment?id=<hex>)`, which is this route: the panel's own origin,
   // a validated 64-hex id, and a path that cannot leave the object store.
-  unregisterAttachment = trackRoute(ctx.webServer.register({
+  unregisterAttachment = trackRoute(registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/attachment',
     async handler(req, res) {
       res.setHeader('cache-control', 'private, max-age=600');
@@ -1058,7 +1050,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // recovery card appeared, the button was pressed. Enum-only, 512 bytes, and
   // only from the authenticated DSH browser — this is not a general log sink.
   // DSH register() takes one route only; client-log and bootstrap must be separate.
-  unregisterClientLog = trackRoute(ctx.webServer.register({
+  unregisterClientLog = trackRoute(registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/client-log',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -1070,7 +1062,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const finish = (status) => { if (!res.writableEnded) res.writeHead(status).end(); };
       req.on('data', (chunk) => {
         size += chunk.length;
-        if (size > 512) { finish(413); req.destroy(); return; }
+        if (size > 2048) { finish(413); req.destroy(); return; }
         chunks.push(chunk);
       });
       req.on('end', () => {
@@ -1079,12 +1071,13 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return finish(400); }
         const event = typeof value?.event === 'string' ? value.event : '';
         if (!CLIENT_EVENTS.has(event)) return finish(400);
-        log.info(`page-${event}`, { anchor: typeof value.anchor === 'string' ? value.anchor.slice(0, 16) : undefined });
+        const detail = value?.detail === undefined ? undefined : JSON.stringify(value.detail).slice(0, 480);
+        log.info(`page-${event}`, { anchor: typeof value.anchor === 'string' ? value.anchor.slice(0, 16) : undefined, ...(detail ? { detail } : {}) });
         finish(204);
       });
     },
   }));
-  unregisterBootstrap = trackRoute(ctx.webServer.register({
+  unregisterBootstrap = trackRoute(registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/bootstrap',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -1138,7 +1131,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       }
     },
   }));
-  unregisterStandalone = trackRoute(ctx.webServer.register({
+  unregisterStandalone = trackRoute(registerRoute({
     kind: 'exact', path: '/no996-openfilm/standalone',
     async handler(req, res) {
       // A plain browser window for layout work. Same DSH origin, so it uses the
@@ -1170,7 +1163,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-length': Buffer.byteLength(page) }).end(page);
     },
   }));
-  unregisterTemplatesPage = trackRoute(ctx.webServer.register({
+  unregisterTemplatesPage = trackRoute(registerRoute({
     kind: 'exact', path: '/no996-openfilm/templates',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
@@ -1186,7 +1179,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(html) }).end(html);
     },
   }));
-  unregisterDebugUrl = trackRoute(ctx.webServer.register({
+  unregisterDebugUrl = trackRoute(registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/debug-url',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
