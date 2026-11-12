@@ -155,6 +155,9 @@ window.__ModuleLoader__.load({
           t,
           primitives,
           fetchArea,
+          panelSnapshot: () => {
+            try { return ctx.get?.('layout')?.panelInfo?.getSnapshot?.()?.activePanelId ?? null; } catch { return null; }
+          },
           openProject: projectId => {
             areaBus.navigate(projectId);
             selectPanel();

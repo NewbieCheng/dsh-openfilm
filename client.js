@@ -624,7 +624,7 @@
     doc.head.appendChild(tag);
   }
   function createAreaBrowser(React, deps) {
-    const { t, fetchArea, openProject, openSession, openPanel, primitives } = deps;
+    const { t, fetchArea, openProject, openSession, openPanel, primitives, panelSnapshot } = deps;
     const h = React.createElement;
     const C = classes(discoverPrefixes());
     const prim = primitives ?? {};
@@ -638,7 +638,16 @@
       const usePanelInfo = props?.usePanelInfo;
       const list = typeof useSessions === "function" ? useSessions((state) => state) : null;
       const wsState = typeof useWorkspaces === "function" ? useWorkspaces((state) => state) : null;
-      const activePanel = typeof usePanelInfo === "function" ? usePanelInfo((info) => info?.activePanelId ?? null) : null;
+      const usePanel = typeof usePanelInfo === "function" ? usePanelInfo : null;
+      const [polled, setPolled] = React.useState(null);
+      React.useEffect(() => {
+        if (usePanel || typeof panelSnapshot !== "function") return void 0;
+        const read = () => setPolled(panelSnapshot());
+        read();
+        const timer = setInterval(read, 600);
+        return () => clearInterval(timer);
+      }, []);
+      const activePanel = usePanel ? usePanel((info) => info?.activePanelId ?? null) : polled;
       const videoActive = activePanel === PANEL;
       const [area, setArea] = React.useState(() => ({ projects: [], hidden: [] }));
       const [loading, setLoading] = React.useState(true);
@@ -1107,6 +1116,13 @@
             t,
             primitives,
             fetchArea,
+            panelSnapshot: () => {
+              try {
+                return ctx.get?.("layout")?.panelInfo?.getSnapshot?.()?.activePanelId ?? null;
+              } catch {
+                return null;
+              }
+            },
             openProject: (projectId) => {
               areaBus.navigate(projectId);
               selectPanel();
