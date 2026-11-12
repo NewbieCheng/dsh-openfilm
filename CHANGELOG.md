@@ -1,18 +1,15 @@
 # 更新记录
 
-## 0.13.0 —— 侧栏项目区：项目对话只在剪辑区出现
+## 0.13.0 —— 项目页进对话区，侧栏保持原生
 
-- 侧栏「工作区」区域改由本插件接管（`sidebar.workspaces`，`priority: -100`）。根据 DSH 客户端单槽规则「每个优先级只能注册一个，最小者渲染」，-100 盖过官方 `WorkspaceBrowser`，不动上游一行代码；切换模式只换渲染内容，不再注销注册。
-- 区域头部是下拉：**剪辑区**（默认）/ **工作区**；模式按会话记忆（项目对话默认剪辑区，普通会话默认工作区）。剪辑区下是「项目」：一个项目一行（项目名 + 它的那条对话），有搜索（匹配项目名或对话标题），`⋯` 菜单（打开面板 / 在对话中打开 / 刷新）。
-- 样式不是行内拼的：`src/area-browser.mjs` 注入一张样式表，尺寸/token 照官方 `ui-workspace` 的 Rows.module.css（行高 34/32、`--dsh-sidebar-row-padding` 缩进、`--dsw-radius-md` 圆角、悬停底色、文件夹图标悬停换箭头），所以工作区视图和原来的侧栏是一套观感。
-- 默认区域跟着会话走：宿主数据回来前先按"不是项目会话"渲染，数据一到项目会话自动落回剪辑区；用户显式选过的区域才覆盖默认值。
-- 点项目行只做两件事：把中间区切到视频创作面板（`layout.selectPanel`），并请官方壳打开该项目（父页面 → iframe 的 `no996-openfilm:navigate`，注入桥用 `pushState + popstate`，壳不响应则退化 `location.replace`）。**不打开 DSH 聊天视图**，也不切换当前会话。
-- 「工作区」视图是过滤版：项目对话（绑定表 + 按项目目录兜住的遗留会话）与只剩它们的项目文件夹都不出现；普通工作区/会话照旧，归档会话仍不显示。
+- 侧栏保持官方 `WorkspaceBrowser`，本插件不再接管 `sidebar.workspaces`。上一版用 `priority: -100` 盖住官方条目的做法在单槽规则上成立，但文件夹按钮、行距、菜单都得重画，观感和原生对不上（真机已见），所以撤掉；`src/area-browser.mjs` 一并删除。
+- 过滤改成"只藏行"：官方会话行自带 `data-row-key="session:<id>"`，`src/area-hider.mjs` 用一条 `display:none` 样式表把项目对话藏起来，其余界面由官方组件渲染。隐藏集合来自宿主路由，启动即拉、每 20 秒与窗口聚焦时刷新；拿不到（桌面页、路由未挂）就不藏。
+- 项目列表成为对话区的一个面板：`main` 槽 key `no996-openfilm-projects`，`sidebar.panellist` 新增「项目」图标（order 20）。页面里是项目名 + 它那条对话（或「未开始」）、搜索（项目名或对话标题）、「新建项目」。
+- 点项目行只做两件事：中间区切到视频创作面板（`layout.selectPanel`），并请官方壳打开该项目（父页面 → iframe 的 `no996-openfilm:navigate`；注入桥用 `pushState + popstate`，壳不响应则退化 `location.replace`）。**不打开 DSH 聊天视图**，也不切换当前会话。
 - 新 Host 只读路由 `GET /api/no996-openfilm/area`（仅官方壳模式注册，鉴权与其它本地路由一致）：Studio 项目列表 + 绑定表 + 会话目录 → `{projects, hiddenSessionIds}`；不打开项目、不建会话。`project-conversation` 增加只读的 `bindings()`。
-- 面板侧：iframe 就绪后补发排队中的导航请求；官方壳每次报告当前项目，侧栏据此跟随。
-- 面板「视频创作」入口不变；桌面页面（`dsh-app://`）拿不到 `/api/…`，项目区在该环境为空列表（不显示坏数据）。
-- 新增测试：`tests/area-view.test.mjs`、`tests/area-client.test.mjs`、`tests/area-route.test.mjs`、`tests/client-area-wiring.test.mjs`，`project-conversation` 补 `bindings()` 只读用例。
-- 边界：过滤版工作区 v1 没有重做拖拽排序、置顶、新建工作区对话框；真机验收需刷新页面（客户端 bundle 变化）。
+- 面板侧：iframe 还没就绪时导航请求排队，`no996-openfilm:boot` 后补发；官方壳每次报告当前项目。
+- 测试：`tests/area-view.test.mjs`、`tests/area-client.test.mjs`、`tests/area-route.test.mjs`、`tests/area-panel.test.mjs`（替身 React 真渲染）、`tests/client-area-wiring.test.mjs`（断言侧栏没被接管、行动作不碰聊天视图、隐藏规则形状），`project-conversation` 补 `bindings()` 只读用例。
+- 边界：只剩被隐藏会话的项目文件夹仍显示文件夹行（点开为空）；要连文件夹一起藏，需要宿主给出"只含项目会话的工作区 id"，v1 没做。桌面页面（`dsh-app://`）拿不到 `/api/…`，项目页是空列表而不是坏数据。
 
 ## 0.12.1 —— 本地服务 SenseVoice 改回原生渲染
 

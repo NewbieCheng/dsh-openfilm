@@ -1,6 +1,7 @@
 import { createStudioPanel } from './studio-panel.mjs';
 import { createActivationStore } from './panel-keepalive.mjs';
-import { createAreaBrowser, ensureAreaStyles } from './area-browser.mjs';
+import { createProjectPanel, ensureProjectStyles } from './area-panel.mjs';
+import { createAreaHider } from './area-hider.mjs';
 import { areaBus } from './area-bus.mjs';
 
 window.__ModuleLoader__.load({
@@ -10,6 +11,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
     const NS = 'no996Openfilm';
     const PANEL = 'no996-openfilm';
+    const PROJECTS = 'no996-openfilm-projects';
     const en = {
       panel: 'Video studio',
       areaProjects: 'Projects', areaWorkspaces: 'Workspaces', areaSwitch: 'Switch area',
@@ -120,6 +122,11 @@ window.__ModuleLoader__.load({
       if (typeof data?.editorOrigin !== 'string') throw new Error('Invalid Studio response');
       return data;
     };
+    function ProjectsIcon({ size }) {
+      return h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true },
+        h('path', { d: 'M4 7.5a2 2 0 0 1 2-2h3l1.6 2h7.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2z', stroke: 'currentColor', strokeWidth: 1.6 }),
+        h('path', { d: 'M4.5 12.5h15', stroke: 'currentColor', strokeWidth: 1.2, opacity: .7 }));
+    }
     function PanelIcon({ size }) {
       return h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true },
         h('rect', { x: 3, y: 5, width: 18, height: 14, rx: 3, stroke: 'currentColor', strokeWidth: 1.7 }),
@@ -130,23 +137,35 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'openfilm: dictionaries');
         const t = ctx.locale.bind(NS);
-        ensureAreaStyles();
+        ensureProjectStyles();
+        const fetchArea = async () => {
+          // The desktop page (dsh-app://app) cannot reach /api/... at all; there
+          // the project page stays empty rather than showing a broken list.
+          if (DESKTOP_PROTOCOL) return { projects: [], hiddenSessionIds: [] };
+          const response = await fetch('/api/no996-openfilm/area', { credentials: 'same-origin', cache: 'no-store' });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        };
+        // Keep project conversations out of the shipped Workspace list by hiding
+        // their rows (they carry data-row-key="session:<id>"); the browser itself
+        // stays the shipped component, so its look is untouched.
+        const hider = createAreaHider();
+        const syncHidden = () => {
+          fetchArea().then(payload => hider.apply(payload?.hiddenSessionIds)).catch(() => {});
+        };
+        syncHidden();
+        if (typeof window !== 'undefined') {
+          window.setInterval(syncHidden, 20000);
+          window.addEventListener('focus', syncHidden);
+        }
         const selectPanel = () => {
           const layout = ctx.get?.('layout');
           if (!layout || typeof layout.selectPanel !== 'function') return false;
           try { layout.selectPanel(PANEL); return true; } catch { return false; }
         };
-        const AreaBrowser = createAreaBrowser(React, {
+        const ProjectPanel = createProjectPanel(React, {
           t,
-          storage: typeof window === 'undefined' ? undefined : window.localStorage,
-          fetchArea: async () => {
-            // The desktop page (dsh-app://app) cannot reach /api/... at all; there
-            // the project area stays empty rather than showing a broken list.
-            if (DESKTOP_PROTOCOL) return { projects: [], hiddenSessionIds: [] };
-            const response = await fetch('/api/no996-openfilm/area', { credentials: 'same-origin', cache: 'no-store' });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            return response.json();
-          },
+          fetchArea,
           openProject: projectId => {
             areaBus.navigate(projectId);
             selectPanel();
@@ -163,11 +182,10 @@ window.__ModuleLoader__.load({
         // `shell.overlay` is rendered for the whole frame lifetime, so the panel
         // it hosts survives page switches instead of reloading Studio each time.
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'no996-openfilm-panel', order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
-        // The Workspace region: a project area that also keeps project
-        // conversations out of the Workspace list. Shadowing is the only lever —
-        // `single` renders the lowest-priority live entry, so -100 outranks the
-        // shipped WorkspaceBrowser without touching it.
-        ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({ name: 'sidebar.workspaces', priority: -100, locale: NS }, AreaBrowser));
+        // The project page lives in the conversation area; the sidebar itself is
+        // the shipped WorkspaceBrowser, untouched.
+        ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PROJECTS, locale: NS }, ProjectPanel));
+        ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PROJECTS, order: 20, locale: NS, label: () => t('projects') }, ProjectsIcon));
       },
     };
   },

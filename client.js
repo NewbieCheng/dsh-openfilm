@@ -450,7 +450,6 @@
 
   // src/area-client.mjs
   var AREA_MODES = Object.freeze(["edit", "work"]);
-  var AREA_MODE_KEY = "no996.openfilm.area";
   var ID = /^[A-Za-z0-9_-]{6,40}$/;
   var SESSION = /^[A-Za-z0-9_-]{1,100}$/;
   function lastSegment(path) {
@@ -513,417 +512,170 @@
     const updatedAt = (project) => project.sessionId ? Number(sessions?.byId?.[project.sessionId]?.updatedAt ?? 0) : 0;
     return list.map((project, index) => ({ project, index, at: updatedAt(project) })).sort((a, b) => b.at - a.at || a.index - b.index).map((item) => item.project);
   }
-  function readMode(storage, sessionId) {
-    if (typeof sessionId !== "string" || !sessionId) return null;
-    try {
-      const raw = storage?.getItem?.(AREA_MODE_KEY);
-      const table = raw ? JSON.parse(raw) : null;
-      const value = table && typeof table === "object" ? table[sessionId] : void 0;
-      return AREA_MODES.includes(value) ? value : null;
-    } catch {
-      return null;
-    }
-  }
-  function writeMode(storage, sessionId, mode) {
-    if (typeof sessionId !== "string" || !sessionId || !AREA_MODES.includes(mode)) return false;
-    try {
-      const raw = storage?.getItem?.(AREA_MODE_KEY);
-      const table = raw ? JSON.parse(raw) : {};
-      if (!table || typeof table !== "object" || Array.isArray(table)) return false;
-      table[sessionId] = mode;
-      storage.setItem(AREA_MODE_KEY, JSON.stringify(table));
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  function defaultMode(isProjectSession) {
-    return isProjectSession === true ? "edit" : "work";
-  }
-  function filterArea({ workspaces, sessions, hidden, projectPaths, archived } = {}) {
-    const hiddenSet = new Set(Array.isArray(hidden) ? hidden : []);
-    const archivedSet = new Set(Array.isArray(archived) ? archived : []);
-    const visible = (id) => typeof id === "string" && !hiddenSet.has(id) && !archivedSet.has(id);
-    const projectFolders = (Array.isArray(projectPaths) ? projectPaths : []).map(folderKey).filter(Boolean);
-    const groups = [];
-    const accounted = /* @__PURE__ */ new Set();
-    for (const workspace of Array.isArray(workspaces) ? workspaces : []) {
-      if (!workspace || typeof workspace.workspaceId !== "string") continue;
-      const sessionIds = Array.isArray(workspace.sessionIds) ? workspace.sessionIds : [];
-      for (const id of sessionIds) if (typeof id === "string") accounted.add(id);
-      const rows = sessionIds.filter(visible);
-      const projectFolder = projectFolders.includes(folderKey(workspace.path));
-      if (rows.length === 0 && projectFolder) continue;
-      groups.push({
-        workspaceId: workspace.workspaceId,
-        title: typeof workspace.title === "string" ? workspace.title : "",
-        sessionIds: rows
-      });
-    }
-    const ids = Array.isArray(sessions?.ids) ? sessions.ids : Object.keys(sessions?.byId ?? {});
-    const ungrouped = ids.filter((id) => visible(id) && !accounted.has(id));
-    return { groups, ungrouped, hiddenCount: hiddenSet.size };
-  }
-  function folderKey(path) {
-    if (typeof path !== "string" || !path) return "";
-    return path.replace(/[\\/]+$/, "").replaceAll("/", "\\").toLowerCase();
-  }
   function sessionTitle(sessions, sessionId) {
     return titleOf(sessions, sessionId);
   }
 
-  // src/area-browser.mjs
-  var STYLE_TAG = "no996-openfilm-area";
+  // src/area-panel.mjs
+  var STYLE_TAG = "no996-openfilm-projects";
   var CSS = `
-.nof-area{box-sizing:border-box;min-height:0;flex:1;display:flex;flex-direction:column;padding-right:var(--dsh-session-list-edge-inset,var(--dsh-sidebar-inline-padding,8px));color:var(--dsw-alias-label-primary)}
-.nof-area *{box-sizing:border-box}
-.nof-area-header{height:36px;display:flex;align-items:center;gap:4px;padding-left:var(--dsh-sidebar-row-padding,12px);margin-bottom:4px;color:var(--dsw-alias-label-tertiary);flex:none;overflow:hidden}
-.nof-area-label{flex:1 1 auto;min-width:0;font-size:12px;line-height:20px;font-weight:500;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative;left:-1px}
-.nof-area-switch{flex:none;max-width:92px;height:22px;padding:0 4px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:20px;cursor:pointer}
-.nof-area-switch:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
-.nof-area-icon{width:28px;height:28px;padding:0;border:0;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-secondary);display:inline-flex;align-items:center;justify-content:center;flex:none;cursor:pointer}
-.nof-area-icon:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.nof-area-icon:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
-.nof-area-searchbar{height:32px;display:flex;align-items:center;gap:0;margin:0 4px 4px calc(var(--dsh-sidebar-paint-inset,0px) + 1px);padding:0 4px 0 0;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-caption)}
-.nof-area-input{flex:1;min-width:0;margin-left:-2px;border:0;outline:none;background:0 0;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:18px}
-.nof-area-input::placeholder{color:var(--dsw-alias-label-tertiary)}
-.nof-area-list{flex:1;min-height:0;overflow-y:auto;margin-left:-4px;padding:0 0 16px 4px;scrollbar-gutter:stable}
-.nof-area-row{display:flex;align-items:center;gap:var(--dsh-sidebar-label-gap,6px);height:34px;padding:0 8px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) - var(--dsh-sidebar-paint-inset,0px) + var(--dsh-workspace-indent,0px));border-inline:var(--dsh-sidebar-paint-inset,0px) solid transparent;border-radius:var(--dsw-radius-md);background-clip:padding-box;color:var(--dsw-alias-label-primary);cursor:pointer;-webkit-user-select:none;user-select:none;position:relative;outline:none}
-.nof-area-row+.nof-area-row{margin-top:2px}
-.nof-area-row:hover{background-color:var(--dsw-alias-interactive-bg-hover)}
-.nof-area-row:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
-.nof-area-session{height:32px;gap:0;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) - var(--dsh-sidebar-paint-inset,0px) + 22px)}
-.nof-area-session.nof-area-current{background-color:var(--dsw-alias-interactive-bg-hover)}
-.nof-area-slot{width:16px;height:20px;flex:none;display:inline-flex;align-items:center;justify-content:center;color:var(--dsw-alias-label-tertiary)}
-.nof-area-arrow{display:none;transition:transform .15s var(--ds-ease-in-out, ease)}
-.nof-area-arrow-open{transform:rotate(90deg)}
-.nof-area-row:hover .nof-area-folder{display:none}
-.nof-area-row:hover .nof-area-arrow{display:inline-flex}
-.nof-area-title{min-width:0;font-size:14px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.nof-area-session .nof-area-title{flex:1;margin:0 6px 0 var(--dsh-sidebar-label-gap,6px)}
-.nof-area-projectText{display:flex;flex-direction:column;flex:1;min-width:0;gap:2px}
-.nof-area-meta{font-size:12px;line-height:20px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.nof-area-actions{flex:none;display:none;align-items:center;gap:13px}
-.nof-area-row:hover .nof-area-actions,.nof-area-row.nof-area-menu-open .nof-area-actions{display:inline-flex}
-.nof-area-more{width:24px;height:24px;padding:0;border:0;border-radius:var(--dsw-radius-xs);background:0 0;color:var(--dsw-alias-label-tertiary);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
-.nof-area-more:hover{color:var(--dsw-alias-label-primary)}
-.nof-area-menu{position:absolute;right:4px;top:30px;z-index:30;min-width:168px;padding:4px;border:1px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-base));box-shadow:0 8px 24px #0006}
-.nof-area-menu button{display:block;width:100%;padding:6px 8px;border:0;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-primary);text-align:left;font:inherit;font-size:12.5px;line-height:20px;cursor:pointer}
-.nof-area-menu button:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.nof-area-section{padding:6px var(--dsh-sidebar-row-padding,12px) 2px;font-size:12px;line-height:20px;color:var(--dsw-alias-label-tertiary)}
-.nof-area-empty{padding:12px var(--dsh-sidebar-row-padding,12px);font-size:12.5px;line-height:1.7;color:var(--dsw-alias-label-tertiary)}
-.nof-area-note{padding:4px var(--dsh-sidebar-row-padding,12px) 8px;font-size:11.5px;line-height:1.6;color:var(--dsw-alias-label-tertiary)}
+.nof-projects{box-sizing:border-box;display:flex;flex-direction:column;min-height:0;height:100%;padding:28px 28px 12px;color:var(--dsw-alias-label-primary);overflow:hidden}
+.nof-projects-head{display:flex;align-items:center;gap:10px;flex:none;flex-wrap:wrap}
+.nof-projects-title{flex:1 1 auto;min-width:0;margin:0;font-size:15px;line-height:24px;font-weight:600}
+.nof-projects-count{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:20px}
+.nof-projects-search{display:flex;align-items:center;gap:6px;height:32px;min-width:220px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-tertiary)}
+.nof-projects-input{flex:1;min-width:0;border:0;outline:none;background:0 0;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:18px}
+.nof-projects-input::placeholder{color:var(--dsw-alias-label-tertiary)}
+.nof-projects-new{height:32px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:0 0;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;cursor:pointer}
+.nof-projects-new:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.nof-projects-hint{flex:none;margin:8px 0 4px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
+.nof-projects-list{flex:1;min-height:0;overflow-y:auto;margin:4px -8px 0;padding:0 8px 24px}
+.nof-projects-row{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;padding:10px 10px;border:0;border-radius:var(--dsw-radius-md);background:0 0;color:var(--dsw-alias-label-primary);text-align:left;cursor:pointer;font:inherit}
+.nof-projects-row:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.nof-projects-row:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
+.nof-projects-icon{flex:none;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-base));color:var(--dsw-alias-label-secondary)}
+.nof-projects-text{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+.nof-projects-name{font-size:14px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nof-projects-meta{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nof-projects-open{flex:none;font-size:12px;line-height:20px;color:var(--dsw-alias-label-tertiary)}
+.nof-projects-row:hover .nof-projects-open{color:var(--dsw-alias-label-primary)}
+.nof-projects-empty{padding:24px 4px;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.8}
 `;
-  function ensureAreaStyles(doc = typeof document === "undefined" ? void 0 : document) {
+  function ensureProjectStyles(doc = typeof document === "undefined" ? void 0 : document) {
     if (!doc || doc.querySelector(`style[data-no996="${STYLE_TAG}"]`)) return;
     const tag = doc.createElement("style");
     tag.dataset.no996 = STYLE_TAG;
     tag.textContent = CSS;
     doc.head.appendChild(tag);
   }
-  function iconPaths(name) {
-    if (name === "search") {
-      return [
-        ["circle", { cx: 11, cy: 11, r: 6.5, stroke: "currentColor", strokeWidth: 1.8 }],
-        ["path", { d: "m16 16 4 4", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" }]
-      ];
-    }
-    if (name === "plus") return [["path", { d: "M12 5v14M5 12h14", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" }]];
-    if (name === "more") {
-      return [
-        ["circle", { cx: 5, cy: 12, r: 1.6, fill: "currentColor" }],
-        ["circle", { cx: 12, cy: 12, r: 1.6, fill: "currentColor" }],
-        ["circle", { cx: 19, cy: 12, r: 1.6, fill: "currentColor" }]
-      ];
-    }
-    if (name === "folder") {
-      return [["path", { d: "M3.5 7.5a2 2 0 0 1 2-2h3l1.6 2h7.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2z", stroke: "currentColor", strokeWidth: 1.6, fill: "none" }]];
-    }
-    if (name === "arrow") {
-      return [["path", { d: "m9 6 6 6-6 6", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", fill: "none" }]];
-    }
-    return [];
-  }
-  function createAreaBrowser(React, deps) {
-    const { t, fetchArea, openProject, openSession, openPanel, storage } = deps;
+  function createProjectPanel(React, deps) {
+    const { t, fetchArea, openProject, openPanel } = deps;
     const h = React.createElement;
-    const Icon = ({ name, size = 14, className }) => h("svg", {
-      width: size,
-      height: size,
-      viewBox: "0 0 24 24",
-      fill: "none",
-      "aria-hidden": true,
-      className
-    }, iconPaths(name).map(([tag, attrs], index) => h(tag, { key: index, ...attrs })));
-    function useSessionList(props) {
-      const hooks = React.useRef(null);
-      if (hooks.current === null) hooks.current = { sessions: props?.useSessions, workspaces: props?.useWorkspaces };
-      return hooks.current;
-    }
-    return function AreaBrowser(props) {
-      const { sessions: useSessions, workspaces: useWorkspaces } = useSessionList(props);
+    const icon = (name, size = 16) => {
+      const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", "aria-hidden": true };
+      if (name === "folder") {
+        return h("svg", common, h("path", { d: "M3.5 7.5a2 2 0 0 1 2-2h3l1.6 2h7.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2z", stroke: "currentColor", strokeWidth: 1.6, fill: "none" }));
+      }
+      if (name === "search") {
+        return h(
+          "svg",
+          common,
+          h("circle", { cx: 11, cy: 11, r: 6.5, stroke: "currentColor", strokeWidth: 1.8 }),
+          h("path", { d: "m16 16 4 4", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" })
+        );
+      }
+      return null;
+    };
+    return function ProjectPanel(props) {
+      const useSessions = props?.useSessions;
       const list = typeof useSessions === "function" ? useSessions((state) => state) : null;
-      const wsState = typeof useWorkspaces === "function" ? useWorkspaces((state) => state) : null;
       const [area, setArea] = React.useState(() => ({ projects: [], hidden: [] }));
       const [loading, setLoading] = React.useState(true);
-      const [query, setQuery] = React.useState("");
-      const [searching, setSearching] = React.useState(false);
-      const [menu, setMenu] = React.useState(null);
-      const [revision, setRevision] = React.useState(0);
-      const [collapsed, setCollapsed] = React.useState(() => /* @__PURE__ */ new Set());
-      const activeId = React.useMemo(() => {
-        if (!list?.byId) return null;
-        for (const id of Object.keys(list.byId)) {
-          if ((list.byId[id]?.retainedBy?.mainView ?? 0) > 0) return id;
-        }
-        return null;
-      }, [list]);
-      const isProjectSession = activeId !== null && area.hidden.includes(activeId);
-      const modeKey = activeId ?? "panel";
-      const [chosen, setChosen] = React.useState(() => readMode(storage, modeKey));
-      const seenKey = React.useRef(modeKey);
-      if (seenKey.current !== modeKey) {
-        seenKey.current = modeKey;
-        setChosen(readMode(storage, modeKey));
-      }
-      const mode = chosen ?? defaultMode(isProjectSession);
+      const [query, setQuery] = React.useState(props?.initialQuery ?? "");
       React.useEffect(() => {
         let live = true;
-        const load = () => {
-          fetchArea().then((payload) => {
-            if (!live) return;
-            setArea(parseAreaPayload(payload));
-            setLoading(false);
-          }).catch(() => {
-            if (live) setLoading(false);
-          });
-        };
-        load();
-        const timer = setInterval(load, 15e3);
-        const off = areaBus.subscribe((event) => {
-          if (event.type === "project") load();
+        fetchArea().then((payload) => {
+          if (!live) return;
+          setArea(parseAreaPayload(payload));
+          setLoading(false);
+        }).catch(() => {
+          if (live) setLoading(false);
         });
-        const focus = () => load();
-        window.addEventListener("focus", focus);
         return () => {
           live = false;
-          clearInterval(timer);
-          off();
-          window.removeEventListener("focus", focus);
         };
-      }, [revision]);
-      const choose = (next) => {
-        if (!AREA_MODES.includes(next)) return;
-        setChosen(next);
-        writeMode(storage, modeKey, next);
-      };
+      }, []);
       const projects = sortProjects(searchProjects(area.projects, query), list);
-      const sessionsById = list?.byId ?? {};
-      const selectedTitle = (id) => sessionTitle(list, id);
-      const workspaceRows = wsState?.items && Array.isArray(wsState.items) ? wsState.items : [];
-      const filtered = filterArea({
-        workspaces: workspaceRows,
-        sessions: list ?? { ids: [], byId: {} },
-        hidden: area.hidden,
-        projectPaths: area.projects.map((project) => project.path),
-        archived: Array.isArray(wsState?.archivedSessionIds) ? wsState.archivedSessionIds : []
-      });
-      const hiddenSet = new Set(area.hidden);
-      const activate = (id) => {
-        let handled = false;
-        try {
-          handled = openSession(id) === true;
-        } catch {
-          handled = false;
-        }
-        if (!handled) {
-          try {
-            props?.open?.(id);
-          } catch {
-          }
-        }
-      };
-      const onKey = (action) => (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          action();
-        }
-      };
-      const isCollapsed = (id) => collapsed.has(id);
-      const toggle = (id) => {
-        setCollapsed((current) => {
-          const next = new Set(current);
-          if (next.has(id)) next.delete(id);
-          else next.add(id);
-          return next;
-        });
-      };
-      const restart = () => {
-        setRevision((value) => value + 1);
-        fetchArea().then((payload) => setArea(parseAreaPayload(payload))).catch(() => {
-        });
-      };
-      const header = h(
+      const titleOf2 = (project) => project.sessionTitle || (project.sessionId ? sessionTitle(list, project.sessionId) || t("areaSessionUntitled") : t("areaNotStarted"));
+      return h(
         "div",
-        { className: "nof-area-header" },
-        h("span", { className: "nof-area-label" }, mode === "edit" ? t("areaProjects") : t("areaWorkspaces")),
-        h(
-          "select",
-          {
-            className: "nof-area-switch",
-            value: mode,
-            "aria-label": t("areaSwitch"),
-            onChange: (event) => choose(event.target.value)
-          },
-          h("option", { value: "edit" }, t("areaEdit")),
-          h("option", { value: "work" }, t("areaWork"))
-        ),
-        h("button", {
-          type: "button",
-          className: "nof-area-icon",
-          title: t("areaSearch"),
-          "aria-label": t("areaSearch"),
-          onClick: () => {
-            if (searching) setQuery("");
-            setSearching((value) => !value);
-          }
-        }, h(Icon, { name: "search" })),
-        mode === "edit" ? h("button", {
-          type: "button",
-          className: "nof-area-icon",
-          title: t("areaNew"),
-          "aria-label": t("areaNew"),
-          onClick: () => openPanel()
-        }, h(Icon, { name: "plus" })) : null
-      );
-      const searchBar = searching ? h(
-        "div",
-        { className: "nof-area-searchbar" },
-        h("button", { type: "button", className: "nof-area-icon", "aria-label": t("areaSearch"), onClick: () => {
-          setQuery("");
-          setSearching(false);
-        } }, h(Icon, { name: "search" })),
-        h("input", {
-          className: "nof-area-input",
-          value: query,
-          autoFocus: true,
-          placeholder: t("areaSearchPlaceholder"),
-          "aria-label": t("areaSearchPlaceholder"),
-          onChange: (event) => setQuery(event.target.value),
-          onKeyDown: (event) => {
-            if (event.key === "Escape") {
-              setQuery("");
-              setSearching(false);
-            }
-            if (event.key === "Enter" && projects.length > 0) {
-              openProject(projects[0].projectId);
-              setSearching(false);
-            }
-          }
-        })
-      ) : null;
-      const projectRow = (project) => h(
-        "div",
-        { key: project.projectId, style: { position: "relative" } },
+        { className: "nof-projects" },
         h(
           "div",
-          {
-            className: "nof-area-row",
-            role: "button",
-            tabIndex: 0,
-            title: project.path,
-            "aria-label": project.name,
-            onClick: () => openProject(project.projectId),
-            onKeyDown: onKey(() => openProject(project.projectId))
-          },
-          h("span", { className: "nof-area-slot" }, h(Icon, { name: "folder" })),
+          { className: "nof-projects-head" },
+          h("h1", { className: "nof-projects-title" }, t("areaPanelTitle")),
+          h("span", { className: "nof-projects-count" }, String(projects.length)),
           h(
-            "span",
-            { className: "nof-area-projectText" },
-            h("span", { className: "nof-area-title" }, project.name),
-            project.sessionTitle ? h("span", { className: "nof-area-meta" }, project.sessionTitle) : h("span", { className: "nof-area-meta" }, project.sessionId ? t("areaSessionUntitled") : t("areaNotStarted"))
+            "div",
+            { className: "nof-projects-search" },
+            icon("search"),
+            h("input", {
+              className: "nof-projects-input",
+              value: query,
+              placeholder: t("areaPanelSearch"),
+              "aria-label": t("areaPanelSearch"),
+              onChange: (event) => setQuery(event.target.value)
+            })
           ),
-          h(
-            "span",
-            { className: "nof-area-actions" },
-            h("button", {
+          h("button", { type: "button", className: "nof-projects-new", onClick: () => openPanel() }, t("areaPanelNew"))
+        ),
+        h("div", { className: "nof-projects-hint" }, t("areaPanelHint")),
+        h(
+          "div",
+          { className: "nof-projects-list" },
+          projects.length === 0 ? h("div", { className: "nof-projects-empty" }, loading ? t("areaLoading") : t("areaEmptyProjects")) : projects.map((project) => h(
+            "button",
+            {
+              key: project.projectId,
               type: "button",
-              className: "nof-area-more",
-              title: t("areaMore"),
-              "aria-label": t("areaMore"),
-              onClick: (event) => {
-                event.stopPropagation();
-                setMenu((current) => current === project.projectId ? null : project.projectId);
-              }
-            }, h(Icon, { name: "more" }))
-          )
-        ),
-        menu === project.projectId ? h(
-          "div",
-          { className: "nof-area-menu" },
-          h("button", { type: "button", onClick: () => {
-            setMenu(null);
-            openProject(project.projectId);
-          } }, t("areaOpenPanel")),
-          project.sessionId ? h("button", { type: "button", onClick: () => {
-            setMenu(null);
-            activate(project.sessionId);
-          } }, t("areaOpenSession")) : null,
-          h("button", { type: "button", onClick: () => {
-            setMenu(null);
-            restart();
-          } }, t("areaRefresh"))
-        ) : null
+              className: "nof-projects-row",
+              title: project.path,
+              "aria-label": project.name,
+              onClick: () => openProject(project.projectId)
+            },
+            h("span", { className: "nof-projects-icon" }, icon("folder")),
+            h(
+              "span",
+              { className: "nof-projects-text" },
+              h("span", { className: "nof-projects-name" }, project.name),
+              h("span", { className: "nof-projects-meta" }, titleOf2(project))
+            ),
+            h("span", { className: "nof-projects-open" }, t("areaPanelOpen"))
+          ))
+        )
       );
-      const sessionRow = (id, parentId) => h("div", {
-        key: `${parentId}:${id}`,
-        className: `nof-area-row nof-area-session${id === activeId ? " nof-area-current" : ""}`,
-        role: "button",
-        tabIndex: 0,
-        "aria-label": selectedTitle(id) || id,
-        onClick: () => activate(id),
-        onKeyDown: onKey(() => activate(id))
-      }, h("span", { className: "nof-area-title" }, selectedTitle(id) || (sessionsById[id]?.blank ? t("areaBlankSession") : t("areaSessionUntitled"))));
-      const workGroups = filtered.groups.map((group) => h(
-        "div",
-        { key: group.workspaceId },
-        h(
-          "div",
-          {
-            className: "nof-area-row",
-            role: "button",
-            tabIndex: 0,
-            "aria-expanded": !isCollapsed(group.workspaceId),
-            "aria-label": group.title || t("areaWorkspaceFallback"),
-            onClick: () => toggle(group.workspaceId),
-            onKeyDown: onKey(() => toggle(group.workspaceId))
-          },
-          h(
-            "span",
-            { className: "nof-area-slot" },
-            h(Icon, { name: "folder", className: "nof-area-folder" }),
-            h(Icon, { name: "arrow", className: `nof-area-arrow${isCollapsed(group.workspaceId) ? "" : " nof-area-arrow-open"}` })
-          ),
-          h("span", { className: "nof-area-title", style: { flex: "1 1 auto" } }, group.title || t("areaWorkspaceFallback"))
-        ),
-        isCollapsed(group.workspaceId) ? null : group.sessionIds.map((id) => sessionRow(id, group.workspaceId))
-      ));
-      const ungrouped = filtered.ungrouped.length > 0 ? h(
-        "div",
-        { key: "__ungrouped" },
-        h("div", { className: "nof-area-section" }, t("areaUngrouped")),
-        filtered.ungrouped.map((id) => sessionRow(id, "ungrouped"))
-      ) : null;
-      const body = mode === "edit" ? h(
-        "div",
-        { className: "nof-area-list" },
-        projects.length === 0 ? h("div", { className: "nof-area-empty" }, loading ? t("areaLoading") : t("areaEmptyProjects")) : projects.map(projectRow)
-      ) : h(
-        "div",
-        { className: "nof-area-list" },
-        filtered.groups.length === 0 && filtered.ungrouped.length === 0 ? h("div", { className: "nof-area-empty" }, loading ? t("areaLoading") : t("areaEmptyWorkspaces")) : [workGroups, ungrouped, hiddenSet.size > 0 ? h("div", { key: "__note", className: "nof-area-note" }, t("areaHiddenNote")) : null]
-      );
-      return h("div", { className: "nof-area", "data-no996-openfilm-area": mode }, header, searchBar, body);
+    };
+  }
+
+  // src/area-hider.mjs
+  var TAG = "no996-openfilm-hide";
+  function rowKeys(sessionIds) {
+    const keys = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const id of Array.isArray(sessionIds) ? sessionIds : []) {
+      if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(id) || seen.has(id)) continue;
+      seen.add(id);
+      keys.push(id);
+    }
+    return keys;
+  }
+  function hideCss(sessionIds) {
+    return rowKeys(sessionIds).map((id) => `[data-row-key="session:${id}"]{display:none!important}`).join("\n");
+  }
+  function createAreaHider(doc = typeof document === "undefined" ? void 0 : document) {
+    if (!doc) return { apply() {
+      return false;
+    } };
+    const tag = doc.createElement("style");
+    tag.dataset.no996 = TAG;
+    doc.head.appendChild(tag);
+    let last = "";
+    return {
+      /** Replace the hidden set; returns whether the stylesheet changed. */
+      apply(sessionIds) {
+        const css = hideCss(sessionIds);
+        if (css === last) return false;
+        last = css;
+        tag.textContent = css;
+        return true;
+      },
+      /** Count how many hidden rows the browser currently draws (diagnostics). */
+      matched() {
+        return tag.sheet?.cssRules?.length ?? 0;
+      },
+      remove() {
+        tag.remove();
+      }
     };
   }
 
@@ -935,6 +687,7 @@
       const h = React.createElement;
       const NS = "no996Openfilm";
       const PANEL = "no996-openfilm";
+      const PROJECTS = "no996-openfilm-projects";
       const en = {
         panel: "Video studio",
         areaProjects: "Projects",
@@ -1086,6 +839,14 @@
         if (typeof data?.editorOrigin !== "string") throw new Error("Invalid Studio response");
         return data;
       };
+      function ProjectsIcon({ size }) {
+        return h(
+          "svg",
+          { width: size, height: size, viewBox: "0 0 24 24", fill: "none", "aria-hidden": true },
+          h("path", { d: "M4 7.5a2 2 0 0 1 2-2h3l1.6 2h7.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2z", stroke: "currentColor", strokeWidth: 1.6 }),
+          h("path", { d: "M4.5 12.5h15", stroke: "currentColor", strokeWidth: 1.2, opacity: 0.7 })
+        );
+      }
       function PanelIcon({ size }) {
         return h(
           "svg",
@@ -1099,7 +860,23 @@
         apply(ctx) {
           ctx.effect(() => ctx.locale.register(NS, { en, zh }), "openfilm: dictionaries");
           const t = ctx.locale.bind(NS);
-          ensureAreaStyles();
+          ensureProjectStyles();
+          const fetchArea = async () => {
+            if (DESKTOP_PROTOCOL) return { projects: [], hiddenSessionIds: [] };
+            const response = await fetch("/api/no996-openfilm/area", { credentials: "same-origin", cache: "no-store" });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+          };
+          const hider = createAreaHider();
+          const syncHidden = () => {
+            fetchArea().then((payload) => hider.apply(payload?.hiddenSessionIds)).catch(() => {
+            });
+          };
+          syncHidden();
+          if (typeof window !== "undefined") {
+            window.setInterval(syncHidden, 2e4);
+            window.addEventListener("focus", syncHidden);
+          }
           const selectPanel = () => {
             const layout = ctx.get?.("layout");
             if (!layout || typeof layout.selectPanel !== "function") return false;
@@ -1110,15 +887,9 @@
               return false;
             }
           };
-          const AreaBrowser = createAreaBrowser(React, {
+          const ProjectPanel = createProjectPanel(React, {
             t,
-            storage: typeof window === "undefined" ? void 0 : window.localStorage,
-            fetchArea: async () => {
-              if (DESKTOP_PROTOCOL) return { projects: [], hiddenSessionIds: [] };
-              const response = await fetch("/api/no996-openfilm/area", { credentials: "same-origin", cache: "no-store" });
-              if (!response.ok) throw new Error(`HTTP ${response.status}`);
-              return response.json();
-            },
+            fetchArea,
             openProject: (projectId) => {
               areaBus.navigate(projectId);
               selectPanel();
@@ -1138,7 +909,8 @@
           ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PANEL, locale: NS }, PanelSeat));
           ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: PANEL, order: 21, locale: NS, label: () => t("panel") }, PanelIcon));
           ctx.slots.inject("shell.overlay", () => ctx.slots.register({ name: "shell.overlay", id: "no996-openfilm-panel", order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
-          ctx.slots.inject("sidebar.workspaces", () => ctx.slots.register({ name: "sidebar.workspaces", priority: -100, locale: NS }, AreaBrowser));
+          ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PROJECTS, locale: NS }, ProjectPanel));
+          ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: PROJECTS, order: 20, locale: NS, label: () => t("projects") }, ProjectsIcon));
         }
       };
     }

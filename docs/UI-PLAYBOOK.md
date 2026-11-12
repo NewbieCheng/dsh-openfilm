@@ -136,15 +136,17 @@ src/theme.mjs             ← 读取 + 注入（按 surface 注册表）
 
 登记内容只需要三件事：**为什么不能改源码、现在怎么工作、什么条件下撤掉。**
 
-### 插槽接管（不是注入）
+### 隐藏行（B2，最小面积）
 
-侧栏 `sidebar.workspaces` 在 0.13.0 起由本插件接管（`src/studio-entry.js`，`priority: -100`），不是 DOM 注入，所以不进上表；之所以记在这里，是因为它同样"盖住了官方界面"，需要同一套退出条件：
+侧栏本身必须是官方 `WorkspaceBrowser`：接管 `sidebar.workspaces`（`priority: -100` 确实能盖过官方条目，单槽规则也成立）会连文件夹按钮、间距、菜单一起重画，0.13.0 试过，观感对不上，已撤。现在只做一件事：
 
-| 接管 | 位置 | 为什么 | 退出条件 |
+| 注入 | 位置 | 为什么 | 退出条件 |
 |---|---|---|---|
-| `sidebar.workspaces` → 项目区 | `src/studio-entry.js` + `src/area-browser.mjs` | DSH 没有"把某个会话藏起来"的 API；项目对话只能靠接管整块区域才能不进工作区列表。single 槽只渲染优先级最小的活条目（`-100` 盖过官方 `WorkspaceBrowser`），切换模式下拉只是换渲染内容。 | DSH 提供按会话隐藏时，改回"官方浏览器 + 隐藏标记" |
+| 项目对话行隐藏 | `src/area-hider.mjs`（样式表注入） | DSH 没有按会话隐藏的 API，但官方行自带 `data-row-key="session:<id>"`，一条 `display:none` 就能只藏这几行，其余照旧原生渲染 | DSH 提供按会话隐藏时删除 |
 
-真机排错顺序：先看 `plugin.log` 有没有 `area-route mounted`（Host 侧路由在），再看页面是否刷新过（客户端 bundle 变了），最后看 `#sidebar` 里 `[data-no996-openfilm-area]` 是否存在（接管是否生效）。官方 `WorkspaceBrowser` 仍在注册表里、只是不渲染。
+失败面：DSH 改掉 `data-row-key` 就不再隐藏（不会错藏别的行，因为选择器带完整前缀和会话 id）。宿主拿不到列表（桌面页、路由未挂）时不隐藏，宁可露出也不猜。
+
+项目页不在侧栏：它是 `main` 槽的一个面板（key `no996-openfilm-projects`），从 `sidebar.panellist` 进入，列表/搜索都在那儿。真机排错顺序：`plugin.log` 有 `area-route mounted` → 页面刷新过（客户端 bundle 变了）→ 侧栏里项目对话消失（隐藏生效）→ 图标栏多一个「项目」→ 点行后中间区切到视频创作。
 
 ---
 

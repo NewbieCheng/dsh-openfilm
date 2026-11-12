@@ -1,7 +1,7 @@
-// The sidebar takeover is wiring, not logic: these assertions keep the pieces
-// connected the way the design says, because the failure mode (the official
-// WorkspaceBrowser silently wins) is invisible in a unit test and expensive in
-// the GUI.
+// The project page and the sidebar filter are wiring, not logic: these
+// assertions keep the pieces connected the way the design says. The failure
+// modes (the shipped sidebar replaced by a lookalike; a project row that opens
+// the chat view) are invisible in a unit test and expensive in the GUI.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -9,36 +9,50 @@ import test from 'node:test';
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const count = (text, needle) => text.split(needle).length - 1;
 
-test('the Workspace region is taken over once, at a priority that outranks the shipped browser', () => {
+test('the shipped Workspace browser is never replaced', () => {
   const entry = read('src/studio-entry.js');
-  assert.equal(count(entry, "inject('sidebar.workspaces'"), 1, 'one registration, no conditional second path');
-  assert.match(entry, /name: 'sidebar\.workspaces', priority: -100/,
-    'single slots render the lowest-priority live entry; -100 is what beats the shipped occupant');
-  assert.doesNotMatch(entry, /sidebar\.workspaces'\)\s*>\s*dispose|\.dispose\(\)\s*;?[^\n]*sidebar\.workspaces/,
-    'the area is permanent now: switching modes is a view change, not an unregister');
+  assert.equal(count(entry, "inject('sidebar.workspaces'"), 0,
+    'taking the slot over is what lost the native folder buttons and spacing');
+  assert.doesNotMatch(entry, /sidebar\.workspaces/);
 });
 
-test('one project row opens the panel and asks it to navigate, not the DSH conversation', () => {
+test('the project page is a conversation-area panel with its own icon', () => {
+  const entry = read('src/studio-entry.js');
+  assert.match(entry, /const PROJECTS = 'no996-openfilm-projects'/);
+  assert.match(entry, /name: 'main', key: PROJECTS/, 'the page renders in the conversation area');
+  assert.match(entry, /name: 'sidebar\.panellist', id: PROJECTS/, 'and is reachable from the icon rail');
+  assert.match(entry, /createProjectPanel\(React, \{/);
+});
+
+test('a project row opens the video panel and asks it to navigate, not the DSH conversation', () => {
   const entry = read('src/studio-entry.js');
   const start = entry.indexOf('openProject: projectId => {');
   assert.ok(start > 0, 'the row action must be the named openProject seam');
-  const block = entry.slice(start, entry.indexOf('}', entry.indexOf('selectPanel();', start)) + 1);
+  const block = entry.slice(start, entry.indexOf('},', start));
   assert.match(block, /areaBus\.navigate\(projectId\)/, 'the panel is asked to show that project');
   assert.match(block, /selectPanel\(\)/, 'the middle area becomes the video panel');
   assert.doesNotMatch(block, /openSession\(/, 'a project row must not open the DSH chat view');
 });
 
-test('the client half declares the workspace package it borrows services from', () => {
+test('project conversations are hidden with a row stylesheet, not by re-rendering the list', () => {
+  const hider = read('src/area-hider.mjs');
+  assert.match(hider, /data-row-key="session:\$\{id\}"/, 'the shipped rows carry the Session id');
+  assert.match(hider, /display:none!important/);
+  const entry = read('src/studio-entry.js');
+  assert.match(entry, /createAreaHider\(\)/);
+  assert.match(entry, /hider\.apply\(payload\?\.hiddenSessionIds\)/);
+});
+
+test('the client half still declares the workspace package it borrows services from', () => {
   const pkg = JSON.parse(read('package.json'));
-  assert.ok(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-workspace'),
-    'ctx.get("uiWorkspace")/useWorkspaces need the package loaded first');
+  assert.ok(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-workspace'));
 });
 
 test('the panel forwards navigation and reports what the shell shows', () => {
   const panel = read('src/studio-panel.mjs');
   assert.match(panel, /import \{ areaBus \} from '\.\/area-bus\.mjs'/);
   assert.match(panel, /type: 'no996-openfilm:navigate'/, 'the iframe receives the request');
-  assert.match(panel, /areaBus\.reportProject\(/, 'the sidebar follows the project on screen');
+  assert.match(panel, /areaBus\.reportProject\(/, 'the page can follow the project on screen');
   assert.match(panel, /areaBus\.reportReady\(\)/, 'a click made while the frame boots is flushed, not dropped');
   assert.match(panel, /areaBus\.takePending\(\)/);
 });
