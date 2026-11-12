@@ -58,7 +58,7 @@ export function resolveAcpCommand({ env = process.env, platform = process.platfo
  * @param {Function} [deps.spawnChild] - injectable for tests
  * @param {Function} [deps.log] - optional `(event, fields)` sink
  */
-export function createAcpClient({ resolve = resolveAcpCommand, env = process.env, requestTimeoutMs = 180000, spawnChild = nodeSpawn, log, args: extraArgs = [] } = {}) {
+export function createAcpClient({ resolve = resolveAcpCommand, env = process.env, requestTimeoutMs = 180000, promptTimeoutMs = 30 * 60_000, spawnChild = nodeSpawn, log, args: extraArgs = [] } = {}) {
   let child = null;
   let state = 'idle';
   let buffer = '';
@@ -178,6 +178,10 @@ export function createAcpClient({ resolve = resolveAcpCommand, env = process.env
           if (line) handleLine(line);
         }
       });
+      // A write into a pipe whose process just died surfaces as an 'error' event
+      // on stdin, not as a throw. Without this listener that event is unhandled and
+      // takes the whole Host down.
+      child.stdin.on('error', error => void log?.('acp-stdin-error', { reason: String(error?.code ?? error?.message ?? error) }));
       child.stderr.setEncoding('utf8');
       let stderrSeen = 0;
       child.stderr.on('data', chunk => {
@@ -209,7 +213,9 @@ export function createAcpClient({ resolve = resolveAcpCommand, env = process.env
     newSession({ cwd, mcpServers = [] }) { return request('session/new', { cwd, mcpServers }); },
     resumeSession({ sessionId, cwd, mcpServers = [] }) { return request('session/resume', { sessionId, cwd, mcpServers }); },
     listSessions() { return request('session/list', {}); },
-    prompt({ sessionId, blocks }) { return request('session/prompt', { sessionId, prompt: blocks }); },
+    // A real editing turn can legitimately run for many minutes (transcode, frame
+    // analysis); the transport's hung-process guard must not cut it short.
+    prompt({ sessionId, blocks }) { return request('session/prompt', { sessionId, prompt: blocks }, { timeoutMs: promptTimeoutMs }); },
     setConfigOption({ sessionId, configId, value }) { return request('session/set_config_option', { sessionId, configId, value }); },
     cancel(sessionId) { return notify('session/cancel', { sessionId }); },
 

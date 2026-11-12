@@ -3,6 +3,8 @@
 // real model (AGENTS §1: no real model calls in automated tests).
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { PassThrough, Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { createAcpClient, resolveAcpCommand } from '../src/acp-client.mjs';
@@ -14,6 +16,7 @@ function startClient({ mode, timeoutMs = 5000 } = {}) {
     resolve: () => ({ command: process.execPath, args: [fixture] }),
     env: { ...process.env, ...(mode ? { FAKE_ACP_MODE: mode } : {}) },
     requestTimeoutMs: timeoutMs,
+    promptTimeoutMs: timeoutMs,
     spawnChild: (command, args, options) => spawn(command, args, options),
   });
   return client;
@@ -114,4 +117,56 @@ test('requests after close are refused by name, not by crashing', async () => {
   await client.start();
   await client.close();
   await assert.rejects(client.newSession({ cwd: 'C:\\fake' }), error => error.code === 'ACP_NOT_READY');
+});
+
+function fakeChild({ stdinFails = false, answer = false } = {}) {
+  const child = new EventEmitter();
+  let writes = 0;
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = new Writable({
+    write(chunk, encoding, done) {
+      if (stdinFails) return done(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }));
+      writes += 1;
+      if (answer && (answer === 'first' ? writes === 1 : true)) {
+        child.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: JSON.parse(chunk).id, result: { agentInfo: { name: 'fake' } } }) + '\n');
+      }
+      done();
+    },
+  });
+  child.kill = () => {};
+  return child;
+}
+
+test('a dead pipe on stdin is logged, not an unhandled crash', async () => {
+  const child = fakeChild({ stdinFails: true });
+  const client = createAcpClient({
+    resolve: () => ({ command: 'fake', args: [] }),
+    env: {},
+    requestTimeoutMs: 60,
+    spawnChild: () => child,
+    log: () => {},
+  });
+  // The write fails asynchronously on stdin. Before the guard this was an
+  // unhandled 'error' event that killed the Host; now the call just times out.
+  await assert.rejects(client.start(), error => error.code === 'ACP_TIMEOUT');
+});
+
+test('a prompt gets its own, much longer budget than control calls', async () => {
+  const child = fakeChild({ answer: 'first' });
+  const client = createAcpClient({
+    resolve: () => ({ command: 'fake', args: [] }),
+    env: {},
+    requestTimeoutMs: 5000,
+    promptTimeoutMs: 40,
+    spawnChild: () => child,
+  });
+  await client.start();
+  await assert.rejects(client.prompt({ sessionId: 's', blocks: [] }), error => error.code === 'ACP_TIMEOUT');
+  // The control budget is untouched: an unanswered list is still waiting.
+  let listed = 'pending';
+  client.listSessions().then(() => { listed = 'resolved'; }, () => { listed = 'rejected'; });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(listed, 'pending');
+  await client.close();
 });
