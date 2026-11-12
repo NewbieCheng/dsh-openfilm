@@ -248,3 +248,36 @@ test('injected workspace instructions do not count as a competing prompt', async
   };
   assert.deepEqual(await send(f.service), { ok: true, stopReason: 'end_turn' });
 });
+
+test('diagnose says which turn received what, and where output died', async () => {
+  // "The panel is empty" has two causes that look identical from outside: DSH
+  // produced nothing, or we dropped it. The record has to tell them apart.
+  const f = fixture();
+  assert.equal(f.service.diagnose('project1').verdict, 'no-turn-recorded');
+
+  // A turn where DSH sends frames and they translate into updates.
+  f.hold();
+  const live = send(f.service);
+  await f.ready();
+  f.push({ type: 'assistant-stream', frame: { type: 'chunk', attemptId: 'a', index: 0, turn: 1, chunk: { type: 'text-delta', text: 'hello' } } });
+  f.end('completed');
+  await live;
+
+  const first = f.service.diagnose('project1');
+  assert.equal(first.verdict, 'emitted');
+  const turn = first.turns.at(-1);
+  assert.equal(turn.frames['stream:chunk:text-delta'], 1, 'the frame is counted before translation');
+  assert.equal(turn.emitted, 1, 'and the update it produced is counted too');
+  assert.equal(turn.ended, 'completed');
+
+  // A turn with frames that translate into nothing is the other verdict.
+  const quiet = send(f.service);
+  await f.ready();
+  f.push({ type: 'assistant-stream', frame: { type: 'chunk', attemptId: 'b', index: 0, turn: 2, chunk: { type: 'unknown-delta', text: '' } } });
+  f.end('completed');
+  await quiet;
+  const second = f.service.diagnose('project1');
+  assert.equal(second.turns.at(-1).emitted, 0);
+  assert.equal(second.verdict, 'nothing-emitted');
+  assert.equal(second.turns.at(-1).dropped['stream:unknown-delta'], 1, 'the dropped frame is named');
+});

@@ -1,5 +1,60 @@
 # 更新记录
 
+## 0.9.0
+
+### 新：工具调用显示真名
+
+以前每一步都只有闭集文案（「已检查影片」），看不出到底调了什么。现在 gent-act 事件带 	ool，行上多一个等宽小标：已检查影片 · openfilm_film、搜索网页「获客运营」· web_search。工具名来自桥接侧的 	ool_call.toolName，上游只负责显示，不再猜。
+
+### 新：对话里直接出现真图片
+
+模型抽的帧、出的联系表，以前只留在附件里，面板上看不到。现在：
+
+- Markdown 支持 ![](url)（空标签就是一张图，此前被当成非法链接丢掉），渲染成最大高 420px、可点击放大的图片；
+- 	ool/result 与 ssistant/message 文本里出现 sha256:<64hex> 时，桥接自动补一行 ![](/api/no996-openfilm/attachment?id=<hex>)；
+- 新增 GET /api/no996-openfilm/attachment?id=<64hex>：只认 64 位十六进制、只读 <DSH_HOME>/attachments/v1/objects/<前2位>/、按魔数给 MIME、要求 DSH 浏览器同源身份。
+
+### 改：空的「思考 0s」不再出现
+
+没有文本的思考块直接不建行（此前会留一个只有计时器的空壳）。有思考文本时仍默认展开。
+
+### 改：底部按钮只说「模型 · 思考强度」
+
+自动（按这一句话的内容） 这类长括号说明被剥掉，只剩 自动，模型名不再被挤成 D…。
+
+### 修：调工具不再弹出独立的剪辑浏览器窗口
+
+**根因**：openfilm_cli 启动内核 CLI 时没设 OPENFILM_NO_BROWSER=1；而 CLI 的 look / ender 在项目缺少 .film/opened 时会调 open(project) —— 那正是"启动 Studio 并在人的浏览器里打开"。于是每调一次工具就弹一个剪辑窗口，里面还带着上游桌面端的引流。
+
+**修法（三层）**：
+
+- 环境变量固定 OPENFILM_NO_BROWSER=1（内核自己的开关）；
+- 绑定项目时由 Host 写 .film/opened 标记（与内核写的空文件一致），CLI 判定"已经展示过"，不再启动 Studio；
+- openfilm_cli 只保留 doctor；look / ender 按名字拒绝并指向 openfilm_frame / openfilm_export（它们走 HTTP，不启窗口）。
+
+### 修：会话又跑进「未分组」
+
+**根因**：project-conversation.mjs 里 workspaceController 取不到、create 抛错、ttachSession 不存在或失败，四处 catch 全静默，失败即退回 cwd 分支 —— 那条分支必然未分组。
+
+**修法**：
+
+- 每一步都记 workspace-join { step, ok, code }，不再静默；
+- 建完用 sessionController.list() **复验** item.workspaceId，不成立才 attach，再复验，**最多重试一次**（循环只会对着同一个答案空转）；
+- 两次仍不成立 → 标记 degraded，项目照常打开（这是展示问题，不是工作阻塞）；
+- 已存在的会话每次打开都会重新 seat，之前漏挂的会自己归位。
+
+### 新：诊断能回答「为什么面板是空的」
+
+/api/no996-openfilm/diagnose 现在按项目返回最近 4 轮：每种帧收到几个、产出几条更新、哪些帧在翻译层被丢弃，并给一句判词 —— 
+o-turn-recorded / 
+o-frames-received（DSH 没产出）/ 
+othing-emitted（我们丢了）/ some-frames-dropped / mitted；同时带 grouping（seated / degraded）。
+
+### 测试与快照
+
+- 新增 	ests/project-markers.test.mjs（4 例）、project-conversation 增 3 例、xport-cli-tool 增 2 例、official-agent-service 增 1 例；全库 **358 项 / 357 通过 / 1 跳过**。
+- 上游补丁从 15 个文件增至 **17 个**（新增 packages/shared/src/markdown-blocks.ts、pps/desktop/chat/src/components/Markdown.tsx），endor/official-shell/patch.diff、manifest.patch.files 与之一致。
+
 ## 0.8.2
 
 ### 修：预设装坏了 → 每句话都 `PROJECT_CONVERSATION_CREATE`，权限行也消失

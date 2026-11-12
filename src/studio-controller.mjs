@@ -2,7 +2,7 @@ import { createStudioRuntime } from './studio-runtime.mjs';
 import { createHostComponentDetector } from './host-components.mjs';
 import { installTemplate, listTemplates } from './official-templates.mjs';
 import { readFileSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
@@ -522,6 +522,17 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const admission = ctx.connection.admit({ headers: req.headers });
       if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('{}'); return; }
       const proxy = await lastProxy?.catch(() => undefined);
+      // Which project the page is asking about, if it named one. Both the turn
+      // record and the grouping state are per project.
+      const diagnoseProject = await (async () => {
+        try {
+          const chunks = [];
+          for await (const chunk of req) { chunks.push(chunk); if (Buffer.concat(chunks).byteLength > 4096) return ''; }
+          const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+          const id = typeof parsed?.projectId === 'string' ? parsed.projectId : '';
+          return /^[A-Za-z0-9_-]{6,40}$/.test(id) ? id : '';
+        } catch { return ''; }
+      })();
       // Whether the video-editing preset actually activated, not just whether its
       // row exists: the roster carries each preset's activation diagnostic.
       let preset = null;
@@ -555,6 +566,12 @@ export function createStudioController(ctx, createProxy, { officialShell = false
             return { available: store.available(), names: store.names() };
           } catch (error) { return { available: false, error: String(error?.code ?? 'PERMISSION_UNAVAILABLE') }; }
         })(),
+        // Per-turn evidence for "the panel shows nothing": frames received, updates
+        // emitted, and which frames died in translation. Without this, exhausted
+        // agent output and dropped events look identical.
+        turns: agentService ? agentService.diagnose(diagnoseProject) : null,
+        // Whether the conversation is really grouped under the project's folder.
+        grouping: conversations && diagnoseProject ? conversations.grouping(diagnoseProject) : 'unknown',
         // The last few events, so a support message can carry the history that
         // explains the symptom without asking for a file path.
         log: { file: log.file, tail: log.tail(12) },
@@ -562,7 +579,33 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
     },
   });
-  const unregisterBootstrap = ctx.webServer.register({
+  // A picture the agent made, served to the panel that shows it.
+//
+// The frame tool stores what Studio drew as a DSH attachment (`sha256:<hex>` under
+// <DSH_HOME>/attachments/v1/objects). The chat transcript then points at it with
+// `![](/api/no996-openfilm/attachment?id=<hex>)`, which is this route: the panel's own origin,
+// a validated 64-hex id, and a path that cannot leave the object store.
+const unregisterAttachment = ctx.webServer.register({
+  kind: 'exact', path: '/api/no996-openfilm/attachment',
+  async handler(req, res) {
+    res.setHeader('cache-control', 'private, max-age=600');
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { allow: 'GET, HEAD' }).end(); return; }
+    const admission = ctx.connection.admit({ headers: req.headers });
+    if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end(); return; }
+    const raw = String(new URL(req.url ?? '/', 'http://localhost').searchParams.get('id') ?? '').trim().toLowerCase();
+    const id = raw.replace(/^sha256:/, '');
+    if (!/^[a-f0-9]{64}$/.test(id)) { res.writeHead(400, { 'content-type': 'text/plain' }).end('bad attachment id'); return; }
+    const home = process.env.DSH_HOME || join(homedir(), '.dsh');
+    const file = join(home, 'attachments', 'v1', 'objects', id.slice(0, 2), id);
+    let bytes;
+    try { bytes = await readFile(file); } catch { res.writeHead(404, { 'content-type': 'text/plain' }).end('not found'); return; }
+    const type = bytes[0] === 0x89 && bytes[1] === 0x50 ? 'image/png'
+      : bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg'
+      : bytes.subarray(0, 4).toString('latin1') === 'RIFF' ? 'image/webp' : 'application/octet-stream';
+    res.writeHead(200, { 'content-type': type, 'content-length': bytes.byteLength }).end(req.method === 'HEAD' ? undefined : bytes);
+  },
+});
+const unregisterBootstrap = ctx.webServer.register({
     // Page-side events worth keeping when a person reports "it broke": the
     // recovery card appeared, the button was pressed. Enum-only, 512 bytes, and
     // only from the authenticated DSH browser — this is not a general log sink.

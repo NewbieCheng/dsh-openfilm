@@ -4,17 +4,26 @@ OpenFilm 视频创作作为 DSH 插件：整页官方 Studio 0.3.2 + 官方对�
 
 ## 文档
 
-- [AGENTS.md](AGENTS.md) — 给智能体的操作手册：红线、仓库地图、**重载与热加载矩阵**、诊断入口
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — 架构、启动时序、请求路径、模块职责、安全模型、构建与升级
-- [docs/NOTES.md](docs/NOTES.md) — 决策纪要、版本纪事、踩坑记录、待办与待拍板
+接手开发只看这五份，其余都是历史：
+
+| 文档 | 给谁 | 内容 |
+|---|---|---|
+| **[docs/HANDOVER.md](docs/HANDOVER.md)** | **接手的智能体** | **五分钟上手、五条红线、当前状态、三类故障先查哪里** |
+| [AGENTS.md](AGENTS.md) | 智能体 | 红线、仓库地图、重载矩阵、诊断入口 |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 开发者 | 架构、启动时序、请求路径、模块职责、安全模型、构建/生效/发版 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 开发者 | **接下来做什么**：0.9.1 账号与登录，之后的批次，已知边界 |
+| [docs/NOTES.md](docs/NOTES.md) | 考古 | 决策纪要与踩坑记录（历史，不必先读） |
+| [docs/TEST-CHECKLIST.md](docs/TEST-CHECKLIST.md) | 验收者 | 真机验收清单 |
+
+细节手册：[docs/TEMPLATES.md](docs/TEMPLATES.md)（模板）、[docs/HOT-RELOAD.md](docs/HOT-RELOAD.md)（三档热更新）。
 
 > **不是热加载**：改客户端源码要 `npm run build` + 刷新页面；改 Host 源码要重启 DSH；改 `vendor/templates` 下一次请求即生效。详见 `AGENTS.md` §4。
 
-## 下载与更新（0.8.2）
+## 下载与更新（0.9.0）
 
-从 [GitHub Releases](https://github.com/NewbieCheng/dsh-openfilm/releases) 下载 `dsh-openfilm-0.8.2.tgz`，在 DSH 插件管理器中安装该包，或通过管理器的 `install_bundle` 指定本地包路径。更新前请保存尚未保存的编辑，完成后按管理器提示重启 DSH 或刷新页面。
+从 [GitHub Releases](https://github.com/NewbieCheng/dsh-openfilm/releases) 下载 `dsh-openfilm-0.9.0.tgz`，在 DSH 插件管理器中安装该包，或通过管理器的 `install_bundle` 指定本地包路径。更新前请保存尚未保存的编辑，完成后按管理器提示重启 DSH 或刷新页面。
 
-发布包包含 OpenFilm 0.3.2（内核与界面快照同版本；界面快照带五处可查的本地改动（权限菜单行、模型菜单分组与搜索、会话删除、思考可见、模型名只显示模型），共 15 个文件，见 `vendor/official-shell/patch.diff`）、运行依赖、官方界面和模板，无需另外手动安装 OpenFilm；下载发布包本身仍需联网。宿主需提供兼容的 DSH 和 Node.js 22.2 或更高版本。自动化测试 349 项（348 通过、1 跳过），在 Windows 本机运行；macOS/Linux 尚未完成实机 GUI 验证。真机验收（右侧对话观感、审批卡、导出文件可播）按 `docs/TEST-CHECKLIST.md` 逐项执行，尚未由作者完整跑完，因此发布包里的这条链路仍属"待验收"。
+发布包包含 OpenFilm 0.3.2（内核与界面快照同版本；界面快照带可查的本地改动（权限菜单行、模型菜单分组与搜索、会话删除、思考可见且空块不画、模型名只显示模型、工具行显示真名、对话内联图片、底部只显示「模型 · 思考强度」），共 17 个文件，见 `vendor/official-shell/patch.diff`）、运行依赖、官方界面和模板，无需另外手动安装 OpenFilm；下载发布包本身仍需联网。宿主需提供兼容的 DSH 和 Node.js 22.2 或更高版本。自动化测试 349 项（348 通过、1 跳过），在 Windows 本机运行；macOS/Linux 尚未完成实机 GUI 验证。真机验收（右侧对话观感、审批卡、导出文件可播）按 `docs/TEST-CHECKLIST.md` 逐项执行，尚未由作者完整跑完，因此发布包里的这条链路仍属"待验收"。
 
 **关于自动检查更新**：DSH 插件管理器的版本检查目前只支持从 npm 仓库安装的插件；GitHub 安装包和本地链接不会自动按 GitHub Releases 检查新版本。本项目目前尚未发布到 npm，需手动从 Releases 获取新包更新。
 

@@ -13,7 +13,7 @@ import { openProjectConversations } from '../src/project-conversation.mjs';
 const chain = () => ({ min: chain, regex: chain, strict: chain });
 const z = { object: chain, string: chain, literal: chain, discriminatedUnion: chain };
 
-function fixture({ items = [], workspace = true, rename = true, createFails = false } = {}) {
+function fixture({ items = [], workspace = true, rename = true, createFails = false, attachWorks = true } = {}) {
   const records = new Map();
   const calls = { create: [], list: 0, rename: [], workspace: [], attach: [] };
   const ctx = {
@@ -36,7 +36,15 @@ function fixture({ items = [], workspace = true, rename = true, createFails = fa
             path: request.path,
             title: 'demo-film',
             sessionIds: [],
-            async attachSession(sessionId) { calls.attach.push(sessionId); },
+            // A real attach makes the Session a member, and the catalog says so: the
+        // read-back is what proves membership, so the fake must move too.
+        async attachSession(sessionId) {
+          calls.attach.push(sessionId);
+          if (!attachWorks) return;
+          const item = items.find(candidate => candidate.sessionId === sessionId);
+          if (item) item.workspaceId = 'workspace-1';
+          else items.push({ sessionId, workspaceId: 'workspace-1' });
+        },
           };
         },
       }
@@ -152,6 +160,49 @@ test('a refused session creation keeps the Host reason', async () => {
     () => conversations.resolve({ projectId: 'proj123456', path: projectPath }),
     error => error.code === 'PROJECT_CONVERSATION_CREATE' && error.detail === 'nope' && error.cause instanceof Error,
   );
-  assert.deepEqual(failures, [['project-conversation-create', { detail: 'nope', workspace: 'cwd' }]]);
+  // The grouping trail comes first now: a fallback to a cwd-only Session is
+  // exactly what put conversations in 未分组, so it is reported, not swallowed.
+  assert.deepEqual(failures, [
+    ['workspace-join', { step: 'controller', ok: false, code: 'WORKSPACE_CONTROLLER_MISSING' }],
+    ['project-conversation-create', { detail: 'nope', workspace: 'cwd' }],
+  ]);
   assert.equal(records.size, 0, 'a failed creation stores no hint');
+});
+test('a conversation the catalog already groups needs no attach', async () => {
+  // The bug being guarded: 未分组 came from never proving membership. When it is
+  // already proven, touching the Workspace would be noise.
+  const { ctx, calls } = fixture({ items: [{ sessionId: 'session-1', cwd: projectPath, title: 'demo-film', workspaceId: 'workspace-1' }] });
+  const conversations = await openProjectConversations(ctx, { z });
+  await conversations.resolve({ projectId: 'proj123456', path: projectPath });
+  assert.deepEqual(calls.attach, [], 'membership is read back, not re-applied');
+  assert.equal(conversations.grouping('proj123456'), 'seated');
+});
+
+test('an attach that does not take is reported, and the project still opens', async () => {
+  // Membership is presentation: it must never stop the person from working, but a
+  // failure that leaves the Session ungrouped has to be visible in diagnostics.
+  const { ctx, calls } = fixture({ attachWorks: false });
+  const failures = [];
+  const conversations = await openProjectConversations(ctx, { z, onFailure: (event, fields) => failures.push([event, fields]) });
+  const sessionId = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
+  assert.equal(sessionId, 'session-1');
+  assert.equal(calls.attach.length, 1, 'one retry at most: a loop would spin against a Host that answers the same way');
+  assert.equal(conversations.grouping('proj123456'), 'degraded');
+  const verify = failures.filter(([event, fields]) => event === 'workspace-join' && fields.step === 'verify');
+  assert.deepEqual(verify, [['workspace-join', { step: 'verify', ok: false, code: 'WORKSPACE_MEMBERSHIP_UNCONFIRMED' }]]);
+});
+
+test('binding a project marks it as shown, so the CLI never starts Studio for it', async () => {
+  const { mkdtemp, rm, access } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = await mkdtemp(join(tmpdir(), 'openfilm-marker-'));
+  try {
+    const { ctx } = fixture();
+    const conversations = await openProjectConversations(ctx, { z });
+    await conversations.resolve({ projectId: 'proj123456', path: root });
+    await access(join(root, '.film', 'opened'));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

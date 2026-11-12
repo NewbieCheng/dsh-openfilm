@@ -59,6 +59,28 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
       ['modelCatalog', 'selectModel', 'prompt', 'follow', 'cancel'].some(name => typeof controller?.[name] !== 'function')) {
     throw fail('OFFICIAL_AGENT_DEPENDENCY', 'Trusted verifier, registry, emitter and session controller are required');
   }
+  // What each recent turn actually received, and what it turned into.
+  //
+  // "The panel shows nothing" has two very different causes — the Host produced no
+  // events at all, or we dropped them — and without this record they look identical
+  // from the outside. Four turns per project is enough to answer that question and
+  // small enough to keep in memory forever.
+  const turnDiagnostics = new Map();
+  const DIAGNOSED_TURNS = 4;
+  function tally(projectId, turnNo) {
+    let record = (turnDiagnostics.get(projectId) ?? []).find(item => item.turn === turnNo);
+    if (!record) {
+      record = { turn: turnNo, at: new Date().toISOString(), frames: {}, emitted: 0, dropped: {}, ended: null };
+      const list = [...(turnDiagnostics.get(projectId) ?? []), record];
+      turnDiagnostics.set(projectId, list.slice(-DIAGNOSED_TURNS));
+    }
+    return record;
+  }
+  function count(bag, name) {
+    if (typeof name !== 'string' || !name) return;
+    bag[name] = (bag[name] ?? 0) + 1;
+  }
+
   // Archive state is optional: without it the bridge still works and DSH's own
   // gate decides; it must never be faked into "not archived".
   const archived = typeof isArchived === 'function' ? isArchived : () => false;
@@ -201,6 +223,33 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
       const accepted = approvals.answerRequest({ projectId, key, requestId, optionId }) === true;
       return { ok: accepted };
     },
+    /**
+     * What the last few turns actually received, and what came out of it.
+     *
+     * A turn with frames but nothing emitted is a bug on this side; a turn with no
+     * frames at all is DSH answering nothing. The panel cannot tell those apart,
+     * this can.
+     */
+    diagnose(projectId) {
+      const turns = turnDiagnostics.get(projectId) ?? [];
+      return {
+        turns: turns.map(item => ({
+          turn: item.turn, at: item.at, ended: item.ended, emitted: item.emitted,
+          frames: item.frames, dropped: item.dropped,
+        })),
+        // The shortest honest answer to "why is the panel empty", about the last turn:
+        // no frames at all means DSH said nothing; frames but no emitted update means
+        // this bridge dropped them.
+        verdict: (() => {
+          const last = turns.at(-1);
+          if (!last) return 'no-turn-recorded';
+          if (Object.keys(last.frames).length === 0) return 'no-frames-received';
+          if (last.emitted === 0) return 'nothing-emitted';
+          if (Object.keys(last.dropped).length > 0) return 'some-frames-dropped';
+          return 'emitted';
+        })(),
+      };
+    },
     async modelCatalog(projectId) {
       await verify(projectId);
       return controller.modelCatalog();
@@ -337,6 +386,12 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
               // missing. One file, overwritten per send, strings clamped so every
               // line stays parseable JSON (mid-line slicing made forensics manual).
               try { trace.push(JSON.stringify(clampTrace(frame))); } catch { /* unserializable frame */ }
+        // Every frame is counted before it is translated, so a frame that dies in
+        // translation still shows up as "received, produced nothing".
+        const seen = tally(projectId, candidate ?? 0);
+        if (frame?.type === 'event') count(seen.frames, 'event:' + String(frame.event?.type ?? '?'));
+        else if (frame?.type === 'assistant-stream') count(seen.frames, 'stream:' + String(frame.frame?.type ?? '?') + (frame.frame?.chunk?.type ? ':' + String(frame.frame.chunk.type) : ''));
+        else count(seen.frames, String(frame?.type ?? 'unknown'));
               if (frame?.type === 'event') {
                 const event = frame.event;
                 if (event?.type === 'turn/start') {
@@ -395,6 +450,7 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
                     : kind === 'aborted' ? { ok: true, stopReason: 'cancelled' }
                       : { ok: false, error: turnFailureMessage(reason, { archived: archived(sessionId) === true }) };
                   operation.blocked = kind === 'blocked';
+      tally(projectId, candidate).ended = String(kind ?? 'unknown');
                   await finish(result);
                 } else if (event?.type === 'tool/call' || event?.type === 'tool/result' || event?.type === 'assistant/message') {
                   // Durable lifecycle of the same turn. Ignore anything belonging
@@ -404,7 +460,9 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
                   if (!state) continue;
                   const result = translateSessionEvent(state, { sessionId, turnId, event });
                   state = result.state;
+                  if (result.events.length === 0) count(tally(projectId, candidate).dropped, 'event:' + String(event?.type ?? '?'));
                   for (const eventUpdate of result.events) {
+                    tally(projectId, candidate).emitted += 1;
                     if (await emit(projectId, eventUpdate) === false) throw fail('OFFICIAL_AGENT_STREAM_LOST', 'No live event stream accepted the update');
                   }
                 }
@@ -415,7 +473,9 @@ export function createOfficialAgentService(ctx, { verifier, openProjectSessions,
                 // attempt already running, and chunk kinds we do not translate all
                 // return it. Treating those as fatal failed every live turn.
                 state = result.state;
+                if (result.events.length === 0) count(tally(projectId, candidate).dropped, 'stream:' + String(frame.frame?.chunk?.type ?? frame.frame?.type ?? '?'));
                 for (const event of result.events) {
+                  tally(projectId, candidate).emitted += 1;
                   // Refuse to report success if the transport cannot accept a frame.
                   // Acceptance is not browser acknowledgement or durable replay.
                   if (await emit(projectId, event) === false) throw fail('OFFICIAL_AGENT_STREAM_LOST', 'No live event stream accepted the update');

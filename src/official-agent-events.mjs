@@ -32,6 +32,31 @@ const THOUGHT = new Set(['reasoning-delta', 'thinking-delta', 'thought-delta', '
 
 const clip = (value, max) => (typeof value === 'string' ? value.slice(0, max) : '');
 
+/**
+ * Pictures this turn made, as markdown the panel can draw.
+ *
+ * A rendered frame reaches DSH as an attachment (sha256:<hex> under the Host's attachment
+ * store). The panel gets a URL of its own origin that serves exactly that object, so a frame the
+ * agent looks at is also a frame the person sees — instead of a file name in a tool result.
+ */
+const ATTACHMENT = /sha256:([a-f0-9]{64})/gi;
+/** The text, with a picture line under it when the text names an attachment. */
+function withPictures(text) {
+  if (typeof text !== 'string' || !ATTACHMENT.test(text)) { ATTACHMENT.lastIndex = 0; return text; }
+  ATTACHMENT.lastIndex = 0;
+  const pictures = pictureRefs(text);
+  return pictures ? text + '\n\n' + pictures : text;
+}
+
+function pictureRefs(...texts) {
+  const seen = new Set();
+  for (const text of texts) {
+    if (typeof text !== 'string') continue;
+    for (const match of text.matchAll(ATTACHMENT)) seen.add(match[1].toLowerCase());
+  }
+  return [...seen].map(id => '![](/api/no996-openfilm/attachment?id=' + id + ')').join('\n');
+}
+
 function update(key, sessionUpdate, extra) {
   return { key, kind: 'update', update: { sessionUpdate, ...extra } };
 }
@@ -71,6 +96,8 @@ function toolCallEvent(state, { callId, name, input }) {
     events: [update(state.key, 'tool_call', {
       toolCallId: callId, title, kind: act.kind, status: 'in_progress',
       rawInput: act.rawInput,
+      /* The panel shows what actually ran, beside what it meant for the film. */
+      toolName: clip(typeof name === 'string' ? name : '', 80),
       ...(act.locations ? { locations: act.locations } : {}),
     })],
   };
@@ -181,7 +208,7 @@ export function translateSessionEvent(state, { sessionId, turnId, event } = {}) 
         ...(known?.title ? { title: known.title } : {}),
         ...(known?.kind ? { kind: known.kind } : {}),
         status: failed ? 'failed' : 'completed',
-        ...(text ? { content: [{ type: 'text', text: clip(text, TEXT_MAX) }], rawOutput: clip(text, TEXT_MAX) } : {}),
+        ...(text ? { content: [{ type: 'text', text: clip(withPictures(text), TEXT_MAX) }], rawOutput: clip(text, TEXT_MAX) } : {}),
       })],
     };
   }
@@ -200,7 +227,7 @@ export function translateSessionEvent(state, { sessionId, turnId, event } = {}) 
   }
   if (!(step !== null && next.textSteps.includes(step))) {
     const text = textOf(content, 'text');
-    if (text) events.push(update(next.key, 'agent_message_chunk', { content: { type: 'text', text: clip(text, TEXT_MAX) } }));
+    if (text) events.push(update(next.key, 'agent_message_chunk', { content: { type: 'text', text: clip(withPictures(text), TEXT_MAX) } }));
   }
   for (const block of content) {
     if (block?.type !== 'tool-call') continue;

@@ -104,6 +104,10 @@ test('a run reports the exit code and the output, and never throws on failure', 
     assert.equal(options.cwd, bound.path);
     assert.equal(options.shell, false);
     assert.equal(options.env.NO996_OPENFILM_CLI, '0');
+  // The kernel's own switch: Studio starts, nothing opens in the person's browser.
+  // Without it open puts a second editing window on screen, with the upstream
+  // desktop-app pitch in it, while the panel is already showing the film.
+  assert.equal(options.env.OPENFILM_NO_BROWSER, '1', 'a tool call must never open a browser window');
     return child;
   };
   const tool = createCliTool({ ...link, cliPath: 'C:/cli/bin/openfilm.mjs', spawnImpl, timeoutMs: 50 });
@@ -125,7 +129,8 @@ test('a failing run is handed back for the model to read', async () => {
     return child;
   };
   const tool = createCliTool({ ...link, cliPath: 'C:/cli/bin/openfilm.mjs', spawnImpl, timeoutMs: 50 });
-  const value = await tool.execute({ verb: 'look' }, { agent });
+  // `look` is refused now (it starts Studio and a window), so the failing run is doctor's.
+  const value = await tool.execute({ verb: 'doctor' }, { agent });
   assert.match(value.text, /退出码 2/);
   assert.match(value.text, /not a project/);
   assert.match(value.text, /不要原样重试/);
@@ -143,4 +148,21 @@ test('the recursion guard and a missing CLI are explicit', async () => {
   // The bundled dependency is present in this repo, so resolution finds a real path.
   const found = resolveCli();
   assert.ok(found === undefined || /openfilm\.mjs$/.test(found), String(found));
+});
+
+test('the tool only runs doctor: look and render would start Studio and a window', async () => {
+  const tool = createCliTool({
+    isProjectAgent: () => true,
+    projectOf: () => ({ path: 'C:/p' }),
+    cliPath: 'C:/openfilm/bin/openfilm.mjs',
+    spawnImpl: () => { throw new Error('must not spawn'); },
+  });
+  assert.deepEqual(tool.parameters.properties.verb.enum, ['doctor']);
+  for (const verb of ['look', 'render']) {
+    await assert.rejects(
+      () => tool.execute({ verb }, { agent: {} }),
+      error => /openfilm_cli 只保留 doctor/.test(error.message) && /openfilm_frame/.test(error.message),
+      verb + ' must be refused by name, pointing at the tool that does the job',
+    );
+  }
 });

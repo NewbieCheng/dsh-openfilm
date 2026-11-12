@@ -1,6 +1,6 @@
 # AGENTS.md — dsh-openfilm
 
-给在本仓工作的智能体的操作手册。人读版：`README.md`；架构与重载细节：`docs/DEVELOPMENT.md`；决策与历史：`docs/NOTES.md`。
+给在本仓工作的智能体的操作手册。人读版：`README.md`；架构与重载细节：`docs/DEVELOPMENT.md`；路线图：`docs/ROADMAP.md`；决策与历史：`docs/NOTES.md`。
 
 > 本文件会被 `openfilm-video-editing` 预设里的 `@deepseek-ai/dsh-agent-instructions` 读入（`maxBytes: 65536`）。
 > 保持精炼：新增内容优先写进 `docs/`，这里只留"必须知道才不犯错"的部分。
@@ -46,6 +46,7 @@
 | 客户端源码 | `src/studio-entry.js`、`studio-panel.mjs`、`panel-keepalive.mjs` | 注册 `main`(占位) / `sidebar.panellist`(图标) / `shell.overlay`(真面板)。**面板没有模板首页**，打开就是官方 Studio |
 | 官方界面注入 | `src/shell-extras.mjs`（读取器）+ `assets/shell-ui.js`（真正的脚本） | 往官方 shell 页面叠模板下拉 / 故障卡片 / 隐藏「视频复刻」；每次渲染读盘，改完刷新即生效 |
 | 热更新教程 | `docs/HOT-RELOAD.md` | 三档热更新的具体做法与坑 |
+| 路线图 | `docs/ROADMAP.md` | 接下来做什么（0.9.1 账号与登录），已知边界；**开工前先看** |
 | 归档 | `src/workspace-archive.mjs`、`src/archive-bridge.mjs` | DSH 归档集合的唯一 Host 视图 + `/api/no996-openfilm/archive` |
 | 事件流 | `src/official-event-stream.mjs`、`official-event-hub.mjs` | SSE 写出与按项目 fan-out；**背压只排队不关闭**（0.4.2 修） |
 | 客户端产物 | `client.js` | **由 `npm run build` 生成，禁止手改** |

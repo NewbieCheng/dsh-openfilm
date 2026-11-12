@@ -138,12 +138,18 @@ export function createStudioPanel(React) {
     React.useEffect(() => {
       if (!HOST_HTTP || !silent || state.status !== 'ready') return undefined;
       let live = true;
-      fetch('/api/no996-openfilm/diagnose', { method: 'POST', credentials: 'same-origin' })
+      // Naming the project is what makes the answer useful: the turn record and the
+      // grouping state are per project, and "the panel is empty" is a per-project question.
+      fetch('/api/no996-openfilm/diagnose', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(projectId ? { projectId } : {}),
+      })
         .then(response => (response.ok ? response.json() : { httpStatus: response.status }))
         .then(value => { if (live) setDiag(value); })
         .catch(error => { if (live) setDiag({ error: String((error && error.message) || error) }); });
       return () => { live = false; };
-    }, [silent, state.status, attempt]);
+    }, [silent, state.status, attempt, projectId]);
 
     const retry = () => { setSilent(false); setHealth(null); setAttempt(value => value + 1); };
     // Poll the Host's own Studio state while the panel is up. One automatic

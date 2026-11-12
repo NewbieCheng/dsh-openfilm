@@ -62,4 +62,17 @@ test('the shell snapshot declares its one upstream patch, or none at all', () =>
   }
   assert.match(diff, /data-thought/, 'the thought block must be rendered');
   assert.match(diff, /agent_thought_chunk/, 'and fed from the agent thought chunks');
+
+  // The panel says what actually ran: the real tool name travels beside the closed act, and the
+  // row prints it. A picture the agent made is drawn in the transcript, not left as a file name.
+  for (const file of [
+    'apps/desktop/chat/src/components/Markdown.tsx',
+    'packages/shared/src/markdown-blocks.ts',
+  ]) {
+    assert.ok(manifest.patch.files.includes(file), 'the patch must include ' + file);
+  }
+  assert.match(diff, /data-tool-name/, 'the act row must print the tool name');
+  assert.match(diff, /toolName/, 'and the bridge must be able to pass it in');
+  assert.match(diff, /kind: 'image'/, 'an empty-label markdown link is a picture');
+  assert.match(diff, /InlinePicture/, 'and the transcript draws it');
 });

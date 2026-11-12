@@ -18,6 +18,16 @@ import { dirname, join, resolve, sep } from 'node:path';
 const MAX_OUTPUT = 8000;
 const VERBS = ['doctor', 'look', 'render'];
 
+/**
+ * What this tool still runs.
+ *
+ * look and ender are gone on purpose: the kernel CLI draws frames by starting Studio and, on
+ * a project Studio has never shown, by opening the person's browser (in/openfilm.mjs: open).
+ * Inside DSH the film already has a window — the panel — and a second one arrives with the
+ * upstream desktop-app pitch in it. openfilm_frame and openfilm_export do both jobs over HTTP.
+ */
+const TOOL_VERBS = ['doctor'];
+
 /** Where the packaged CLI lives, or undefined when this install has no copy. */
 export function resolveCli({ require: resolver } = {}) {
   try {
@@ -84,7 +94,9 @@ function runNode(cli, argv, cwd, { timeoutMs = 300_000, spawnImpl = spawn } = {}
         // The CLI talks to Studio over loopback only; it never needs a shell.
         shell: false,
         windowsHide: true,
-        env: { ...process.env, NO_COLOR: '1', NO996_OPENFILM_CLI: '0' },
+        // OPENFILM_NO_BROWSER=1 is the kernel's own documented switch (open --help): Studio
+      // starts, nothing opens in the person's browser.
+      env: { ...process.env, NO_COLOR: '1', NO996_OPENFILM_CLI: '0', OPENFILM_NO_BROWSER: '1' },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
     } catch (failure) {
@@ -127,7 +139,7 @@ export function createCliTool({ isProjectAgent, projectOf, cliPath, spawnImpl, t
     parameters: {
       type: 'object', additionalProperties: false, required: ['verb'],
       properties: {
-        verb: { type: 'string', enum: VERBS, description: 'doctor | look | render' },
+        verb: { type: 'string', enum: TOOL_VERBS, description: 'doctor（这台机器有什么）。看画面用 openfilm_frame，导出用 openfilm_export。' },
         at: { type: 'number', minimum: 0, description: 'look: one frame at this second.' },
         from: { type: 'number', minimum: 0, description: 'look/render: range start in seconds.' },
         to: { type: 'number', minimum: 0, description: 'look/render: range end in seconds.' },
@@ -153,7 +165,11 @@ export function createCliTool({ isProjectAgent, projectOf, cliPath, spawnImpl, t
       if (process.env.NO996_OPENFILM_CLI === '1') throw new Error('这个进程被标记为不许调用 CLI（NO996_OPENFILM_CLI=1）。');
       const cli = cliPath ?? resolveCli();
       if (!cli) throw new Error('这个插件里没带 openfilm CLI（找不到 openfilm/package.json）。用 openfilm_film / openfilm_frame / openfilm_export 代替。');
-      const built = cliArguments(String(args?.verb ?? ''), args, project.path);
+      const verb = String(args?.verb ?? '');
+    if (!TOOL_VERBS.includes(verb)) {
+      throw new Error(`openfilm_cli 只保留 ${TOOL_VERBS.join(' / ')}：${verb || '（空）'} 会启动 Studio 并可能弹出浏览器窗口。看某一秒的画面用 openfilm_frame，导出成片用 openfilm_export。`);
+    }
+    const built = cliArguments(verb, args, project.path);
       if (built.error) throw new Error(built.error);
       const result = await runNode(cli, built.argv, project.path, { timeoutMs, spawnImpl });
       const head = `openfilm ${built.argv.join(' ')} → 退出码 ${result.code === null ? '（没有正常结束）' : result.code}`;
