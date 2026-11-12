@@ -5,11 +5,11 @@
 
 ---
 
-## 下一批候选：ACP 化（待拍板，见 [ARCHITECTURE.md](ARCHITECTURE.md)）
+## ACP 化（0.13.0，见 [ARCHITECTURE.md](ARCHITECTURE.md)）
 
 | 项 | 内容 | 状态 |
 |---|---|---|
-| ACP 边车 | Host 以 `dsh --profile acp` 驱动面板对话，替换手写 RPC 回合（见 ARCHITECTURE.md §9） | 已实现，待真机 |
+| ACP 边车 | Host 以 `dsh --profile acp` 驱动面板对话；旧的手写 RPC 回合路径已删除（ARCHITECTURE.md §10） | 已实现，待面板真机点击 |
 | 会话身份统一 | 面板与侧栏共用同一 DSH 会话；思考/工具/审批/续聊同源（M2） | 已实现，待真机 |
 | 引用式附件 | 图片在模型不支持时落成绝对路径；图片支持则内联。`embeddedContext` 在 DSH ACP 里硬编码 false，所以不用 `resource_link`（M3） | 已实现 |
 | 编辑指令 | 面板会话拿不到 `openfilm-video-editing` 预设，改为写项目 `AGENTS.md`（不覆盖已有文件） | 已实现 |
