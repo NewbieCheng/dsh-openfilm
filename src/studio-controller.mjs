@@ -867,21 +867,22 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // DSH webServer.register accepts ONE route and throws on duplicate path. If
   // setup fails after a route is mounted, Cordis never gets a disposer and the
   // path leaks — the next enable then fails with "duplicate exact route".
+  // Registering the same exact path twice throws inside the web registry; a
+  // management toggle can re-run this block in a Host that already has it, and a
+  // throw here would mark the whole plugin as failed to activate. Declared as a
+  // function so the routes registered earlier in this body can call it.
+  function registerRoute(route) {
+    try { return ctx.webServer.register(route); } catch (error) {
+      void log.warn('route-already-mounted', { path: route?.path, detail: String(error?.message ?? error).slice(0, 160) });
+      return () => {};
+    }
+  }
   // Track every route disposer and roll back on throw; dispose sync-unregisters
   // routes before any await so a re-enable cannot race a leftover path.
   const routeDisposers = [];
   const trackRoute = dispose => {
     routeDisposers.push(dispose);
     return dispose;
-  };
-  // Registering the same exact path twice throws inside the web registry; a
-  // management toggle can re-run this block in a Host that already has it, and a
-  // throw here would mark the whole plugin as failed to activate.
-  const registerRoute = route => {
-    try { return ctx.webServer.register(route); } catch (error) {
-      void log.warn('route-already-mounted', { path: route?.path, detail: String(error?.message ?? error).slice(0, 160) });
-      return () => {};
-    }
   };
   const rollbackRoutes = () => {
     while (routeDisposers.length) {
