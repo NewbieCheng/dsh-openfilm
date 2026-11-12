@@ -327,12 +327,16 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
           result = await entry.client.prompt({ sessionId: entry.sessionId, blocks: retryBlocks });
         }
         const stopReason = result?.stopReason === 'cancelled' ? 'cancelled' : 'end_turn';
-        await emit(projectId, { key: entry.key, kind: 'done', turnId, ok: true, stopReason });
+        // The page ends the visible turn only on this terminal event; without a
+        // live stream the honest answer is a named failure, not a 15 s silence.
+        if (await emit(projectId, { key: entry.key, kind: 'done', turnId, ok: true, stopReason }) === false) {
+          throw failure('OFFICIAL_AGENT_STREAM_LOST', 'no live event stream accepted the terminal event');
+        }
         return { ok: true, stopReason };
       } catch (error) {
         const reason = String(error?.code ?? error?.message ?? error).slice(0, 120);
         void log?.('acp-prompt-failed', { projectId, reason });
-        await emit(projectId, { key: entry.key, kind: 'done', turnId, ok: false, error: reason });
+        await emit(projectId, { key: entry.key, kind: 'done', turnId, ok: false, error: reason }).catch(() => {});
         throw failure('OFFICIAL_AGENT_FAILED', reason);
       } finally {
         entry.inflight = undefined;

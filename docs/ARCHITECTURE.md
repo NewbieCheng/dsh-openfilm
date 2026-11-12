@@ -132,3 +132,17 @@
 - 不再往侧栏注入任何东西（0.13.0 决定不变）。
 - 不把 Studio 代理当安全边界。
 - 不让 `openfilm_draft` 承担保存/导出。
+
+## 9. 进展（0.13.0，边车已落地）
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| ACP 线级客户端 | 完成 | `src/acp-client.mjs`；`tests/acp-client.test.mjs` 9 项；真机 `initialize/session/new/session/list` 探测通过 |
+| 会话身份 | 完成 | `session/new` 的 id 存 `$DSH_HOME/no996-openfilm/acp-sessions.json`；`session/resume` 续聊（跨进程，同一子进程内 resume 会被 DSH 以"already active"拒绝，这是协议行为） |
+| 模型 / 思考 | 完成 | ACP `configOptions`（model、reasoning_effort）直接映射到面板菜单；会话打开后按 Host 当前选择 `set_config_option` |
+| 权限 | 完成 | 子进程按项目预设启动（`DSH_PERMISSION_MODE`）；改预设 = 丢弃子进程，下轮重建 |
+| 附件 | 部分 | 不支持图片的路由 → 临时文件 + 绝对路径；支持则内联 image block |
+| 工具 | **缺** | ACP 子进程只有 dsh-base 工具，拿不到本插件的 `openfilm_*` 工具与 `openfilm-prompt` 预设提示词。这是下一里程碑：Host 起一个 MCP（HTTP）端，`session/new` 时以 `mcpServers` 传入，把影片工具与编辑指引暴露给子进程 |
+| 真机验收 | 待做 | 刷新页面后：面板发一句 → 侧栏同一会话；模型/思考菜单可切；权限行仍在；SenseVoice 不受影响 |
+
+里程碑口径修正：M1/M2 已在代码层完成，M4（工作区命名）在 ACP 下不需要——会话的 cwd 就是项目目录，侧栏按目录自然分组，没有注入。真正的下一步是上面的「工具」一项，然后才是 M5 真机验收。
