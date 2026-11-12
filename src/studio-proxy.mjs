@@ -175,6 +175,21 @@ function fail(res, status = 403) {
  * retains its native file and process permissions; DSH workspace tool restrictions
  * do not constrain these APIs.
  */
+const AGENT_HINTS = Object.freeze({
+  OFFICIAL_AGENT_FAILED: '对话子进程出错了，请重试；多次失败就重启 DSH',
+  OFFICIAL_AGENT_BUSY: '上一条还在进行中，等它结束或先取消',
+  OFFICIAL_AGENT_NOT_RUNNING: '当前没有可取消的回合',
+  OFFICIAL_AGENT_MODEL_UNAVAILABLE: '当前拿不到模型列表，稍后再试',
+  OFFICIAL_AGENT_UNAVAILABLE: '项目或对话子进程暂时不可用',
+  OFFICIAL_AGENT_STREAM_LOST: '事件流断了，输出可能不完整，请重试',
+  OFFICIAL_AGENT_INPUT: '请求内容无效',
+  OFFICIAL_AGENT_CLOSED: '对话已关闭',
+  OFFICIAL_AGENT_PROJECT_UNVERIFIED: '项目校验失败，刷新面板再试',
+  OFFICIAL_AGENT_CONVERSATION_ARCHIVED: '这个会话已归档，先恢复再继续',
+  OFFICIAL_AGENT_OWNERSHIP: '找不到这个会话',
+  OFFICIAL_AGENT_DEPENDENCY: '宿主缺少依赖能力',
+});
+
 export async function startStudioProxy({ upstream, authenticateBrowser, webOrigin, desktop = false, officialShell = false, officialRpc, authorizeOfficialProject, attachOfficialEvents, readProjectFile, openProjectFile, beforeProjectDelete, log } = {}) {
   // A proxy without a logger is valid (tests, embedders); the calls are no-ops.
   const say = typeof log?.write === 'function' ? log : { write() {}, info() {}, warn() {}, error() {} };
@@ -701,6 +716,10 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
         // may contain credentials or private paths. The turn reason is emitted
         // only when it is one of the explicitly recognized fixed values.
         const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,40}$/.test(error.code) ? error.code : 'OFFICIAL_RPC_FAILED';
+        // A fixed sentence per known failure, so the bubble says what to do
+        // instead of only "503". Constants only: the message never carries the
+        // exception text, a path or a provider's words.
+        const hint = AGENT_HINTS[code];
         const match = code === 'OFFICIAL_AGENT_TURN_FAILED' && typeof error?.message === 'string'
           ? /^Turn ended without completion \((aborted|blocked|error|max-tokens|interrupted|forked|unknown)\)$/.exec(error.message) : null;
         // Which channel failed, so a 503 in the page names the culprit instead of
@@ -709,7 +728,7 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
         say.warn('official-rpc-failed', { channel, code });
         if (!res.destroyed && !res.writableEnded) {
           res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
-          res.end(match ? `${code}: ${match[1]} (${channel})` : `${code} (${channel})`);
+          res.end(match ? `${code}: ${match[1]} (${channel})` : hint ? `${code}: ${hint} (${channel})` : `${code} (${channel})`);
         }
       } finally {
         officialRequests -= 1;
