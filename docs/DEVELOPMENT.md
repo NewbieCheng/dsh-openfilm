@@ -24,7 +24,7 @@
 │ └─ createStudioController(ctx, startStudioProxy)                              │
 │    ├─ Studio 运行时：openfilm/studio.startStudio({port:0}) → 临时端口          │
 │    ├─ 代理：47822，校验 cookie/Host/Origin，转发 HTTP+WS                       │
-│    ├─ 官方对话桥：official-rpc → DSH Session；事件 → SSE                       │
+│    ├─ 官方对话桥：official-rpc → ACP 子进程（dsh --profile acp）；事件 → SSE │
 │    ├─ 主题层：assets/theme/*.css 注入（开发期）                                │
 │    └─ 调试控制台：127.0.0.1:47821（可关）                                      │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -85,9 +85,11 @@
 | `project-conversation.mjs` | 一个项目 = 一个 DSH Session | 高：会话归属在这里决定 |
 | `workspace-archive.mjs` / `archive-bridge.mjs` | 归档集合的唯一 Host 视图 + 浏览器路由 | 高：浏览器可触达的写路径 |
 
-### 官方对话桥
+### 对话桥（ACP）
 
-`official-agent-service.mjs`（建会话/follow/prompt/取消/终态/帧记录）、`official-agent-events.mjs`（帧 → 文本/思考/工具/计划/图片）、`official-chat-rpc.mjs`、`official-chat-store.mjs`、`official-event-hub.mjs` / `official-event-stream.mjs`（fan-out + SSE）、`official-facade.mjs`（注入页面的 `openfilmNative`，RPC 白名单）、`official-permission.mjs` / `official-turn-policy.mjs`、`official-approvals.mjs` / `official-approval-bridge.mjs`。
+面板的对话不再由 Host 手工模拟回合：`acp-client.mjs`（ndjson 线级客户端：initialize / session/new|resume|prompt / set_config_option / cancel）、`acp-agent-service.mjs`（每项目一个 `dsh --profile acp` 子进程；会话 id 存 `acp-session-store.mjs`；模型与思考走 configOptions；权限预设以 `DSH_PERMISSION_MODE` 在 spawn 时传给子进程）、`mcp-server.mjs`（Host 的 MCP 端点，把 `openfilm_*` 工具交给子进程，令牌按会话签发、滑动过期、随退出吊销）、`project-instructions.mjs`（首开项目写 `AGENTS.md`）。外层仍是：`official-chat-rpc.mjs`（RPC 白名单与校验）、`official-chat-store.mjs`、`official-event-hub.mjs` / `official-event-stream.mjs`（fan-out + SSE）、`official-facade.mjs`（注入页面的 `openfilmNative`）、`official-permission.mjs`（权限行与决策）、`official-approvals.mjs`（`session/request_permission` → 页面）。
+
+旧路径（`official-agent-service.mjs` + `official-agent-events.mjs` + Host 侧会话绑定）仅在 `NO996_OPENFILM_ACP=0` 时启用，真机验收后按 `docs/ARCHITECTURE.md §10` 删除。
 
 ### 影片工具（10 个，只对项目会话可见）
 
