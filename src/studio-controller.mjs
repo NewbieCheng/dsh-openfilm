@@ -242,15 +242,20 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     }
     return officialStorePromise;
   };
+  // Declared here, assigned once the ACP service is built below, so the host RPC
+  // handlers can tell the two paths apart without reading a const before its
+  // initialization (the bone this repo has broken twice).
+  let acpAgentService = null;
   // A failure reason for the log, never a filesystem path (the log is shared).
   const safeDetail = error => String(error?.message ?? '').replace(/[A-Za-z]:[\\/][^\s"']*/g, '[path]').slice(0, 160);
   const officialRpc = async (channel, payload) => {
     if (disposed) throw new Error('Studio disposed');
     if (channel === 'agent:prompt') {
       if (!agentService) throw new Error('Agent bridge unavailable');
-      // A project whose person already chose full access gets it back on every
-      // new Session; the decision lives in the Host, never in the page.
-      if (typeof payload?.projectId === 'string') {
+      // Legacy only: under ACP the child owns the Session and the permission preset
+      // rides on DSH_PERMISSION_MODE, so asking the old binding here would create a
+      // second, unused Host-side Session for the same project on every prompt.
+      if (!acpAgentService && typeof payload?.projectId === 'string') {
         try {
           const store = await permissions();
           const sessionId = await boundSession(payload.projectId);
@@ -273,8 +278,12 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       try { store = await permissions(); }
       catch (error) { void log.warn('permission-store-failed', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40), detail: safeDetail(error) }); }
       let sessionId = null;
-      try { sessionId = await boundSession(projectId); }
-      catch (error) { void log.warn('permission-session-failed', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40), detail: safeDetail(error) }); }
+      if (!acpAgentService) {
+        // Under ACP there is no Host-side Session to read; resolving the legacy
+        // binding here would create one just because the menu asked.
+        try { sessionId = await boundSession(projectId); }
+        catch (error) { void log.warn('permission-session-failed', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40), detail: safeDetail(error) }); }
+      }
       const remembered = store ? store.remembered(projectId) ?? null : null;
       // The menu only draws the row when it has a value, so "no Session yet" (or
       // a Session that DSH reports nothing for) must not read as "no permission":
@@ -300,8 +309,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         void log.warn('permission-set-unavailable', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40), detail: safeDetail(error) });
         return { ok: false, preset: null, applied: false, error: String(error?.code ?? 'PERMISSION_STORE_UNAVAILABLE'), message: safeDetail(error) };
       }
-      let sessionId = null;
-      try { sessionId = await boundSession(projectId); } catch { sessionId = null; }
       try {
         // Before the first message there is no Session to change, so the answer is
         // remembered and applied by `resume` on the next prompt.
@@ -315,6 +322,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
           await store.decide(projectId, preset);
           return { ok: true, preset, applied: false };
         }
+        let sessionId = null;
+        try { sessionId = await boundSession(projectId); } catch { sessionId = null; }
         if (!sessionId) return { ok: true, preset, applied: false };
         const applied = await store.apply(projectId, sessionId, preset);
         return { ok: true, preset: applied.preset, applied: true };
@@ -660,7 +669,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // shell's own ACP surface (thinking, tools, resume, model menu) is what the page
   // draws. NO996_OPENFILM_ACP=0 keeps the old in-process bridge as an escape hatch
   // until the ACP path is verified on a real GUI.
-  const acpAgentService = acpEnabled()
+  acpAgentService = acpEnabled()
     ? createAcpAgentService({
       verifier: verifyOfficialProject,
       store: acpSessions,

@@ -30,3 +30,12 @@ test('the MCP endpoint exists before its route handler references it', () => {
   assert.ok(endpoint > 0 && route > 0);
   assert.ok(endpoint < route);
 });
+
+test('the ACP service handle is declared before the RPC handlers read it', () => {
+  const declared = at('let acpAgentService = null;');
+  const firstRead = at('if (!acpAgentService &&');
+  assert.ok(declared > 0 && firstRead > 0);
+  assert.ok(declared < firstRead);
+  // Assigned once, later in the same scope; a `const` here would be a TDZ trap.
+  assert.equal(source.includes('const acpAgentService ='), false);
+});
