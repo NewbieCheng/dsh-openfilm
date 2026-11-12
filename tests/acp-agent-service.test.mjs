@@ -16,7 +16,7 @@ function memoryStore(seed = {}) {
   return { get: id => table.get(id), set: (id, value) => table.set(id, value), all: () => [...table] };
 }
 
-function harness({ mode, image = false, emptyList = false, store = memoryStore(), approvals, defaultSelection, permissionMode, onOptions } = {}) {
+function harness({ mode, image = false, emptyList = false, store = memoryStore(), approvals, defaultSelection, permissionMode, onOptions, mcpServers, onClosed } = {}) {
   const events = [];
   const service = createAcpAgentService({
     verifier: async projectId => ({ projectId, path: 'C:\\fake' }),
@@ -25,11 +25,13 @@ function harness({ mode, image = false, emptyList = false, store = memoryStore()
     approvals,
     defaultSelection: defaultSelection ?? (() => undefined),
     permissionMode: permissionMode ?? (() => undefined),
+    mcpServers: mcpServers ?? undefined,
+    onClosed,
     createClient: options => {
       onOptions?.(options);
       return createAcpClient({
         resolve: () => ({ command: process.execPath, args: [fixture] }),
-        env: { ...process.env, ...(mode ? { FAKE_ACP_MODE: mode } : {}), ...(image ? { FAKE_ACP_IMAGE: '1' } : {}), ...(emptyList ? { FAKE_ACP_EMPTY_LIST: '1' } : {}), ...(options?.env ?? {}) },
+        env: { ...process.env, ...(mode ? { FAKE_ACP_MODE: mode } : {}), ...(image ? { FAKE_ACP_IMAGE: '1' } : {}), ...(emptyList ? { FAKE_ACP_EMPTY_LIST: '1' } : {}), ...(mcpServers ? { FAKE_ACP_MCP: '1' } : {}), ...(options?.env ?? {}) },
         requestTimeoutMs: 5000,
         spawnChild: (command, args, spawnOptions) => spawn(command, args, spawnOptions),
       });
@@ -60,6 +62,26 @@ test('the panel session adopts the DSH-side model selection', async () => {
   const { service } = harness({ defaultSelection: () => ({ provider: 'q', model: 'q1' }) });
   const catalog = await service.modelCatalog(PROJECT);
   assert.deepEqual(catalog.default, { provider: 'q', model: 'q1' });
+  await service.close();
+});
+
+test('the MCP endpoint is handed to the ACP session', async () => {
+  const { service, events } = harness({
+    mcpServers: async (projectId, path) => [{ type: 'http', name: 'no996-openfilm', url: 'http://127.0.0.1:1/mcp', headers: [] }],
+  });
+  await service.send(PROJECT, { key: 'k', turnId: 't', text: 'hi' });
+  const message = updatesOf(events).find(update => update.sessionUpdate === 'agent_message_chunk');
+  assert.match(message.content.text, /mcp:no996-openfilm/);
+  await service.close();
+});
+
+test('closing a session tells the Host to revoke its credentials', async () => {
+  const closed = [];
+  const { service } = harness({ onClosed: projectId => closed.push(projectId) });
+  await service.modelCatalog(PROJECT);
+  await service.reset(PROJECT);
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.ok(closed.includes(PROJECT));
   await service.close();
 });
 

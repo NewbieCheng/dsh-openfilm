@@ -24,6 +24,7 @@ let modelValue = '["p","m1"]';
 let effortValue = 'high';
 let sendResume = false;
 let pendingPrompt = null;
+let mcpNames = [];
 const queued = [];
 const configState = () => [
   { id: 'model', name: 'Model', category: 'model', type: 'select', currentValue: modelValue, options: [
@@ -49,6 +50,7 @@ function handle(message) {
       });
     case 'session/new':
     case 'session/resume':
+      mcpNames = (message.params?.mcpServers ?? []).map(server => server.name);
       sendResume = false;
       return result(message.id, { sessionId: message.params?.sessionId || 'session-fake-1', configOptions: configState() });
     case 'session/list':
@@ -70,7 +72,7 @@ function handle(message) {
       const sessionId = message.params.sessionId;
       send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId, update: { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'thinking…' } } } });
       const kinds = (message.params.prompt ?? []).map(block => block.type).join(',');
-      send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'blocks:' + kinds } } } });
+      send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'blocks:' + kinds + (process.env.FAKE_ACP_MCP === '1' ? ' mcp:' + mcpNames.join(',') : '') } } } });
       const permission = new Promise(resolve => { permissionWait = { id: 9001, resolve }; });
       send({ jsonrpc: '2.0', id: 9001, method: 'session/request_permission', params: { sessionId, toolCall: { title: 'write' }, options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }, { optionId: 'deny', name: 'Deny', kind: 'reject_once' }] } });
       pendingPrompt = message.id;

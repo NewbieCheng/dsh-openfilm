@@ -58,6 +58,7 @@ import { attachApprovalBridge } from './official-approval-bridge.mjs';
 import { createOfficialAgentService } from './official-agent-service.mjs';
 import { createAcpAgentService } from './acp-agent-service.mjs';
 import { createAcpSessionStore } from './acp-session-store.mjs';
+import { createMcpEndpoint, createMcpTokens, mcpServerEntry } from './mcp-server.mjs';
 import { attachOfficialEventStream } from './official-event-stream.mjs';
 import { z } from 'zod';
 import { realpath } from 'node:fs/promises';
@@ -584,7 +585,14 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       if (current.sessionId && !current.archived) await archive.archive(current.sessionId, { stopActivity: true });
     } catch { /* the delete still has to run */ }
   };
-  const isProjectAgent = agent => Boolean(agent && conversations && !disposed && ctx.agents.get(agent.id) === agent && conversations.boundConversation(agent.id)?.available);
+  // The ACP child is a different process, so its film-tool calls arrive over MCP.
+  // These records are the only synthetic agents in the Host: minted here, checked
+  // here, and resolved by the same `projectOfAgent` every tool already uses.
+  const mcpTokens = createMcpTokens({ randomBytes });
+  const mcpAgents = new Map();
+  const mcpAgentFor = (projectId, path) => ({ id: `mcp:${projectId}`, path, projectId });
+  const isProjectAgent = agent => Boolean(agent && !disposed && (mcpAgents.get(agent.id) === agent ||
+    (conversations && ctx.agents.get(agent.id) === agent && conversations.boundConversation(agent.id)?.available)));
   // One project-scoped event fan-out feeds the official chat's stream.
   const eventHub = createOfficialEventHub();
   // Every envelope that goes to the panel is also kept, per project and turn, as
@@ -649,6 +657,18 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       permissionMode: async projectId => {
         try { const store = await permissions(); return store?.remembered?.(projectId); } catch { return undefined; }
       },
+      // A fresh child gets a fresh bearer token for this Host's MCP endpoint, so
+      // the film tools travel with the conversation (they live here, not there).
+      mcpServers: async (projectId, projectPath) => {
+        const agent = mcpAgentFor(projectId, projectPath);
+        mcpAgents.set(agent.id, agent);
+        const token = mcpTokens.mint({ projectId, path: projectPath, agent });
+        return [mcpServerEntry({ url: `${webOrigin}/api/no996-openfilm/mcp`, token })];
+      },
+      onClosed: projectId => {
+        mcpTokens.revokeProject(projectId);
+        mcpAgents.delete(`mcp:${projectId}`);
+      },
       log: (event, fields) => void log.info(event, fields),
     })
     : null;
@@ -675,7 +695,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     },
     keyOfProject: projectId => agentService.activeKey(projectId),
   }) : () => {};
-  const unregisterGuide = ctx.tools.register(createGuideTool(isProjectAgent), { when: ({ agent }) => isProjectAgent(agent) });
+  const guideTool = createGuideTool(isProjectAgent);
+  const unregisterGuide = ctx.tools.register(guideTool, { when: ({ agent }) => isProjectAgent(agent) });
   // One Studio client for every project tool: it resolves the live upstream, adds
   // the key the page must never see, and turns a failure into readable text.
   const studioHttp = () => {
@@ -713,6 +734,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // The project a bound conversation belongs to, resolved from the Host's own
   // binding table. Never from a renderer-supplied id.
   const projectOfAgent = agent => {
+    if (mcpAgents.get(agent?.id) === agent) return { projectId: agent.projectId, path: agent.path, available: true };
     const bound = conversations?.boundConversation(agent?.id);
     return bound && bound.available === true && typeof bound.path === 'string' ? bound : undefined;
   };
@@ -751,17 +773,47 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // other tools because that polish pass needs askAgent, which is built above the
   // Studio runtime and below the tool list.
   const transcribeService = createTranscribeService({ logger: log });
-  const unregisterTranscribe = ctx.tools.register(
-    createTranscribeTool({
-      isProjectAgent,
-      projectOf: projectOfAgent,
-      service: transcribeService,
-      refine: ({ segments, signal }) => refineTranscript({ ask: askAgent, segments, signal }),
-    }),
-    { when: ({ agent }) => isProjectAgent(agent) },
-  );
+  const transcribeTool = createTranscribeTool({
+    isProjectAgent,
+    projectOf: projectOfAgent,
+    service: transcribeService,
+    refine: ({ segments, signal }) => refineTranscript({ ask: askAgent, segments, signal }),
+  });
+  const unregisterTranscribe = ctx.tools.register(transcribeTool, { when: ({ agent }) => isProjectAgent(agent) });
   // The install path the panel can use without a chat turn: a fresh machine needs
   // 228 MB of weights, and the person should be able to start that from the UI.
+  // The film tools, for the ACP child. No cookie admission: the caller is the
+  // child process and proves itself with the per-Session bearer token above.
+  const mcpEndpoint = createMcpEndpoint({
+    tools: [guideTool, ...filmTools, transcribeTool],
+    resolveToken: token => mcpTokens.resolve(token),
+    log: (event, fields) => void log.info(event, fields),
+  });
+  const unregisterMcp = trackRoute(registerRoute({
+    kind: 'exact', path: '/api/no996-openfilm/mcp',
+    async handler(req, res) {
+      res.setHeader('cache-control', 'no-store');
+      if (disposed) { res.writeHead(503).end('{}'); return; }
+      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end('{}'); return; }
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of req) {
+        size += chunk.byteLength;
+        if (size > 4 * 1024 * 1024) { res.writeHead(413).end('{}'); return; }
+        chunks.push(chunk);
+      }
+      let answer;
+      try {
+        answer = await mcpEndpoint.handle({ headers: req.headers, body: Buffer.concat(chunks).toString('utf8') });
+      } catch (error) {
+        void log.warn('mcp-failed', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40) });
+        answer = { status: 500, body: { error: 'mcp failed' } };
+      }
+      if (answer.body === undefined) { res.writeHead(answer.status).end(); return; }
+      const body = JSON.stringify(answer.body);
+      res.writeHead(answer.status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
+    },
+  }));
   const unregisterTranscribeRoute = registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/asr',
     async handler(req, res) {
@@ -1267,6 +1319,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     try { unregisterContext(); } catch { /* already gone */ }
     try { unregisterTranscribe(); } catch { /* already gone */ }
     try { unregisterTranscribeRoute(); } catch { /* already gone */ }
+    try { unregisterMcp(); } catch { /* already gone */ }
+    mcpAgents.clear();
     try { unregisterSystemCheck(); } catch { /* already gone */ }
     try { unregisterSystemInstall(); } catch { /* already gone */ }
     try { unregisterGuide(); } catch { /* already gone */ }

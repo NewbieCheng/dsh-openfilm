@@ -126,7 +126,7 @@ function thinkingFromConfigOptions(configOptions = []) {
  * @param {Function} [deps.createClient] - injectable for tests
  * @param {string} [deps.imageDir] - where unsupported inline images are materialised
  */
-export function createAcpAgentService({ verifier, store, emit, approvals, log, createClient = options => createAcpClient(options), imageDir = join(tmpdir(), 'no996-openfilm-chat-images'), defaultSelection = () => undefined, permissionMode = () => undefined }) {
+export function createAcpAgentService({ verifier, store, emit, approvals, log, createClient = options => createAcpClient(options), imageDir = join(tmpdir(), 'no996-openfilm-chat-images'), defaultSelection = () => undefined, permissionMode = () => undefined, mcpServers, onClosed }) {
   if (typeof verifier !== 'function' || typeof emit !== 'function' || !store || typeof store.get !== 'function' || typeof store.set !== 'function') {
     throw new TypeError('verifier, store and emit are required');
   }
@@ -163,6 +163,7 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
     client.on('exit', ({ code }) => {
       void log?.('acp-exited', { projectId, code });
       if (projects.get(projectId) === entry) projects.delete(projectId);
+      try { onClosed?.(projectId); } catch { /* nothing left to clean */ }
     });
   }
 
@@ -184,6 +185,10 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       // The approval preset is the child's sandbox + approval policy too, so it is
       // chosen at spawn: DSH itself reads DSH_PERMISSION_MODE.
       const mode = await modeOf(projectId);
+      // A fresh process means fresh MCP credentials: the endpoint is this Host,
+      // and only the child holding the token may call the film tools.
+      const servers = typeof mcpServers === 'function' ? await mcpServers(projectId, project.path) : undefined;
+      const wiring = Array.isArray(servers) && servers.length > 0 ? { mcpServers: servers } : {};
       entry.client = createClient({ env: { ...process.env, ...(mode ? { DSH_PERMISSION_MODE: mode } : {}) } });
       attach(entry);
       const capabilities = await entry.client.start();
@@ -192,7 +197,7 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       const known = store.get(projectId);
       if (known?.sessionId && RESUMABLE.test(known.sessionId)) {
         try {
-          const resumed = await entry.client.resumeSession({ sessionId: known.sessionId, cwd: project.path });
+          const resumed = await entry.client.resumeSession({ sessionId: known.sessionId, cwd: project.path, ...wiring });
           entry.sessionId = known.sessionId;
           entry.configOptions = resumed?.configOptions ?? [];
           await adoptDefaultSelection(entry);
@@ -201,7 +206,7 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
           void log?.('acp-resume-failed', { projectId, reason: String(error?.code ?? error).slice(0, 80) });
         }
       }
-      const created = await entry.client.newSession({ cwd: project.path });
+      const created = await entry.client.newSession({ cwd: project.path, ...wiring });
       if (!created || !text(created.sessionId)) throw failure('OFFICIAL_AGENT_UNAVAILABLE', 'agent returned no session');
       entry.sessionId = created.sessionId;
       entry.configOptions = created.configOptions ?? [];
@@ -406,6 +411,7 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       if (!entry) return { ok: true };
       projects.delete(projectId);
       try { await entry.client?.close?.(); } catch { /* already gone */ }
+      try { onClosed?.(projectId); } catch { /* nothing left to clean */ }
       return { ok: true };
     },
 
