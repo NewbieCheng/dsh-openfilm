@@ -58,6 +58,7 @@ import { attachApprovalBridge } from './official-approval-bridge.mjs';
 import { createOfficialAgentService } from './official-agent-service.mjs';
 import { createAcpAgentService } from './acp-agent-service.mjs';
 import { createAcpSessionStore } from './acp-session-store.mjs';
+import { ensureProjectInstructions } from './project-instructions.mjs';
 import { createMcpEndpoint, createMcpTokens, mcpServerEntry } from './mcp-server.mjs';
 import { attachOfficialEventStream } from './official-event-stream.mjs';
 import { z } from 'zod';
@@ -664,6 +665,12 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         mcpAgents.set(agent.id, agent);
         const token = mcpTokens.mint({ projectId, path: projectPath, agent });
         return [mcpServerEntry({ url: `${webOrigin}/api/no996-openfilm/mcp`, token })];
+      },
+      // The ACP profile has no OpenFilm preset, but its agent reads AGENTS.md from
+      // the workspace — which is the project folder. Written once, never overwritten.
+      prepareProject: async (projectId, projectPath) => {
+        const result = ensureProjectInstructions({ root: projectPath });
+        if (result.created) void log.info('project-instructions', { projectId });
       },
       onClosed: projectId => {
         mcpTokens.revokeProject(projectId);

@@ -16,7 +16,7 @@ function memoryStore(seed = {}) {
   return { get: id => table.get(id), set: (id, value) => table.set(id, value), all: () => [...table] };
 }
 
-function harness({ mode, image = false, emptyList = false, store = memoryStore(), approvals, defaultSelection, permissionMode, onOptions, mcpServers, onClosed } = {}) {
+function harness({ mode, image = false, emptyList = false, store = memoryStore(), approvals, defaultSelection, permissionMode, onOptions, mcpServers, onClosed, prepareProject } = {}) {
   const events = [];
   const service = createAcpAgentService({
     verifier: async projectId => ({ projectId, path: 'C:\\fake' }),
@@ -27,6 +27,7 @@ function harness({ mode, image = false, emptyList = false, store = memoryStore()
     permissionMode: permissionMode ?? (() => undefined),
     mcpServers: mcpServers ?? undefined,
     onClosed,
+    prepareProject,
     createClient: options => {
       onOptions?.(options);
       return createAcpClient({
@@ -62,6 +63,14 @@ test('the panel session adopts the DSH-side model selection', async () => {
   const { service } = harness({ defaultSelection: () => ({ provider: 'q', model: 'q1' }) });
   const catalog = await service.modelCatalog(PROJECT);
   assert.deepEqual(catalog.default, { provider: 'q', model: 'q1' });
+  await service.close();
+});
+
+test('opening a session prepares the project folder with the editing instructions', async () => {
+  const seen = [];
+  const { service } = harness({ prepareProject: async (projectId, projectPath) => { seen.push({ projectId, projectPath }); } });
+  await service.modelCatalog(PROJECT);
+  assert.deepEqual(seen, [{ projectId: PROJECT, projectPath: 'C:\\fake' }]);
   await service.close();
 });
 

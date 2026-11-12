@@ -126,7 +126,7 @@ function thinkingFromConfigOptions(configOptions = []) {
  * @param {Function} [deps.createClient] - injectable for tests
  * @param {string} [deps.imageDir] - where unsupported inline images are materialised
  */
-export function createAcpAgentService({ verifier, store, emit, approvals, log, createClient = options => createAcpClient(options), imageDir = join(tmpdir(), 'no996-openfilm-chat-images'), defaultSelection = () => undefined, permissionMode = () => undefined, mcpServers, onClosed }) {
+export function createAcpAgentService({ verifier, store, emit, approvals, log, createClient = options => createAcpClient(options), imageDir = join(tmpdir(), 'no996-openfilm-chat-images'), defaultSelection = () => undefined, permissionMode = () => undefined, mcpServers, onClosed, prepareProject }) {
   if (typeof verifier !== 'function' || typeof emit !== 'function' || !store || typeof store.get !== 'function' || typeof store.set !== 'function') {
     throw new TypeError('verifier, store and emit are required');
   }
@@ -182,6 +182,9 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
     entry.ready = (async () => {
       const project = await verifier(projectId);
       if (!project || !text(project.path)) throw failure('OFFICIAL_AGENT_UNAVAILABLE', 'project has no folder');
+      // The ACP agent gets its editing instructions from the project folder, not
+      // from our preset. Best effort: a project that cannot be written stays usable.
+      try { await prepareProject?.(projectId, project.path); } catch (error) { void log?.('prepare-project-failed', { projectId, reason: String(error?.code ?? error).slice(0, 60) }); }
       // The approval preset is the child's sandbox + approval policy too, so it is
       // chosen at spawn: DSH itself reads DSH_PERMISSION_MODE.
       const mode = await modeOf(projectId);
