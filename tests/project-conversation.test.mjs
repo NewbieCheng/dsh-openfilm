@@ -134,3 +134,24 @@ test('a Workspace view without attachSession still groups the conversation', asy
   assert.equal(sessionId, 'session-1');
   assert.deepEqual(calls.create[0], { workspaceId: 'workspace-9', agentPreset: 'openfilm-video-editing' });
 });
+// When the Host refuses to create the Session, the reason has to survive.
+//
+// A preset that failed to load made `sessionController.create` throw, the bare
+// PROJECT_CONVERSATION_CREATE hid it, and the panel showed
+// "OpenFilm capability unavailable: agent:prompt [503] PROJECT_CONVERSATION_CREATE"
+// with nothing to act on. The code and message stay on the error now, and the log
+// gets them too.
+test('a refused session creation keeps the Host reason', async () => {
+  const { ctx, records } = fixture({ workspace: false, createFails: true });
+  const failures = [];
+  const conversations = await openProjectConversations(ctx, {
+    z,
+    onFailure: (event, fields) => failures.push([event, fields]),
+  });
+  await assert.rejects(
+    () => conversations.resolve({ projectId: 'proj123456', path: projectPath }),
+    error => error.code === 'PROJECT_CONVERSATION_CREATE' && error.detail === 'nope' && error.cause instanceof Error,
+  );
+  assert.deepEqual(failures, [['project-conversation-create', { detail: 'nope', workspace: 'cwd' }]]);
+  assert.equal(records.size, 0, 'a failed creation stores no hint');
+});

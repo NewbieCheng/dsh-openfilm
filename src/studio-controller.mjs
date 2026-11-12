@@ -263,7 +263,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   };
   const projectConversations = () => {
     if (!conversationsPromise) {
-      conversationsPromise = openProjectConversations(ctx, { z, archived: id => archive.isArchived(id) }).then(opened => { conversations = opened; return opened; });
+      conversationsPromise = openProjectConversations(ctx, { z, archived: id => archive.isArchived(id), onFailure: (event, fields) => { void log.warn(event, fields); } }).then(opened => { conversations = opened; return opened; });
       conversationsPromise.catch(() => { conversationsPromise = undefined; });
     }
     return conversationsPromise;

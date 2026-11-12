@@ -150,3 +150,23 @@ test('no applied preset means no permission row', async () => {
   const started = await facade.localAgents.start('deepseek', '', null, { projectId: 'project1' });
   assert.equal((started.info?.configOptions || []).some(o => o && o.category === 'permission'), false);
 });
+// The row must not disappear when the Host reports a preset this build does not name.
+// It went missing entirely (person: "缺少选择权限") whenever the preset failed to
+// resolve, because the builder returned null for any `current` it did not list.
+test('an unknown current preset still draws the permission row', async () => {
+  const env = setup();
+  env.calls.length = 0;
+  const factoryCalls = [];
+  const facade = runInNewContext(officialFacadeSource, { EventSource: class { close() {} } })({
+    invoke: async (channel, payload) => {
+      factoryCalls.push({ channel, payload });
+      if (channel === 'agent:permission') return { current: 'read-only', decided: 'read-only', available: true };
+      return null;
+    },
+  });
+  const started = await facade.localAgents.start('deepseek', '', null, { projectId: 'project1' });
+  const option = (started.info?.configOptions || []).find(o => o && o.category === 'permission');
+  assert.ok(option, `expected a permission option, got ${JSON.stringify(started.configOptions)}`);
+  assert.equal(option.currentValue, 'read-only');
+  assert.equal(option.options.map(o => o.value).join(','), 'danger-full-access,workspace-write,read-only');
+});

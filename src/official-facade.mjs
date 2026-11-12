@@ -39,20 +39,25 @@ function officialFacadeFactory(bridge) {
   // Two choices, because a row without a real choice is not drawn at all.
   const permissionOption = state => {
     if (!state || typeof state !== 'object') return null;
-    const values = ['danger-full-access', 'workspace-write'];
-    // `current` is what the Host applied; a row that guesses the preset is worse
-    // than no row.
-    if (!values.includes(state.current)) return null;
+    const choices = [
+      { value: 'danger-full-access', name: '完全访问（不再逐步询问）' },
+      { value: 'workspace-write', name: '只用工作区（关键步骤会问）' },
+    ];
+    // `current` is what the Host applied. A value we do not name is still shown,
+    // as itself: hiding the whole row lost the choice entirely (the row went
+    // missing whenever the Host reported a preset this build did not know).
+    const current = typeof state.current === 'string' ? state.current : '';
+    if (!current) return null;
+    const options = choices.some(choice => choice.value === current)
+      ? choices
+      : [...choices, { value: current, name: current }];
     return {
       id: 'permission',
       name: '权限',
       category: 'permission',
       type: 'select',
-      currentValue: state.current,
-      options: [
-        { value: 'danger-full-access', name: '完全访问（不再逐步询问）' },
-        { value: 'workspace-write', name: '只用工作区（关键步骤会问）' },
-      ],
+      currentValue: current,
+      options,
     };
   };  const rpcAllow = new Set(['chat:load', 'chat:log', 'chat:save-sessions', 'chat:save-turn', 'chat:archive', 'chat:unarchive', 'chat:archive-state', 'editor:link', 'client:log', 'agent:prompt', 'agent:cancel', 'agent:models', 'agent:select-model', 'agent:thinking', 'agent:select-thinking', 'agent:answer-permission', 'agent:permission', 'agent:permission-set', 'agent:trace']);
   const eventAllow = new Set(['desktop:full-screen', 'desktop:toggle-chat', 'desktop:open-settings']);

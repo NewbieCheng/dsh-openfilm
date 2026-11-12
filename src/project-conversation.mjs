@@ -36,7 +36,7 @@ function samePath(left, right) {
  * `rebind` is the only way to move a project to a new conversation, and it
  * leaves the archived Session and its history untouched.
  */
-export async function openProjectConversations(ctx, { z, archived } = {}) {
+export async function openProjectConversations(ctx, { z, archived, onFailure } = {}) {
   if (!ctx?.storageDomain?.open || !ctx?.sessionController?.create || !ctx?.sessionController?.list || !z?.object) {
     throw error('PROJECT_CONVERSATION_DEPENDENCY', 'storageDomain, sessionController and Zod are required');
   }
@@ -90,8 +90,16 @@ export async function openProjectConversations(ctx, { z, archived } = {}) {
       : { cwd: canonical, agentPreset: 'openfilm-video-editing' };
     try {
       ({ sessionId } = await ctx.sessionController.create(request));
-    } catch {
-      throw error('PROJECT_CONVERSATION_CREATE', 'A conversation for this project could not be created');
+    } catch (cause) {
+      // Swallowing the Host's reason turned one broken preset into a bare
+      // PROJECT_CONVERSATION_CREATE, and that cost a round of guessing. The code
+      // and the message tail stay on the error (no paths: the message is DSH's).
+      const detail = String(cause?.code ?? '').slice(0, 60) || String(cause?.message ?? cause).slice(0, 200);
+      const wrapped = error('PROJECT_CONVERSATION_CREATE', 'A conversation for this project could not be created');
+      wrapped.cause = cause;
+      wrapped.detail = detail;
+      if (typeof onFailure === 'function') onFailure('project-conversation-create', { detail, workspace: workspace?.id ? 'workspace' : 'cwd' });
+      throw wrapped;
     }
     if (typeof sessionId !== 'string' || !sessionId.trim()) {
       throw error('PROJECT_CONVERSATION_CREATE', 'Session creation returned no ID');

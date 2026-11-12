@@ -34,13 +34,15 @@
           # the roots below. `dsh-openfilm/skills` is mirrored into <dshHome>/skills by
           # `node scripts/install-skills.mjs`; a person can add their own beside it and the catalog
           # refreshes without a restart (the provider watches its roots).
-          - id: skill-registry
-            name: '@deepseek-ai/dsh-skill'
+          #
+          # The skill *registry* (`@deepseek-ai/dsh-skill`) is mounted by the host itself; mounting it
+          # again here made the whole preset fail to load, which showed up as
+          # `PROJECT_CONVERSATION_CREATE` on every prompt and a missing 权限 row. Only the file
+          # provider belongs in this list, with its defaults (project + user roots, watched) — the
+          # defaults are exactly what we want, and spelling them out was a second way to break the
+          # preset if a field name ever drifted.
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
-            config:
-              includeDefaultRoots: true
-              watch: true
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
           - id: tool-todo

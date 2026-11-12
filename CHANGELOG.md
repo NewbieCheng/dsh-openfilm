@@ -1,5 +1,23 @@
 # 更新记录
 
+## 0.8.2
+
+### 修：预设装坏了 → 每句话都 `PROJECT_CONVERSATION_CREATE`，权限行也消失
+
+**现象**：发一句话就红条 —— `[503] PROJECT_CONVERSATION_CREATE (agent:prompt)`；同时输入框上面的菜单只剩「模型 / 思考强度」，**权限那一行不见了**。
+
+**根因**：0.8.0 我把 `@deepseek-ai/dsh-skill`（技能**注册表**）写进了预设的插件清单，而它本来就由宿主挂载；重复挂载让整个 `openfilm-video-editing` 预设**加载失败**。于是：
+
+- `sessionController.create({ agentPreset: 'openfilm-video-editing' })` 被拒绝 → `createSession` 抛错 → 我们把它压成 `PROJECT_CONVERSATION_CREATE`，真实原因被吞掉；
+- 预设不可用 ⇒ 权限状态也取不到 ⇒ `agent:permission` 失败 ⇒ 权限行按"猜不出就不画"的旧策略直接消失。
+
+**修法**：
+
+- `cordis.patch.yml`：移除重复的 `@deepseek-ai/dsh-skill`，并去掉 `skill-filesystem` 上显式写的 `includeDefaultRoots` / `watch`（默认值本来就是我们要的，写出来是第二种弄坏预设的方式）；
+- `project-conversation.mjs`：`createSession` 不再吞原因 —— 错误上带 `cause` 与 `detail`（Host 的错误码或消息尾巴，无路径），并写日志 `project-conversation-create`。下次预设装坏，一眼能看到是哪一步；
+- `official-facade.mjs`：权限行改成"**永远画出来**"。Host 报的 `current` 不在已知两项里时，把它作为第三个选项原样列出，而不是整行消失。
+- 测试：新增两例（预设装坏时 `PROJECT_CONVERSATION_CREATE` 保留 `detail` / `cause` 且不写提示；未知 `current` 仍画出权限行）。
+
 ## 0.8.1
 
 ### 修：面板弹 `[HTTP 503] OFFICIAL_CHAT_UNAVAILABLE (agent:thinking)`
