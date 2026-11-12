@@ -4,6 +4,8 @@
 
 - 侧栏「工作区」区域改由本插件接管（`sidebar.workspaces`，`priority: -100`）。根据 DSH 客户端单槽规则「每个优先级只能注册一个，最小者渲染」，-100 盖过官方 `WorkspaceBrowser`，不动上游一行代码；切换模式只换渲染内容，不再注销注册。
 - 区域头部是下拉：**剪辑区**（默认）/ **工作区**；模式按会话记忆（项目对话默认剪辑区，普通会话默认工作区）。剪辑区下是「项目」：一个项目一行（项目名 + 它的那条对话），有搜索（匹配项目名或对话标题），`⋯` 菜单（打开面板 / 在对话中打开 / 刷新）。
+- 样式不是行内拼的：`src/area-browser.mjs` 注入一张样式表，尺寸/token 照官方 `ui-workspace` 的 Rows.module.css（行高 34/32、`--dsh-sidebar-row-padding` 缩进、`--dsw-radius-md` 圆角、悬停底色、文件夹图标悬停换箭头），所以工作区视图和原来的侧栏是一套观感。
+- 默认区域跟着会话走：宿主数据回来前先按"不是项目会话"渲染，数据一到项目会话自动落回剪辑区；用户显式选过的区域才覆盖默认值。
 - 点项目行只做两件事：把中间区切到视频创作面板（`layout.selectPanel`），并请官方壳打开该项目（父页面 → iframe 的 `no996-openfilm:navigate`，注入桥用 `pushState + popstate`，壳不响应则退化 `location.replace`）。**不打开 DSH 聊天视图**，也不切换当前会话。
 - 「工作区」视图是过滤版：项目对话（绑定表 + 按项目目录兜住的遗留会话）与只剩它们的项目文件夹都不出现；普通工作区/会话照旧，归档会话仍不显示。
 - 新 Host 只读路由 `GET /api/no996-openfilm/area`（仅官方壳模式注册，鉴权与其它本地路由一致）：Studio 项目列表 + 绑定表 + 会话目录 → `{projects, hiddenSessionIds}`；不打开项目、不建会话。`project-conversation` 增加只读的 `bindings()`。

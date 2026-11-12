@@ -573,84 +573,54 @@
   }
 
   // src/area-browser.mjs
-  var S = {
-    region: { display: "flex", flexDirection: "column", minHeight: 0, height: "100%", overflow: "hidden" },
-    header: {
-      display: "flex",
-      alignItems: "center",
-      gap: 6,
-      padding: "6px 8px 6px 12px",
-      minHeight: 32,
-      color: "var(--dsw-alias-label-secondary)"
-    },
-    title: { flex: "1 1 auto", minWidth: 0, fontSize: 12, fontWeight: 600, letterSpacing: ".02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-    select: {
-      maxWidth: 96,
-      border: "1px solid var(--dsw-alias-separator)",
-      borderRadius: 6,
-      background: "var(--dsw-alias-bg-base)",
-      color: "var(--dsw-alias-label-primary)",
-      fontSize: 11,
-      padding: "2px 4px",
-      cursor: "pointer"
-    },
-    iconButton: {
-      width: 24,
-      height: 24,
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      border: 0,
-      borderRadius: 6,
-      background: "transparent",
-      color: "var(--dsw-alias-label-secondary)",
-      cursor: "pointer"
-    },
-    search: {
-      margin: "0 8px 6px",
-      display: "flex",
-      alignItems: "center",
-      gap: 6,
-      border: "1px solid var(--dsw-alias-separator)",
-      borderRadius: 7,
-      padding: "4px 8px",
-      background: "var(--dsw-alias-bg-base)"
-    },
-    searchInput: { flex: "1 1 auto", minWidth: 0, border: 0, outline: "none", background: "transparent", color: "var(--dsw-alias-label-primary)", fontSize: 12 },
-    body: { flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "0 6px 12px" },
-    section: { padding: "6px 6px 2px", fontSize: 11, color: "var(--dsw-alias-label-tertiary)" },
-    row: {
-      display: "flex",
-      alignItems: "center",
-      gap: 6,
-      width: "100%",
-      boxSizing: "border-box",
-      padding: "5px 8px",
-      borderRadius: 6,
-      border: 0,
-      background: "transparent",
-      color: "var(--dsw-alias-label-primary)",
-      textAlign: "left",
-      cursor: "pointer",
-      fontSize: 12.5
-    },
-    rowSub: { display: "block", color: "var(--dsw-alias-label-tertiary)", fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-    dot: { flex: "none", width: 6, height: 6, borderRadius: 999, background: "var(--dsw-alias-label-tertiary)" },
-    empty: { padding: "18px 12px", fontSize: 12, lineHeight: 1.6, color: "var(--dsw-alias-label-tertiary)" },
-    menu: {
-      position: "absolute",
-      right: 8,
-      top: 28,
-      zIndex: 20,
-      minWidth: 148,
-      padding: 4,
-      borderRadius: 8,
-      border: "1px solid var(--dsw-alias-separator)",
-      background: "var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base))",
-      boxShadow: "0 8px 24px #0006"
-    },
-    menuItem: { display: "block", width: "100%", textAlign: "left", border: 0, background: "transparent", color: "var(--dsw-alias-label-primary)", padding: "6px 8px", borderRadius: 6, cursor: "pointer", fontSize: 12 }
-  };
+  var STYLE_TAG = "no996-openfilm-area";
+  var CSS = `
+.nof-area{box-sizing:border-box;min-height:0;flex:1;display:flex;flex-direction:column;padding-right:var(--dsh-session-list-edge-inset,var(--dsh-sidebar-inline-padding,8px));color:var(--dsw-alias-label-primary)}
+.nof-area *{box-sizing:border-box}
+.nof-area-header{height:36px;display:flex;align-items:center;gap:4px;padding-left:var(--dsh-sidebar-row-padding,12px);margin-bottom:4px;color:var(--dsw-alias-label-tertiary);flex:none;overflow:hidden}
+.nof-area-label{flex:1 1 auto;min-width:0;font-size:12px;line-height:20px;font-weight:500;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative;left:-1px}
+.nof-area-switch{flex:none;max-width:92px;height:22px;padding:0 4px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:20px;cursor:pointer}
+.nof-area-switch:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
+.nof-area-icon{width:28px;height:28px;padding:0;border:0;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-secondary);display:inline-flex;align-items:center;justify-content:center;flex:none;cursor:pointer}
+.nof-area-icon:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.nof-area-icon:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
+.nof-area-searchbar{height:32px;display:flex;align-items:center;gap:0;margin:0 4px 4px calc(var(--dsh-sidebar-paint-inset,0px) + 1px);padding:0 4px 0 0;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-caption)}
+.nof-area-input{flex:1;min-width:0;margin-left:-2px;border:0;outline:none;background:0 0;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:18px}
+.nof-area-input::placeholder{color:var(--dsw-alias-label-tertiary)}
+.nof-area-list{flex:1;min-height:0;overflow-y:auto;margin-left:-4px;padding:0 0 16px 4px;scrollbar-gutter:stable}
+.nof-area-row{display:flex;align-items:center;gap:var(--dsh-sidebar-label-gap,6px);height:34px;padding:0 8px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) - var(--dsh-sidebar-paint-inset,0px) + var(--dsh-workspace-indent,0px));border-inline:var(--dsh-sidebar-paint-inset,0px) solid transparent;border-radius:var(--dsw-radius-md);background-clip:padding-box;color:var(--dsw-alias-label-primary);cursor:pointer;-webkit-user-select:none;user-select:none;position:relative;outline:none}
+.nof-area-row+.nof-area-row{margin-top:2px}
+.nof-area-row:hover{background-color:var(--dsw-alias-interactive-bg-hover)}
+.nof-area-row:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
+.nof-area-session{height:32px;gap:0;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) - var(--dsh-sidebar-paint-inset,0px) + 22px)}
+.nof-area-session.nof-area-current{background-color:var(--dsw-alias-interactive-bg-hover)}
+.nof-area-slot{width:16px;height:20px;flex:none;display:inline-flex;align-items:center;justify-content:center;color:var(--dsw-alias-label-tertiary)}
+.nof-area-arrow{display:none;transition:transform .15s var(--ds-ease-in-out, ease)}
+.nof-area-arrow-open{transform:rotate(90deg)}
+.nof-area-row:hover .nof-area-folder{display:none}
+.nof-area-row:hover .nof-area-arrow{display:inline-flex}
+.nof-area-title{min-width:0;font-size:14px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nof-area-session .nof-area-title{flex:1;margin:0 6px 0 var(--dsh-sidebar-label-gap,6px)}
+.nof-area-projectText{display:flex;flex-direction:column;flex:1;min-width:0;gap:2px}
+.nof-area-meta{font-size:12px;line-height:20px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nof-area-actions{flex:none;display:none;align-items:center;gap:13px}
+.nof-area-row:hover .nof-area-actions,.nof-area-row.nof-area-menu-open .nof-area-actions{display:inline-flex}
+.nof-area-more{width:24px;height:24px;padding:0;border:0;border-radius:var(--dsw-radius-xs);background:0 0;color:var(--dsw-alias-label-tertiary);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.nof-area-more:hover{color:var(--dsw-alias-label-primary)}
+.nof-area-menu{position:absolute;right:4px;top:30px;z-index:30;min-width:168px;padding:4px;border:1px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-base));box-shadow:0 8px 24px #0006}
+.nof-area-menu button{display:block;width:100%;padding:6px 8px;border:0;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-primary);text-align:left;font:inherit;font-size:12.5px;line-height:20px;cursor:pointer}
+.nof-area-menu button:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.nof-area-section{padding:6px var(--dsh-sidebar-row-padding,12px) 2px;font-size:12px;line-height:20px;color:var(--dsw-alias-label-tertiary)}
+.nof-area-empty{padding:12px var(--dsh-sidebar-row-padding,12px);font-size:12.5px;line-height:1.7;color:var(--dsw-alias-label-tertiary)}
+.nof-area-note{padding:4px var(--dsh-sidebar-row-padding,12px) 8px;font-size:11.5px;line-height:1.6;color:var(--dsw-alias-label-tertiary)}
+`;
+  function ensureAreaStyles(doc = typeof document === "undefined" ? void 0 : document) {
+    if (!doc || doc.querySelector(`style[data-no996="${STYLE_TAG}"]`)) return;
+    const tag = doc.createElement("style");
+    tag.dataset.no996 = STYLE_TAG;
+    tag.textContent = CSS;
+    doc.head.appendChild(tag);
+  }
   function iconPaths(name) {
     if (name === "search") {
       return [
@@ -667,19 +637,23 @@
       ];
     }
     if (name === "folder") {
-      return [["path", { d: "M3.5 7.5a2 2 0 0 1 2-2h3l1.6 2h7.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2z", stroke: "currentColor", strokeWidth: 1.6 }]];
+      return [["path", { d: "M3.5 7.5a2 2 0 0 1 2-2h3l1.6 2h7.4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2z", stroke: "currentColor", strokeWidth: 1.6, fill: "none" }]];
+    }
+    if (name === "arrow") {
+      return [["path", { d: "m9 6 6 6-6 6", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", fill: "none" }]];
     }
     return [];
   }
   function createAreaBrowser(React, deps) {
     const { t, fetchArea, openProject, openSession, openPanel, storage } = deps;
     const h = React.createElement;
-    const Icon = ({ name, size = 14 }) => h("svg", {
+    const Icon = ({ name, size = 14, className }) => h("svg", {
       width: size,
       height: size,
       viewBox: "0 0 24 24",
       fill: "none",
-      "aria-hidden": true
+      "aria-hidden": true,
+      className
     }, iconPaths(name).map(([tag, attrs], index) => h(tag, { key: index, ...attrs })));
     function useSessionList(props) {
       const hooks = React.useRef(null);
@@ -706,12 +680,13 @@
       }, [list]);
       const isProjectSession = activeId !== null && area.hidden.includes(activeId);
       const modeKey = activeId ?? "panel";
-      const [mode, setMode] = React.useState(() => readMode(storage, modeKey) ?? defaultMode(isProjectSession));
+      const [chosen, setChosen] = React.useState(() => readMode(storage, modeKey));
       const seenKey = React.useRef(modeKey);
       if (seenKey.current !== modeKey) {
         seenKey.current = modeKey;
-        setMode(readMode(storage, modeKey) ?? defaultMode(isProjectSession));
+        setChosen(readMode(storage, modeKey));
       }
+      const mode = chosen ?? defaultMode(isProjectSession);
       React.useEffect(() => {
         let live = true;
         const load = () => {
@@ -739,7 +714,7 @@
       }, [revision]);
       const choose = (next) => {
         if (!AREA_MODES.includes(next)) return;
-        setMode(next);
+        setChosen(next);
         writeMode(storage, modeKey, next);
       };
       const projects = sortProjects(searchProjects(area.projects, query), list);
@@ -768,18 +743,12 @@
           }
         }
       };
-      const rowProps = (onClick, label) => ({
-        type: "button",
-        style: S.row,
-        onClick,
-        "aria-label": label,
-        onMouseEnter: (event) => {
-          event.currentTarget.style.background = "var(--dsw-alias-interactive-bg-hover)";
-        },
-        onMouseLeave: (event) => {
-          event.currentTarget.style.background = "transparent";
+      const onKey = (action) => (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          action();
         }
-      });
+      };
       const isCollapsed = (id) => collapsed.has(id);
       const toggle = (id) => {
         setCollapsed((current) => {
@@ -789,45 +758,53 @@
           return next;
         });
       };
-      const header = React.createElement(
+      const restart = () => {
+        setRevision((value) => value + 1);
+        fetchArea().then((payload) => setArea(parseAreaPayload(payload))).catch(() => {
+        });
+      };
+      const header = h(
         "div",
-        { style: S.header },
-        React.createElement("span", { style: S.title }, mode === "edit" ? t("areaProjects") : t("areaWorkspaces")),
-        React.createElement(
+        { className: "nof-area-header" },
+        h("span", { className: "nof-area-label" }, mode === "edit" ? t("areaProjects") : t("areaWorkspaces")),
+        h(
           "select",
           {
-            style: S.select,
+            className: "nof-area-switch",
             value: mode,
             "aria-label": t("areaSwitch"),
             onChange: (event) => choose(event.target.value)
           },
-          React.createElement("option", { value: "edit" }, t("areaEdit")),
-          React.createElement("option", { value: "work" }, t("areaWork"))
+          h("option", { value: "edit" }, t("areaEdit")),
+          h("option", { value: "work" }, t("areaWork"))
         ),
-        React.createElement("button", {
+        h("button", {
           type: "button",
-          style: S.iconButton,
+          className: "nof-area-icon",
           title: t("areaSearch"),
           "aria-label": t("areaSearch"),
           onClick: () => {
-            setSearching((value) => !value);
             if (searching) setQuery("");
+            setSearching((value) => !value);
           }
-        }, React.createElement(Icon, { name: "search" })),
-        mode === "edit" ? React.createElement("button", {
+        }, h(Icon, { name: "search" })),
+        mode === "edit" ? h("button", {
           type: "button",
-          style: S.iconButton,
+          className: "nof-area-icon",
           title: t("areaNew"),
           "aria-label": t("areaNew"),
           onClick: () => openPanel()
-        }, React.createElement(Icon, { name: "plus" })) : null
+        }, h(Icon, { name: "plus" })) : null
       );
-      const searchBar = searching ? React.createElement(
+      const searchBar = searching ? h(
         "div",
-        { style: S.search },
-        React.createElement(Icon, { name: "search" }),
-        React.createElement("input", {
-          style: S.searchInput,
+        { className: "nof-area-searchbar" },
+        h("button", { type: "button", className: "nof-area-icon", "aria-label": t("areaSearch"), onClick: () => {
+          setQuery("");
+          setSearching(false);
+        } }, h(Icon, { name: "search" })),
+        h("input", {
+          className: "nof-area-input",
           value: query,
           autoFocus: true,
           placeholder: t("areaSearchPlaceholder"),
@@ -845,108 +822,108 @@
           }
         })
       ) : null;
-      const projectRow = (project) => React.createElement(
+      const projectRow = (project) => h(
         "div",
         { key: project.projectId, style: { position: "relative" } },
-        React.createElement(
-          "button",
+        h(
+          "div",
           {
-            ...rowProps(() => openProject(project.projectId), project.name),
-            style: { ...S.row, alignItems: "flex-start", paddingRight: 28 },
-            title: project.path
+            className: "nof-area-row",
+            role: "button",
+            tabIndex: 0,
+            title: project.path,
+            "aria-label": project.name,
+            onClick: () => openProject(project.projectId),
+            onKeyDown: onKey(() => openProject(project.projectId))
           },
-          React.createElement("span", { style: { ...S.dot, marginTop: 6, background: project.sessionId ? "var(--dsw-alias-brand-primary, #4c8dff)" : "var(--dsw-alias-label-tertiary)" } }),
-          React.createElement(
+          h("span", { className: "nof-area-slot" }, h(Icon, { name: "folder" })),
+          h(
             "span",
-            { style: { minWidth: 0, flex: "1 1 auto" } },
-            React.createElement("span", { style: { display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, project.name),
-            React.createElement("span", { style: S.rowSub }, project.sessionTitle || (project.sessionId ? t("areaSessionUntitled") : t("areaNotStarted")))
+            { className: "nof-area-projectText" },
+            h("span", { className: "nof-area-title" }, project.name),
+            project.sessionTitle ? h("span", { className: "nof-area-meta" }, project.sessionTitle) : h("span", { className: "nof-area-meta" }, project.sessionId ? t("areaSessionUntitled") : t("areaNotStarted"))
+          ),
+          h(
+            "span",
+            { className: "nof-area-actions" },
+            h("button", {
+              type: "button",
+              className: "nof-area-more",
+              title: t("areaMore"),
+              "aria-label": t("areaMore"),
+              onClick: (event) => {
+                event.stopPropagation();
+                setMenu((current) => current === project.projectId ? null : project.projectId);
+              }
+            }, h(Icon, { name: "more" }))
           )
         ),
-        React.createElement("button", {
-          type: "button",
-          style: { ...S.iconButton, position: "absolute", right: 4, top: 4 },
-          title: t("areaMore"),
-          "aria-label": t("areaMore"),
-          onClick: (event) => {
-            event.stopPropagation();
-            setMenu((current) => current === project.projectId ? null : project.projectId);
-          }
-        }, React.createElement(Icon, { name: "more" })),
-        menu === project.projectId ? React.createElement(
+        menu === project.projectId ? h(
           "div",
-          { style: S.menu },
-          React.createElement("button", { type: "button", style: S.menuItem, onClick: () => {
+          { className: "nof-area-menu" },
+          h("button", { type: "button", onClick: () => {
             setMenu(null);
             openProject(project.projectId);
           } }, t("areaOpenPanel")),
-          project.sessionId ? React.createElement("button", {
-            type: "button",
-            style: S.menuItem,
-            onClick: () => {
-              setMenu(null);
-              activate(project.sessionId);
-            }
-          }, t("areaOpenSession")) : null,
-          React.createElement("button", {
-            type: "button",
-            style: S.menuItem,
-            onClick: () => {
-              setMenu(null);
-              setRevision((value) => value + 1);
-              fetchArea().then((payload) => setArea(parseAreaPayload(payload))).catch(() => {
-              });
-            }
-          }, t("areaRefresh"))
+          project.sessionId ? h("button", { type: "button", onClick: () => {
+            setMenu(null);
+            activate(project.sessionId);
+          } }, t("areaOpenSession")) : null,
+          h("button", { type: "button", onClick: () => {
+            setMenu(null);
+            restart();
+          } }, t("areaRefresh"))
         ) : null
       );
-      const sessionButton = (id, paddingLeft) => React.createElement("button", {
-        key: id,
-        ...rowProps(() => activate(id), selectedTitle(id) || id),
-        style: { ...S.row, paddingLeft, color: id === activeId ? "var(--dsw-alias-label-primary)" : void 0 }
-      }, React.createElement(
-        "span",
-        { style: { minWidth: 0, flex: "1 1 auto", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } },
-        selectedTitle(id) || (sessionsById[id]?.blank ? t("areaBlankSession") : t("areaSessionUntitled"))
-      ));
-      const workGroups = filtered.groups.map((group) => React.createElement(
+      const sessionRow = (id, parentId) => h("div", {
+        key: `${parentId}:${id}`,
+        className: `nof-area-row nof-area-session${id === activeId ? " nof-area-current" : ""}`,
+        role: "button",
+        tabIndex: 0,
+        "aria-label": selectedTitle(id) || id,
+        onClick: () => activate(id),
+        onKeyDown: onKey(() => activate(id))
+      }, h("span", { className: "nof-area-title" }, selectedTitle(id) || (sessionsById[id]?.blank ? t("areaBlankSession") : t("areaSessionUntitled"))));
+      const workGroups = filtered.groups.map((group) => h(
         "div",
         { key: group.workspaceId },
-        React.createElement(
-          "button",
+        h(
+          "div",
           {
-            ...rowProps(() => toggle(group.workspaceId), group.title || t("areaWorkspaceFallback")),
-            style: { ...S.row, color: "var(--dsw-alias-label-secondary)" }
+            className: "nof-area-row",
+            role: "button",
+            tabIndex: 0,
+            "aria-expanded": !isCollapsed(group.workspaceId),
+            "aria-label": group.title || t("areaWorkspaceFallback"),
+            onClick: () => toggle(group.workspaceId),
+            onKeyDown: onKey(() => toggle(group.workspaceId))
           },
-          React.createElement(Icon, { name: "folder" }),
-          React.createElement("span", { style: { flex: "1 1 auto", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, group.title || t("areaWorkspaceFallback")),
-          React.createElement("span", { style: { fontSize: 10, color: "var(--dsw-alias-label-tertiary)" } }, isCollapsed(group.workspaceId) ? "\u25B8" : "\u25BE")
+          h(
+            "span",
+            { className: "nof-area-slot" },
+            h(Icon, { name: "folder", className: "nof-area-folder" }),
+            h(Icon, { name: "arrow", className: `nof-area-arrow${isCollapsed(group.workspaceId) ? "" : " nof-area-arrow-open"}` })
+          ),
+          h("span", { className: "nof-area-title", style: { flex: "1 1 auto" } }, group.title || t("areaWorkspaceFallback"))
         ),
-        isCollapsed(group.workspaceId) ? null : group.sessionIds.map((id) => sessionButton(id, 24))
+        isCollapsed(group.workspaceId) ? null : group.sessionIds.map((id) => sessionRow(id, group.workspaceId))
       ));
-      const ungrouped = filtered.ungrouped.length > 0 ? React.createElement(
+      const ungrouped = filtered.ungrouped.length > 0 ? h(
         "div",
         { key: "__ungrouped" },
-        React.createElement("div", { style: S.section }, t("areaUngrouped")),
-        filtered.ungrouped.map((id) => sessionButton(id, 12))
+        h("div", { className: "nof-area-section" }, t("areaUngrouped")),
+        filtered.ungrouped.map((id) => sessionRow(id, "ungrouped"))
       ) : null;
-      const body = mode === "edit" ? React.createElement(
+      const body = mode === "edit" ? h(
         "div",
-        { style: S.body },
-        projects.length === 0 ? React.createElement("div", { style: S.empty }, loading ? t("areaLoading") : t("areaEmptyProjects")) : projects.map(projectRow)
-      ) : React.createElement(
+        { className: "nof-area-list" },
+        projects.length === 0 ? h("div", { className: "nof-area-empty" }, loading ? t("areaLoading") : t("areaEmptyProjects")) : projects.map(projectRow)
+      ) : h(
         "div",
-        { style: S.body },
-        filtered.groups.length === 0 && filtered.ungrouped.length === 0 ? React.createElement("div", { style: S.empty }, loading ? t("areaLoading") : t("areaEmptyWorkspaces")) : [workGroups, ungrouped]
+        { className: "nof-area-list" },
+        filtered.groups.length === 0 && filtered.ungrouped.length === 0 ? h("div", { className: "nof-area-empty" }, loading ? t("areaLoading") : t("areaEmptyWorkspaces")) : [workGroups, ungrouped, hiddenSet.size > 0 ? h("div", { key: "__note", className: "nof-area-note" }, t("areaHiddenNote")) : null]
       );
-      return React.createElement(
-        "div",
-        { style: S.region, "data-no996-openfilm-area": mode },
-        header,
-        searchBar,
-        body,
-        hiddenSet.size > 0 && mode === "work" ? React.createElement("div", { style: { ...S.section, padding: "4px 12px 8px" } }, t("areaHiddenNote")) : null
-      );
+      return h("div", { className: "nof-area", "data-no996-openfilm-area": mode }, header, searchBar, body);
     };
   }
 
@@ -1122,6 +1099,7 @@
         apply(ctx) {
           ctx.effect(() => ctx.locale.register(NS, { en, zh }), "openfilm: dictionaries");
           const t = ctx.locale.bind(NS);
+          ensureAreaStyles();
           const selectPanel = () => {
             const layout = ctx.get?.("layout");
             if (!layout || typeof layout.selectPanel !== "function") return false;

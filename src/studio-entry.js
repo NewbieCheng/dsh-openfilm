@@ -1,6 +1,6 @@
 import { createStudioPanel } from './studio-panel.mjs';
 import { createActivationStore } from './panel-keepalive.mjs';
-import { createAreaBrowser } from './area-browser.mjs';
+import { createAreaBrowser, ensureAreaStyles } from './area-browser.mjs';
 import { areaBus } from './area-bus.mjs';
 
 window.__ModuleLoader__.load({
@@ -130,6 +130,7 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'openfilm: dictionaries');
         const t = ctx.locale.bind(NS);
+        ensureAreaStyles();
         const selectPanel = () => {
           const layout = ctx.get?.('layout');
           if (!layout || typeof layout.selectPanel !== 'function') return false;
