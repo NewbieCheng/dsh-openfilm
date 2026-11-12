@@ -136,6 +136,16 @@ src/theme.mjs             ← 读取 + 注入（按 surface 注册表）
 
 登记内容只需要三件事：**为什么不能改源码、现在怎么工作、什么条件下撤掉。**
 
+### 插槽接管（不是注入）
+
+侧栏 `sidebar.workspaces` 在 0.13.0 起由本插件接管（`src/studio-entry.js`，`priority: -100`），不是 DOM 注入，所以不进上表；之所以记在这里，是因为它同样"盖住了官方界面"，需要同一套退出条件：
+
+| 接管 | 位置 | 为什么 | 退出条件 |
+|---|---|---|---|
+| `sidebar.workspaces` → 项目区 | `src/studio-entry.js` + `src/area-browser.mjs` | DSH 没有"把某个会话藏起来"的 API；项目对话只能靠接管整块区域才能不进工作区列表。single 槽只渲染优先级最小的活条目（`-100` 盖过官方 `WorkspaceBrowser`），切换模式下拉只是换渲染内容。 | DSH 提供按会话隐藏时，改回"官方浏览器 + 隐藏标记" |
+
+真机排错顺序：先看 `plugin.log` 有没有 `area-route mounted`（Host 侧路由在），再看页面是否刷新过（客户端 bundle 变了），最后看 `#sidebar` 里 `[data-no996-openfilm-area]` 是否存在（接管是否生效）。官方 `WorkspaceBrowser` 仍在注册表里、只是不渲染。
+
 ---
 
 ## 7. 反模式

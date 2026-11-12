@@ -498,6 +498,18 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
     if(event.source!==parent||parent===window||!(event.origin===parentOrigin||(${desktop}&&event.origin==='null')))return;
     const data=event.data;
     if(data&&typeof data==='object'&&!Array.isArray(data)&&Object.keys(data).length===2&&data.type==='no996-openfilm:project-snapshot-request'&&data.version===1)report(true);
+    // The sidebar area asks the shell to show one project. Only the history call
+    // is made here: the shell's own router owns what a project change means, and
+    // its patched history wrapper reports the new path back to the parent.
+    if(data&&typeof data==='object'&&!Array.isArray(data)&&data.type==='no996-openfilm:navigate'&&data.version===1&&typeof data.projectId==='string'&&/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId)){
+      const target='/projects/'+data.projectId;
+      if(location.pathname!==target&&location.pathname!==target+'/'){
+        try{
+          history.pushState({},'',target);
+          dispatchEvent(new PopStateEvent('popstate',{state:{}}));
+        }catch(e){try{location.assign(target)}catch(_){}}
+      }
+    }
     // Layout requests come from the standalone browser page (or any trusted
     // parent on this origin): the same placement calls the app's own controls use.
     if(data&&typeof data==='object'&&data.type==='no996-openfilm:layout'&&data.version===1){

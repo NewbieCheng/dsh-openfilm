@@ -10,13 +10,15 @@
  * overlays a compact gate until Host auth is ready. Tokens never reach here.
  */
 
+
+import { areaBus } from './area-bus.mjs';
+
 /** Shared project-URL guard. The injected template picker and the standalone
  * templates page both build `/projects/<id>`, so the rule lives in one place. */
 export function templateProjectUrl(editorOrigin, projectId) {
   if (typeof projectId !== 'string' || !/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw new Error('Invalid project');
   return `${new URL(editorOrigin).origin}/projects/${projectId}`;
 }
-
 
 export function createStudioPanel(React) {
   const h = React.createElement;
@@ -41,6 +43,28 @@ export function createStudioPanel(React) {
     const iframeRef = React.useRef(null);
     const heardRef = React.useRef(false);
     const watchNavigationRef = React.useRef(null);
+    const readyRef = React.useRef(false);
+    const urlRef = React.useRef(null);
+
+    // Ask the official shell to show one project. The injected bridge owns the
+    // history call; this side only has to reach a frame that is really loaded.
+    const postNavigate = projectId => {
+      const frame = iframeRef.current;
+      if (!frame || !frame.contentWindow || !readyRef.current || typeof projectId !== 'string') return false;
+      let origin = '*';
+      try { origin = new URL(urlRef.current).origin; } catch { /* keep the wildcard */ }
+      try {
+        frame.contentWindow.postMessage({ type: 'no996-openfilm:navigate', version: 1, projectId }, origin);
+        return true;
+      } catch { return false; }
+    };
+
+    React.useEffect(() => {
+      const off = areaBus.subscribe(event => {
+        if (event.type === 'navigate') postNavigate(event.projectId);
+      });
+      return off;
+    }, []);
 
     React.useEffect(() => {
       // A custom-scheme page (dsh-app://app) cannot reach /api/... at all; the
@@ -97,6 +121,8 @@ export function createStudioPanel(React) {
     React.useEffect(() => {
       if (state.status !== 'ready') return undefined;
       const editorOrigin = new URL(state.url).origin;
+      urlRef.current = state.url;
+      readyRef.current = false;
       let timer;
       const watchNavigation = () => {
         heardRef.current = false;
@@ -113,8 +139,14 @@ export function createStudioPanel(React) {
         if (data && typeof data === 'object' && data.type === 'no996-openfilm:boot' && data.version === 1) {
           if (data.rendered === true) {
             heardRef.current = true;
+            readyRef.current = true;
             setSilent(false);
             clearTimeout(timer);
+            // The frame can act on a navigation request now; a click made while the
+            // panel was still booting is flushed here instead of being dropped.
+            areaBus.reportReady();
+            const pending = areaBus.takePending();
+            if (pending) postNavigate(pending);
           }
           setBoot({ hasNative: data.hasNative === true, rendered: data.rendered === true });
         }
@@ -126,6 +158,8 @@ export function createStudioPanel(React) {
         // Login/logout are handled inside the official shell overlay. Keep the
         // iframe up so logout only reopens the compact gate, never tears Studio down.
         if (data && typeof data === 'object' && data.type === 'no996-openfilm:project' && data.version === 1 && typeof data.projectId === 'string') {
+          // The project area draws the same projects and follows the one on screen.
+          areaBus.reportProject(/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId) ? data.projectId : null);
           try {
             if (/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId)) {
               localStorage.setItem('no996.openfilm.lastProject', data.projectId);

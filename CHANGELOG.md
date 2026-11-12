@@ -1,5 +1,17 @@
 # 更新记录
 
+## 0.13.0 —— 侧栏项目区：项目对话只在剪辑区出现
+
+- 侧栏「工作区」区域改由本插件接管（`sidebar.workspaces`，`priority: -100`）。根据 DSH 客户端单槽规则「每个优先级只能注册一个，最小者渲染」，-100 盖过官方 `WorkspaceBrowser`，不动上游一行代码；切换模式只换渲染内容，不再注销注册。
+- 区域头部是下拉：**剪辑区**（默认）/ **工作区**；模式按会话记忆（项目对话默认剪辑区，普通会话默认工作区）。剪辑区下是「项目」：一个项目一行（项目名 + 它的那条对话），有搜索（匹配项目名或对话标题），`⋯` 菜单（打开面板 / 在对话中打开 / 刷新）。
+- 点项目行只做两件事：把中间区切到视频创作面板（`layout.selectPanel`），并请官方壳打开该项目（父页面 → iframe 的 `no996-openfilm:navigate`，注入桥用 `pushState + popstate`，壳不响应则退化 `location.replace`）。**不打开 DSH 聊天视图**，也不切换当前会话。
+- 「工作区」视图是过滤版：项目对话（绑定表 + 按项目目录兜住的遗留会话）与只剩它们的项目文件夹都不出现；普通工作区/会话照旧，归档会话仍不显示。
+- 新 Host 只读路由 `GET /api/no996-openfilm/area`（仅官方壳模式注册，鉴权与其它本地路由一致）：Studio 项目列表 + 绑定表 + 会话目录 → `{projects, hiddenSessionIds}`；不打开项目、不建会话。`project-conversation` 增加只读的 `bindings()`。
+- 面板侧：iframe 就绪后补发排队中的导航请求；官方壳每次报告当前项目，侧栏据此跟随。
+- 面板「视频创作」入口不变；桌面页面（`dsh-app://`）拿不到 `/api/…`，项目区在该环境为空列表（不显示坏数据）。
+- 新增测试：`tests/area-view.test.mjs`、`tests/area-client.test.mjs`、`tests/area-route.test.mjs`、`tests/client-area-wiring.test.mjs`，`project-conversation` 补 `bindings()` 只读用例。
+- 边界：过滤版工作区 v1 没有重做拖拽排序、置顶、新建工作区对话框；真机验收需刷新页面（客户端 bundle 变化）。
+
 ## 0.12.1 —— 本地服务 SenseVoice 改回原生渲染
 
 - 撤掉 `assets/shell-ui.js` 里往「本地服务」弹窗追加卡片的 B2 注入，改为改上游源码数据：`studio/server/local-models.mjs` 的 `ABOUT` 加一条 `sensevoice-small`，`library/local-models.json` 加模型文件清单。UI 完全由这份数据驱动，所以 SenseVoice 现在作为「语音转写」组里的普通一行渲染（名称 / FunAudioLLM · 228 MB / 安装 / 原生进度条 / 已开启），没有额外卡片。

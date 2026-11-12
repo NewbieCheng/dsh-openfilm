@@ -34,7 +34,7 @@ function fixture({
   const view = () => ({ workspaceId: 'workspace-1', path: state.path, title: 'demo-film', sessionIds: [...state.sessionIds] });
 
   const ctx = {
-    storageDomain: { async open() { return { table: () => ({ get: key => records.get(key), put: async (key, value) => records.set(key, value) }), close: async () => {} }; } },
+    storageDomain: { async open() { return { table: () => ({ get: key => records.get(key), put: async (key, value) => records.set(key, value), entries: () => records.entries() }), close: async () => {} }; } },
     sessionController: {
       async create(request) {
         calls.create.push(request);
@@ -293,3 +293,17 @@ test('a failing default-permission hook never blocks the conversation', async ()
   // conversation exists either way.
   assert.ok(failures.includes('permission-default'));
 });
+
+test('bindings() lists stored rows without creating or validating anything', async () => {
+  const { ctx, records, calls } = fixture()
+  records.set('proj123456', { projectId: 'proj123456', path: projectPath, sessionId: 'session-1' })
+  records.set('proj654321', { projectId: 'proj654321', path: `${projectPath}-b`, sessionId: 'session-2' })
+  const conversations = await openProjectConversations(ctx, { z })
+  assert.deepEqual(conversations.bindings(), [
+    { projectId: 'proj123456', path: projectPath, sessionId: 'session-1' },
+    { projectId: 'proj654321', path: `${projectPath}-b`, sessionId: 'session-2' },
+  ])
+  assert.equal(calls.list, 0, 'reading the sidebar must not touch the session catalog')
+  await conversations.close()
+  assert.deepEqual(conversations.bindings(), [], 'a closed store reads as empty, never as a crash')
+})

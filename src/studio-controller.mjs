@@ -33,6 +33,7 @@ import { startLocalConsole } from './studio-debug-redirect.mjs';
 import { createDshAskAgent } from './dsh-ai.mjs';
 import { reportPresetStatus } from './preset-report.mjs';
 import { openProjectConversations } from './project-conversation.mjs';
+import { createAreaRoute } from './area-route.mjs';
 import { createGuideTool } from './guide-tool.mjs';
 import { createStudioHttp } from './studio-http.mjs';
 import { createFrameTool } from './frame-tool.mjs';
@@ -919,6 +920,28 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     },
     isDisposed: () => disposed,
   }));
+  // What the sidebar project area draws: Studio's projects, the stored
+  // project→Session bindings, and the Sessions the Workspace view must not list.
+  // Read-only; registered only for the official shell, which owns the library.
+  let unregisterArea;
+  if (officialShell) {
+    unregisterArea = trackRoute(ctx.webServer.register(createAreaRoute({
+      admit: req => {
+        const admission = ctx.connection.admit({ headers: req.headers });
+        return !('rejection' in admission) && admission.peer.id === ctx.connection.browserPeer.id;
+      },
+      conversationsOf: () => projectConversations(),
+      proxyOf: () => lastProxy,
+      listSessions: async () => {
+        const page = await ctx.sessionController.list({}, AbortSignal.timeout(15000));
+        return Array.isArray(page?.items) ? page.items : [];
+      },
+      log,
+    })));
+    // One line of evidence that the sidebar's data route is really mounted: a
+    // 401/403 from outside cannot tell "mounted and refusing" from "missing".
+    void log.info('area-route', { mounted: true, path: '/api/no996-openfilm/area' });
+  }
   unregister = trackRoute(ctx.webServer.register({
     kind: 'exact', path: '/api/no996-openfilm/diagnose',
     async handler(req, res) {

@@ -1,5 +1,7 @@
 import { createStudioPanel } from './studio-panel.mjs';
 import { createActivationStore } from './panel-keepalive.mjs';
+import { createAreaBrowser } from './area-browser.mjs';
+import { areaBus } from './area-bus.mjs';
 
 window.__ModuleLoader__.load({
   id: 'dsh-openfilm',
@@ -10,6 +12,14 @@ window.__ModuleLoader__.load({
     const PANEL = 'no996-openfilm';
     const en = {
       panel: 'Video studio',
+      areaProjects: 'Projects', areaWorkspaces: 'Workspaces', areaSwitch: 'Switch area',
+      areaEdit: 'Editing', areaWork: 'Workspaces', areaSearch: 'Search projects or conversations',
+      areaSearchPlaceholder: 'Search projects or conversations', areaNew: 'New project', areaMore: 'More',
+      areaLoading: 'Reading…', areaEmptyProjects: 'No projects yet. Open the video studio to create one.',
+      areaEmptyWorkspaces: 'No workspace to show.', areaNotStarted: 'Not started', areaSessionUntitled: 'New conversation',
+      areaBlankSession: 'New conversation', areaOpenPanel: 'Open video studio', areaOpenSession: 'Open as conversation',
+      areaRefresh: 'Refresh list', areaUngrouped: 'Ungrouped', areaWorkspaceFallback: 'Workspace',
+      areaHiddenNote: 'Project conversations appear only in the editing area.',
       studioLoading: 'Starting OpenFilm Studio…',
       studioFailed: 'Unable to start OpenFilm Studio.',
       studioRetry: 'Try again', studioStopped: 'Video workspace stopped', studioStoppedHint: 'The editing service is not running. Restart it to continue; projects and media are untouched.', studioRestart: 'Restart workspace',
@@ -20,6 +30,14 @@ window.__ModuleLoader__.load({
     };
     const zh = {
       panel: '视频创作',
+      areaProjects: '项目', areaWorkspaces: '工作区', areaSwitch: '切换区域',
+      areaEdit: '剪辑区', areaWork: '工作区', areaSearch: '搜索项目或会话',
+      areaSearchPlaceholder: '搜索项目或会话', areaNew: '新建项目', areaMore: '更多',
+      areaLoading: '正在读取…', areaEmptyProjects: '还没有项目。打开视频创作面板新建一个。',
+      areaEmptyWorkspaces: '没有可显示的工作区。', areaNotStarted: '未开始', areaSessionUntitled: '新会话',
+      areaBlankSession: '新会话', areaOpenPanel: '打开视频创作面板', areaOpenSession: '在对话中打开',
+      areaRefresh: '刷新列表', areaUngrouped: '未分组', areaWorkspaceFallback: '工作区',
+      areaHiddenNote: '项目对话只在剪辑区显示。',
       studioLoading: '正在启动 OpenFilm 工作台…',
       studioFailed: '无法启动 OpenFilm 工作台。',
       studioRetry: '重试', studioStopped: '工作台已停止运行', studioStoppedHint: '视频编辑服务已断开。重新启动即可继续，项目和素材不受影响。', studioRestart: '重新启动工作台',
@@ -112,11 +130,43 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'openfilm: dictionaries');
         const t = ctx.locale.bind(NS);
+        const selectPanel = () => {
+          const layout = ctx.get?.('layout');
+          if (!layout || typeof layout.selectPanel !== 'function') return false;
+          try { layout.selectPanel(PANEL); return true; } catch { return false; }
+        };
+        const AreaBrowser = createAreaBrowser(React, {
+          t,
+          storage: typeof window === 'undefined' ? undefined : window.localStorage,
+          fetchArea: async () => {
+            // The desktop page (dsh-app://app) cannot reach /api/... at all; there
+            // the project area stays empty rather than showing a broken list.
+            if (DESKTOP_PROTOCOL) return { projects: [], hiddenSessionIds: [] };
+            const response = await fetch('/api/no996-openfilm/area', { credentials: 'same-origin', cache: 'no-store' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+          },
+          openProject: projectId => {
+            areaBus.navigate(projectId);
+            selectPanel();
+          },
+          openPanel: selectPanel,
+          openSession: sessionId => {
+            const navigation = ctx.get?.('uiWorkspace');
+            if (!navigation || typeof navigation.openSession !== 'function') return false;
+            try { navigation.openSession(sessionId); return true; } catch { return false; }
+          },
+        });
         ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL, locale: NS }, PanelSeat));
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PANEL, order: 21, locale: NS, label: () => t('panel') }, PanelIcon));
         // `shell.overlay` is rendered for the whole frame lifetime, so the panel
         // it hosts survives page switches instead of reloading Studio each time.
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'no996-openfilm-panel', order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
+        // The Workspace region: a project area that also keeps project
+        // conversations out of the Workspace list. Shadowing is the only lever —
+        // `single` renders the lowest-priority live entry, so -100 outranks the
+        // shipped WorkspaceBrowser without touching it.
+        ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({ name: 'sidebar.workspaces', priority: -100, locale: NS }, AreaBrowser));
       },
     };
   },

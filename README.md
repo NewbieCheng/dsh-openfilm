@@ -2,7 +2,7 @@
 
 把 **OpenFilm 0.3.2** 视频工作台做成 DSH 插件：官方 Studio 与桌面壳整页常驻在侧边栏，右侧对话经 Host 桥接到 DSH 会话（模型、审批、会话都是 DSH 的）。
 
-当前 `0.12.1`（上一个发布包是 `0.12.0`）。仓库：`NewbieCheng/dsh-openfilm`，分支 `main`。
+当前 `0.13.0`（上一个发布包是 `0.12.1`）。仓库：`NewbieCheng/dsh-openfilm`，分支 `main`。
 
 ## 安装
 
