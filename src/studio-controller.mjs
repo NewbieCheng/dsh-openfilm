@@ -27,17 +27,12 @@ const HOST_VERSION = (() => { try { return String(JSON.parse(readFileSync(new UR
 
 const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.url));
 /** Page events the Host will record; anything else is refused. */
-const CLIENT_EVENTS = new Set([
-  'recovery-shown', 'restart-click', 'picker-placed', 'session-expired', 'permission-shown', 'permission-chosen',
-  // evidence for the Workspace filter / area payload; see src/project-filter.mjs
-  'client-apply', 'store-loaded', 'filter-installed', 'filter-menu', 'filter-toggle',
-]);
+const CLIENT_EVENTS = new Set(['recovery-shown', 'restart-click', 'picker-placed', 'session-expired', 'permission-shown', 'permission-chosen']);
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
 import { startLocalConsole } from './studio-debug-redirect.mjs';
 import { createDshAskAgent } from './dsh-ai.mjs';
 import { reportPresetStatus } from './preset-report.mjs';
 import { openProjectConversations } from './project-conversation.mjs';
-import { createAreaRoute } from './area-route.mjs';
 import { createGuideTool } from './guide-tool.mjs';
 import { createStudioHttp } from './studio-http.mjs';
 import { createFrameTool } from './frame-tool.mjs';
@@ -934,28 +929,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     },
     isDisposed: () => disposed,
   }));
-  // What the sidebar project area draws: Studio's projects, the stored
-  // project→Session bindings, and the Sessions the Workspace view must not list.
-  // Read-only; registered only for the official shell, which owns the library.
-  let unregisterArea;
-  if (officialShell) {
-    unregisterArea = trackRoute(registerRoute(createAreaRoute({
-      admit: req => {
-        const admission = ctx.connection.admit({ headers: req.headers });
-        return !('rejection' in admission) && admission.peer.id === ctx.connection.browserPeer.id;
-      },
-      conversationsOf: () => projectConversations(),
-      proxyOf: () => lastProxy,
-      listSessions: async () => {
-        const page = await ctx.sessionController.list({}, AbortSignal.timeout(15000));
-        return Array.isArray(page?.items) ? page.items : [];
-      },
-      log,
-    })));
-    // One line of evidence that the sidebar's data route is really mounted: a
-    // 401/403 from outside cannot tell "mounted and refusing" from "missing".
-    void log.info('area-route', { mounted: true, path: '/api/no996-openfilm/area' });
-  }
   unregister = trackRoute(registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/diagnose',
     async handler(req, res) {
@@ -1063,7 +1036,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const finish = (status) => { if (!res.writableEnded) res.writeHead(status).end(); };
       req.on('data', (chunk) => {
         size += chunk.length;
-        if (size > 2048) { finish(413); req.destroy(); return; }
+        if (size > 512) { finish(413); req.destroy(); return; }
         chunks.push(chunk);
       });
       req.on('end', () => {
@@ -1072,8 +1045,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return finish(400); }
         const event = typeof value?.event === 'string' ? value.event : '';
         if (!CLIENT_EVENTS.has(event)) return finish(400);
-        const detail = value?.detail === undefined ? undefined : JSON.stringify(value.detail).slice(0, 480);
-        log.info(`page-${event}`, { anchor: typeof value.anchor === 'string' ? value.anchor.slice(0, 16) : undefined, ...(detail ? { detail } : {}) });
+        log.info(`page-${event}`, { anchor: typeof value.anchor === 'string' ? value.anchor.slice(0, 16) : undefined });
         finish(204);
       });
     },

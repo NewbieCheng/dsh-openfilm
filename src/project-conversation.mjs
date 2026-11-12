@@ -372,19 +372,6 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
     return degraded.get(projectId) === true ? 'degraded' : degraded.has(projectId) ? 'seated' : 'unknown';
   }
 
-  /**
-   * Every stored binding, for the sidebar's project area. Read-only: nothing is
-   * validated, created or archived, so drawing the sidebar cannot change state.
-   */
-  function bindings() {
-    if (closing) return [];
-    try {
-      return [...table.entries()].map(([projectId, record]) => ({
-        projectId, path: record.path, sessionId: record.sessionId,
-      }));
-    } catch { return []; }
-  }
-
   /** The stored hint for a project, without creating or validating a Session. */
   function peek(projectId) {
     if (closing || typeof projectId !== 'string') return undefined;
@@ -398,5 +385,5 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
     }
     return closePromise;
   }
-  return Object.freeze({ resolve, rebind, peek, bindings, boundConversation, grouping, close });
+  return Object.freeze({ resolve, rebind, peek, boundConversation, grouping, close });
 }

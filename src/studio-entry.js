@@ -1,7 +1,5 @@
 import { createStudioPanel } from './studio-panel.mjs';
 import { createActivationStore } from './panel-keepalive.mjs';
-import { createAreaStore } from './area-store.mjs';
-import { createProjectFilter } from './project-filter.mjs';
 
 window.__ModuleLoader__.load({
   id: 'dsh-openfilm',
@@ -12,9 +10,6 @@ window.__ModuleLoader__.load({
     const PANEL = 'no996-openfilm';
     const en = {
       panel: 'Video studio',
-      filterTypeSection: 'Workspace type',
-      filterTypeAll: 'All types',
-      filterTypeProjects: 'Video projects only',
       studioLoading: 'Starting OpenFilm Studio…',
       studioFailed: 'Unable to start OpenFilm Studio.',
       studioRetry: 'Try again', studioStopped: 'Video workspace stopped', studioStoppedHint: 'The editing service is not running. Restart it to continue; projects and media are untouched.', studioRestart: 'Restart workspace',
@@ -25,9 +20,6 @@ window.__ModuleLoader__.load({
     };
     const zh = {
       panel: '视频创作',
-      filterTypeSection: '工作区类型',
-      filterTypeAll: '全部类型',
-      filterTypeProjects: '仅视频创作项目',
       studioLoading: '正在启动 OpenFilm 工作台…',
       studioFailed: '无法启动 OpenFilm 工作台。',
       studioRetry: '重试', studioStopped: '工作台已停止运行', studioStoppedHint: '视频编辑服务已断开。重新启动即可继续，项目和素材不受影响。', studioRestart: '重新启动工作台',
@@ -120,48 +112,6 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'openfilm: dictionaries');
         const t = ctx.locale.bind(NS);
-        const fetchArea = async () => {
-          // The desktop page (dsh-app://app) cannot reach /api/... at all; there
-          // no Session is known to be a project, so no row action appears.
-          if (DESKTOP_PROTOCOL) return { projects: [], hiddenSessionIds: [] };
-          const response = await fetch('/api/no996-openfilm/area', { credentials: 'same-origin', cache: 'no-store' });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          return response.json();
-        };
-        // Evidence for the GUI: a page that runs old code and a page whose menu
-        // registration was refused look identical from the outside.
-        const reported = new Set();
-        const report = (event, detail) => {
-          if (reported.has(event)) return;
-          reported.add(event);
-          try {
-            void fetch('/api/no996-openfilm/client-log', {
-              method: 'POST', credentials: 'same-origin', keepalive: true,
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ event, detail }),
-            }).catch(() => {});
-          } catch { /* diagnostics must never break the UI */ }
-        };
-        report('client-apply', { panel: PANEL });
-        const areaStore = createAreaStore({
-          fetchArea,
-          onLoad: info => report('store-loaded', info),
-        });
-        areaStore.start();
-        const projectFilter = createProjectFilter({
-          store: areaStore,
-          storage: typeof window === 'undefined' ? undefined : window.localStorage,
-          labels: {
-            section: t('filterTypeSection'),
-            all: t('filterTypeAll'),
-            projects: t('filterTypeProjects'),
-          },
-          report,
-        });
-        ctx.effect(() => {
-          projectFilter.start();
-          return () => projectFilter.stop();
-        }, 'openfilm: workspace type filter');
         ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL, locale: NS }, PanelSeat));
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PANEL, order: 21, locale: NS, label: () => t('panel') }, PanelIcon));
         // `shell.overlay` is rendered for the whole frame lifetime, so the panel

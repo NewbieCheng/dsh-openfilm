@@ -133,7 +133,6 @@ src/theme.mjs             ← 读取 + 注入（按 surface 注册表）
 | 全屏登录首页 | `assets/shell-login.js` | 上游登录页不适用 | 同上 |
 | 故障卡片 / 恢复卡 | `assets/shell-ui.js` | 上游没有错误 UI | 上游有错误边界后删除 |
 | 主题 token + 覆盖 | `assets/theme/*.css` | L2 无源码；L1 走 A2 同一份文件 | L2 拿到源码后转 A1/A2 |
-| 「只看视频创作项目」筛选项 | `src/project-filter.mjs` | 视图菜单的条目是 primitives `Menu` 的固定数组，没有插槽；只能往已打开的菜单里追加一个克隆的原生项，筛选靠"给项目行打标记 + 一条样式" | DSH 给视图菜单开插槽/过滤扩展点时删除 |
 
 登记内容只需要三件事：**为什么不能改源码、现在怎么工作、什么条件下撤掉。**
 
@@ -143,15 +142,13 @@ src/theme.mjs             ← 读取 + 注入（按 surface 注册表）
 
 官方开出的行级扩展点（`sidebar.workspaces.session.row.action` 悬停按钮、`sidebar.workspaces.session.menu.item` 菜单项、`sidebar.session.row.trailing` 行尾图标）可以用，但**会话菜单已有固定习惯**，往里加业务项会冲突；0.13.0 试过"在剪辑素材区打开"，已按用户要求删除。需要"找到项目"时用筛选，不要往会话菜单塞入口。
 
-### 视图筛选（B2）
+### 侧栏工作区：不做任何注入
 
-| 注入 | 位置 | 为什么 | 退出条件 |
-|---|---|---|---|
-| 「工作区类型」小节 | `src/project-filter.mjs` | 视图菜单的条目是 primitives `Menu` 的固定数组，没有插槽；只能往已打开的弹层追加**克隆的原生节点**（标签/分隔线/条目/勾选位） | DSH 给视图菜单开插槽/过滤扩展点时删除 |
+0.13.0 起，`dsh-openfilm` 对侧栏**零注入**：不占 single 槽、不加行级按钮、不往会话菜单或视图菜单加条目、不加样式、不隐藏行。原因不是"没时间做"，而是这块界面每加一点都要跟着上游的 DOM/类名/状态走，任何一处对不上就是"功能丢了/列表空了/两个勾"——真实故障已经发生过两次，代价高于收益。
 
-隐藏不靠"渲染后打标记"，而是**生成样式表**：按项目会话 id 生成 `:not([data-row-key="session:…"])` 保留项目行，`:has()` 隐藏没有项目会话的组。打标记的版本会在每次 React 重渲染时闪一下（先隐藏再标记），不要再用。
+需要"找到某个项目"时，用视频创作面板自己（`sidebar.panellist` 的入口 + 面板内的项目列表），不要动侧栏。
 
-失败面：DSH 改了菜单类名（`*viewOptionsMenu`）→ 小节不出现；改了行属性（`data-row-key`）→ 不筛选。都只是"没有效果"，不会错藏别的行。真机排错：先看 `plugin.log` 的 `page-filter-installed` / `page-filter-menu` / `page-store-loaded`。
+回归保护：`tests/sidebar-untouched.test.mjs` 会在源码里出现 `viewOptionsMenu` / `data-row-key` / `contextMenus` / `sidebar.workspaces` 等字样时失败。
 
 ---
 

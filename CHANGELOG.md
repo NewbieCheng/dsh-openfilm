@@ -1,16 +1,12 @@
 # 更新记录
 
-## 0.13.0 —— 视图菜单「工作区类型」筛选
+## 0.13.0 —— 侧栏保持原生：撤销全部工作区定制
 
-- 侧栏仍是官方 `WorkspaceBrowser`：不接管、不改行样式、不隐藏行级交互。唯一改动是在视图菜单（分组/排序/筛选）末尾追加一个小节 **工作区类型**：全部类型 / 仅视频创作项目（同一组内互斥，勾选状态存 `no996.openfilm.filter.type`，旧的 `filter.projects` 值会迁移）。
-- **和归档筛选是两条独立轴、同时生效**：归档那组保持原生行为，类型这组只决定"哪些会话属于视频创作"；两组各有自己的勾，列表是两者的交集。
-- 判据用宿主给出的项目对话集合：已存绑定 + 目录与项目目录相关的会话（项目目录本身、其子目录、创建项目时用的父目录）。第二部分覆盖旧会话与"工作区开在项目文件夹上"的情况。
-- 筛选实现改为**生成式样式表**：按项目会话 id 生成 `:not([data-row-key="session:…"])` 只保留这些行，并用 `:has()` 把不含项目会话的工作区组整组隐藏。行怎么重渲染都不会闪——上一版"先渲染后打标记"会让行闪一下，已废弃。
-- 菜单项是克隆的原生节点（标签/分隔线/条目同一套样式与勾选位），不新增自绘控件；DSH 改类名时只是不出现，不会错藏别的行。
-- 保留的底层能力（不触碰界面）：只读路由 `GET /api/no996-openfilm/area`、`project-conversation.bindings()`、父页面 → iframe 的 `no996-openfilm:navigate`。
-- 路由：所有本地路由重复注册降级为警告，避免管理开关重复 apply 时插件被判成未激活；client-log 复用已有路由，只加事件白名单与 detail 字段。
-- 移除：侧栏接管、项目页、行悬停按钮与会话菜单项「在剪辑素材区打开」。
-- 测试：`tests/project-filter.test.mjs`（取值/迁移/宿主集合/生成的选择器/无 DOM 退化）、`tests/area-view.test.mjs`（目录包含判定）、`tests/client-area-wiring.test.mjs`（只保留筛选、无接管、路由只读）。
+- **侧栏不做任何改动**：不占用 `sidebar.workspaces`、不加行按钮、不往会话菜单加项、不往视图菜单加筛选、不改样式、不隐藏行。置顶、归档、拖拽、运行中状态、右键菜单全部是 DSH 原版行为。
+- 删除的代码（连同测试一起）：`src/project-filter.mjs`（视图菜单「工作区类型」注入与生成式筛选样式）、`src/area-store.mjs`、`src/area-client.mjs`、`src/area-view.mjs`、`src/area-route.mjs`（只读的 `/api/no996-openfilm/area`）、`project-conversation.bindings()`，以及 `studio-entry.js` 里对应的 store / 菜单 / 诊断上报接线。
+- 保留且不涉及侧栏的能力：视频创作面板（`main` + 一个 `sidebar.panellist` 入口 + `shell.overlay` 常驻）、Host 反向代理与对话桥、`no996-openfilm:navigate` 父页面 → iframe 导航、只读诊断 `POST /api/no996-openfilm/diagnose`、`GET /__dsh/...` 诊断端点。
+- 保留的基础设施修复：所有本地路由经 `registerRoute`（函数声明、重复注册降级为警告、注册失败回滚），避免管理开关重复 apply 或残留路径时插件整体激活失败；`client-log` 复用已有路由，不重复注册。
+- 回归测试：`tests/sidebar-untouched.test.mjs` 断言源码里不再出现 `sidebar.workspaces`、`session.row.action`、`contextMenus`、`viewOptionsMenu`、`data-row-key`、`hiddenSessionIds`，且五个已删模块不再存在；`tests/route-registration-order.test.mjs` 断言路由守卫是函数声明且只有它直接调用注册表。
 ## 0.12.1 —— 本地服务 SenseVoice 改回原生渲染
 
 - 撤掉 `assets/shell-ui.js` 里往「本地服务」弹窗追加卡片的 B2 注入，改为改上游源码数据：`studio/server/local-models.mjs` 的 `ABOUT` 加一条 `sensevoice-small`，`library/local-models.json` 加模型文件清单。UI 完全由这份数据驱动，所以 SenseVoice 现在作为「语音转写」组里的普通一行渲染（名称 / FunAudioLLM · 228 MB / 安装 / 原生进度条 / 已开启），没有额外卡片。
