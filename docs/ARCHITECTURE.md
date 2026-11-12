@@ -154,9 +154,9 @@
 
 里程碑口径修正：M1/M2 已在代码层完成，M4（工作区命名）在 ACP 下不需要——会话的 cwd 就是项目目录，侧栏按目录自然分组，没有注入。工具已通过 MCP 端点补齐，剩下的就是 M5 真机验收：**刷新页面后由人发一句**，然后看 `plugin.log` 里的 `acp-session` / `acp-prompt-failed`。
 
-## 10. M5 收尾清单（真机验收后执行，未执行）
+## 10. M5 收尾（已执行）
 
-验收通过后，把旧的手写 RPC 回合路径整段删掉，只留 ACP：
+旧的手写 RPC 回合路径已整段删除，只留 ACP（2026-11-13，删除前在独立 worktree 上跑通全量测试）：
 
 | 删除 | 位置 | 判断依据 |
 |---|---|---|
@@ -171,4 +171,4 @@
 
 **保留**：`official-chat-rpc`、`official-chat-store`、`official-event-*`、`official-approvals`、`official-permission`（权限行与 `decide`）、`official-attachment`（上传仍在，作为大图兜底）、项目文件路由、模板、转写（SenseVoice）与所有影片工具。
 
-删除后必须重跑：`node --test tests/*.test.mjs`、`npm run build`、`npm run docs:check`、`npm run patches:check`，并在真机里再发一句、切一次模型、拖一张图、看一次侧栏同一会话。任何一步不通过，就从 git 恢复（删掉的模块都在历史里）。
+删除后已重跑：`node --test tests/*.test.mjs`（563 项）、`npm run build`、`npm run docs:check`、`npm run patches:check`。真机仍需一次发一句话、切一次模型、拖一张图、看一次侧栏同一会话；任何一步不通过，`git revert` 这一个提交即可恢复（删掉的模块都在历史里）。

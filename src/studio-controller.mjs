@@ -28,14 +28,12 @@ const HOST_VERSION = (() => { try { return String(JSON.parse(readFileSync(new UR
 const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.url));
 
 /** The ACP path is the default; an explicit 0 is the escape hatch. */
-const acpEnabled = () => String(process.env.NO996_OPENFILM_ACP ?? '1') !== '0';
 /** Page events the Host will record; anything else is refused. */
 const CLIENT_EVENTS = new Set(['recovery-shown', 'restart-click', 'picker-placed', 'session-expired', 'permission-shown', 'permission-chosen']);
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
 import { startLocalConsole } from './studio-debug-redirect.mjs';
 import { createDshAskAgent } from './dsh-ai.mjs';
 import { reportPresetStatus } from './preset-report.mjs';
-import { openProjectConversations } from './project-conversation.mjs';
 import { createGuideTool } from './guide-tool.mjs';
 import { createStudioHttp } from './studio-http.mjs';
 import { createFrameTool } from './frame-tool.mjs';
@@ -54,8 +52,6 @@ import { openOfficialChatStore } from './official-chat-store.mjs';
 import { createOfficialChatRpc } from './official-chat-rpc.mjs';
 import { createOfficialEventHub } from './official-event-hub.mjs';
 import { createOfficialApprovals } from './official-approvals.mjs';
-import { attachApprovalBridge } from './official-approval-bridge.mjs';
-import { createOfficialAgentService } from './official-agent-service.mjs';
 import { createAcpAgentService } from './acp-agent-service.mjs';
 import { createAcpSessionStore } from './acp-session-store.mjs';
 import { ensureProjectInstructions } from './project-instructions.mjs';
@@ -72,7 +68,6 @@ import { createArchiveWatcher } from './workspace-archive.mjs';
 import { createPluginLog } from './plugin-log.mjs';
 import { createBridgeTrace } from './bridge-trace.mjs';
 import { openProjectPermissions, FULL_ACCESS, WORKSPACE_WRITE } from './official-permission.mjs';
-import { openTurnPolicy } from './official-turn-policy.mjs';
 import { createProjectFiles } from './project-files.mjs';
 
 /**
@@ -102,10 +97,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   const archive = createArchiveWatcher(ctx);
   const workbenchAuth = createWorkbenchAuth({ dev: process.env.NO996_OPENFILM_DEV === '1' });
   const loginRemember = createLoginRememberStore();
-  let conversationsPromise;
-  let conversations;
   let permissionsPromise;
-  let turnPolicyPromise;
   let httpClient;
   let officialStorePromise;
   let lastProxy;
@@ -252,16 +244,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     if (disposed) throw new Error('Studio disposed');
     if (channel === 'agent:prompt') {
       if (!agentService) throw new Error('Agent bridge unavailable');
-      // Legacy only: under ACP the child owns the Session and the permission preset
-      // rides on DSH_PERMISSION_MODE, so asking the old binding here would create a
-      // second, unused Host-side Session for the same project on every prompt.
-      if (!acpAgentService && typeof payload?.projectId === 'string') {
-        try {
-          const store = await permissions();
-          const sessionId = await boundSession(payload.projectId);
-          if (sessionId) await store.resume(payload.projectId, sessionId);
-        } catch { /* permission is an upgrade, never a precondition for sending */ }
-      }
       return agentService.send(payload?.projectId, { key: payload?.key, turnId: payload?.turnId, text: payload?.text, images: payload?.images });
     }
     if (channel === 'agent:permission') {
@@ -277,18 +259,11 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       let store = null;
       try { store = await permissions(); }
       catch (error) { void log.warn('permission-store-failed', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40), detail: safeDetail(error) }); }
-      let sessionId = null;
-      if (!acpAgentService) {
-        // Under ACP there is no Host-side Session to read; resolving the legacy
-        // binding here would create one just because the menu asked.
-        try { sessionId = await boundSession(projectId); }
-        catch (error) { void log.warn('permission-session-failed', { code: String(error?.code ?? error?.name ?? 'NONE').slice(0, 40), detail: safeDetail(error) }); }
-      }
       const remembered = store ? store.remembered(projectId) ?? null : null;
       // The menu only draws the row when it has a value, so "no Session yet" (or
       // a Session that DSH reports nothing for) must not read as "no permission":
       // fall back to the decision and then to the default the bridge applies.
-      const current = (store && sessionId ? store.current(sessionId) : null) ?? remembered ?? FULL_ACCESS;
+      const current = remembered ?? FULL_ACCESS;
       return {
         available: store ? store.available() : false, decided: remembered !== null, remembered, current,
         names: store ? store.names() : [], fullAccess: FULL_ACCESS, workspace: WORKSPACE_WRITE,
@@ -310,23 +285,11 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         return { ok: false, preset: null, applied: false, error: String(error?.code ?? 'PERMISSION_STORE_UNAVAILABLE'), message: safeDetail(error) };
       }
       try {
-        // Before the first message there is no Session to change, so the answer is
-        // remembered and applied by `resume` on the next prompt.
-        // A running ACP child keeps the mode it booted with; forget it so the next
-        // turn starts under the preset just chosen.
+        // The child cannot change its sandbox while running, so stop it: the next
+        // turn spawns under the preset just chosen, read back from the decision.
         await acpAgentService?.reset?.(projectId);
-        if (acpAgentService) {
-          // Under ACP the Session lives in the child, not here: record the decision
-          // (it is what the next spawn reads) instead of applying it to a Host-side
-          // Session that does not exist.
-          await store.decide(projectId, preset);
-          return { ok: true, preset, applied: false };
-        }
-        let sessionId = null;
-        try { sessionId = await boundSession(projectId); } catch { sessionId = null; }
-        if (!sessionId) return { ok: true, preset, applied: false };
-        const applied = await store.apply(projectId, sessionId, preset);
-        return { ok: true, preset: applied.preset, applied: true };
+        await store.decide(projectId, preset);
+        return { ok: true, preset, applied: false };
       } catch (error) {
         return { ok: false, preset: null, applied: false, error: String(error?.code ?? 'PERMISSION_FAILED'), message: String(error?.message ?? '') };
       }
@@ -539,13 +502,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   const authorizeOfficialProject = async (_req, projectId) => {
     try { await verifyOfficialProject(projectId); return true; } catch { return false; }
   };
-  const projectConversations = () => {
-    if (!conversationsPromise) {
-      conversationsPromise = openProjectConversations(ctx, { z, archived: id => archive.isArchived(id), onFailure: (event, fields) => { void log.warn(event, fields); }, onCreated: async sessionId => { try { const store = await permissions(); await store.applyDefault(sessionId); } catch { /* the default is an upgrade, never a precondition */ } } }).then(opened => { conversations = opened; return opened; });
-      conversationsPromise.catch(() => { conversationsPromise = undefined; });
-    }
-    return conversationsPromise;
-  };
   // Session permission for a project's conversation. Resolved lazily: a page
   // that never opens a project never touches the permission domain.
   const permissions = () => {
@@ -558,49 +514,17 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     }
     return permissionsPromise;
   };
-  // The person's thinking-intensity intent per project, opened lazily like the
-  // permission store. The service takes plain async functions, so a not-yet-open
-  // domain is a delay rather than a missing dependency.
-  const turnPolicy = {
-    async thinking(projectId) { return (await openTurnPolicyStore()).thinking(projectId); },
-    async setThinking(projectId, value) { return (await openTurnPolicyStore()).setThinking(projectId, value); },
-    async forget(projectId) { return (await openTurnPolicyStore()).forget(projectId); },
-  };
-  const openTurnPolicyStore = () => {
-    if (!turnPolicyPromise) {
-      turnPolicyPromise = openTurnPolicy(ctx, { z });
-      turnPolicyPromise.catch(() => { turnPolicyPromise = undefined; });
-    }
-    return turnPolicyPromise;
-  };
   const acpSessions = createAcpSessionStore({ file: join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'no996-openfilm', 'acp-sessions.json') });
-  // The Session bound to a project, resolved in the Host from the binding table.
-  // Null when the project has no conversation yet — reading a permission must
-  // never create one.
-  const boundSession = async projectId => {
-    const opened = await projectConversations();
-    const binding = opened.peek(projectId);
-    return binding && binding.projectId === projectId && typeof binding.sessionId === 'string' ? binding.sessionId : null;
-  };
   // Archive state of a project's bound conversation. Always resolved in the
   // Host: the page supplies a project ID and never a Session ID. This never
   // creates a Session — reading chat history must not have that side effect.
   const archiveState = async projectId => {
     await verifyOfficialProject(projectId);
-    // Under ACP the conversation lives in the child; the only Session id this
-    // Host knows is the one it recorded when the child created it. Falling back
-    // to the old binding keeps a project that still has a Host-side Session
-    // working through the same archive set.
+    // The child owns the Session; this Host only knows the id it recorded when the
+    // child created it, and that id is what the archive set is asked about.
     const acp = acpSessions.get(projectId);
-    if (acp && typeof acp.sessionId === 'string') {
-      return { sessionId: acp.sessionId, archived: archive.isArchived(acp.sessionId) === true, available: archive.available };
-    }
-    const opened = await projectConversations();
-    const binding = opened.peek(projectId);
-    if (!binding || binding.projectId !== projectId || typeof binding.sessionId !== 'string') {
-      return { sessionId: null, archived: false, available: archive.available };
-    }
-    return { sessionId: binding.sessionId, archived: archive.isArchived(binding.sessionId) === true, available: archive.available };
+    if (!acp || typeof acp.sessionId !== 'string') return { sessionId: null, archived: false, available: archive.available };
+    return { sessionId: acp.sessionId, archived: archive.isArchived(acp.sessionId) === true, available: archive.available };
   };
   // The project's folder is also its conversation's workspace; a live watcher
   // keeps Windows from moving it to the Recycle Bin. Stop that conversation
@@ -619,8 +543,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   const mcpTokens = createMcpTokens({ randomBytes });
   const mcpAgents = new Map();
   const mcpAgentFor = (projectId, path) => ({ id: `mcp:${projectId}`, path, projectId });
-  const isProjectAgent = agent => Boolean(agent && !disposed && (mcpAgents.get(agent.id) === agent ||
-    (conversations && ctx.agents.get(agent.id) === agent && conversations.boundConversation(agent.id)?.available)));
+  // Only the ACP child's synthetic MCP record grants tool visibility.
+  const isProjectAgent = agent => Boolean(agent && !disposed && mcpAgents.get(agent.id) === agent);
   // One project-scoped event fan-out feeds the official chat's stream.
   const eventHub = createOfficialEventHub();
   // Every envelope that goes to the panel is also kept, per project and turn, as
@@ -664,92 +588,68 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     return delivered;
   };
   const approvals = createOfficialApprovals({ deliver: deliverToPanel });
-  // Two ways to drive the panel's conversation. ACP is the target: the agent
-  // owns the Session, so the panel and the sidebar share one conversation and the
-  // shell's own ACP surface (thinking, tools, resume, model menu) is what the page
-  // draws. NO996_OPENFILM_ACP=0 keeps the old in-process bridge as an escape hatch
-  // until the ACP path is verified on a real GUI.
-  acpAgentService = acpEnabled()
-    ? createAcpAgentService({
-      verifier: verifyOfficialProject,
-      store: acpSessions,
-      emit: async (projectId, event) => deliverToPanel(projectId, event),
-      approvals,
-      // The panel starts on the model the person already chose for DSH, not on the
-      // acp profile's own default.
-      defaultSelection: () => { try { return ctx.agentDefaultModel?.currentSelection?.(); } catch { return undefined; } },
-      // The panel's permission row is the child's sandbox too: DSH reads the mode
-      // from the environment at boot, so the child is spawned with the preset the
-      // person chose here.
-      // The acp profile boots with its own model, and the ACP bridge decides
-      // "may this session carry images?" from it at initialize. Overlay the
-      // person's current DSH model so a vision route is not silently downgraded
-      // to a text-only one before the first turn.
-      spawnArgs: async () => {
-        try {
-          const selection = ctx.agentDefaultModel?.currentSelection?.();
-          const provider = typeof selection?.provider === 'string' ? selection.provider : '';
-          const model = typeof selection?.model === 'string' ? selection.model : '';
-          if (!provider || !model) return [];
-          const safe = value => value.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60);
-          const file = join(tmpdir(), `dsh-openfilm-acp-${safe(provider)}-${safe(model)}.yml`);
-          await writeFile(file, `- id: acp\n  config:\n    provider: ${JSON.stringify(provider)}\n    model: ${JSON.stringify(model)}\n`, 'utf8');
-          return ['--patch', file];
-        } catch { return []; }
-      },
-      permissionMode: async projectId => {
-        // A project with no recorded decision starts the way the bridge always
-        // started: full access. The menu's own default must not disagree with the
-        // sandbox the child actually boots with.
-        try {
-          const store = await permissions();
-          return store?.remembered?.(projectId) ?? store?.defaultPreset?.() ?? 'danger-full-access';
-        } catch { return undefined; }
-      },
-      // A fresh child gets a fresh bearer token for this Host's MCP endpoint, so
-      // the film tools travel with the conversation (they live here, not there).
-      mcpServers: async (projectId, projectPath) => {
-        const agent = mcpAgentFor(projectId, projectPath);
-        mcpAgents.set(agent.id, agent);
-        const token = mcpTokens.mint({ projectId, path: projectPath, agent });
-        return [mcpServerEntry({ url: `${webOrigin}/api/no996-openfilm/mcp`, token })];
-      },
-      // The ACP profile has no OpenFilm preset, but its agent reads AGENTS.md from
-      // the workspace — which is the project folder. Written once, never overwritten.
-      prepareProject: async (projectId, projectPath) => {
-        const result = ensureProjectInstructions({ root: projectPath });
-        if (result.created) void log.info('project-instructions', { projectId });
-      },
-      onClosed: projectId => {
-        mcpTokens.revokeProject(projectId);
-        mcpAgents.delete(`mcp:${projectId}`);
-      },
-      log: (event, fields) => void log.info(event, fields),
-    })
-    : null;
-  const agentService = officialShell
-    ? acpAgentService ?? createOfficialAgentService(ctx, {
-      verifier: verifyOfficialProject,
-      openProjectSessions: { ensure: args => projectConversations().then(opened => opened.resolve(args)) },
-      // Every published envelope is recorded next to whether a live panel stream
-      // took it: accept-then-nothing and never-accepted look identical in the UI.
-      emit: async (projectId, event) => deliverToPanel(projectId, event),
-      isArchived: id => archive.isArchived(id),
-      policy: turnPolicy,
-      approvals,
-    })
-    : null;
-  // DSH asks the person before a sensitive tool call through a waterfall event.
-  // Without this the panel simply stopped moving, with no way to see why.
-  const unregisterApprovalBridge = agentService ? attachApprovalBridge(ctx, {
+  // The panel's conversation is an ACP child. The agent owns the Session, so the
+  // panel and the sidebar share one conversation and the shell's own ACP surface
+  // (thinking, tools, resume, model menu) is exactly what the page draws.
+  acpAgentService = createAcpAgentService({
+    verifier: verifyOfficialProject,
+    store: acpSessions,
+    emit: async (projectId, event) => deliverToPanel(projectId, event),
     approvals,
-    deliver: deliverToPanel,
-    projectOfSession: sessionId => {
-      const bound = conversations?.boundConversation(sessionId);
-      return bound && bound.available === true ? bound.projectId : undefined;
+    // The panel starts on the model the person already chose for DSH, not on the
+    // acp profile's own default.
+    defaultSelection: () => { try { return ctx.agentDefaultModel?.currentSelection?.(); } catch { return undefined; } },
+    // The panel's permission row is the child's sandbox too: DSH reads the mode
+    // from the environment at boot, so the child is spawned with the preset the
+    // person chose here.
+    // The acp profile boots with its own model, and the ACP bridge decides
+    // "may this session carry images?" from it at initialize. Overlay the
+    // person's current DSH model so a vision route is not silently downgraded
+    // to a text-only one before the first turn.
+    spawnArgs: async () => {
+      try {
+        const selection = ctx.agentDefaultModel?.currentSelection?.();
+        const provider = typeof selection?.provider === 'string' ? selection.provider : '';
+        const model = typeof selection?.model === 'string' ? selection.model : '';
+        if (!provider || !model) return [];
+        const safe = value => value.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60);
+        const file = join(tmpdir(), `dsh-openfilm-acp-${safe(provider)}-${safe(model)}.yml`);
+        await writeFile(file, `- id: acp\n  config:\n    provider: ${JSON.stringify(provider)}\n    model: ${JSON.stringify(model)}\n`, 'utf8');
+        return ['--patch', file];
+      } catch { return []; }
     },
-    keyOfProject: projectId => agentService.activeKey(projectId),
-  }) : () => {};
+    permissionMode: async projectId => {
+      // A project with no recorded decision starts the way the bridge always
+      // started: full access. The menu's own default must not disagree with the
+      // sandbox the child actually boots with.
+      try {
+        const store = await permissions();
+        return store?.remembered?.(projectId) ?? store?.defaultPreset?.() ?? 'danger-full-access';
+      } catch { return undefined; }
+    },
+    // A fresh child gets a fresh bearer token for this Host's MCP endpoint, so
+    // the film tools travel with the conversation (they live here, not there).
+    mcpServers: async (projectId, projectPath) => {
+      const agent = mcpAgentFor(projectId, projectPath);
+      mcpAgents.set(agent.id, agent);
+      const token = mcpTokens.mint({ projectId, path: projectPath, agent });
+      return [mcpServerEntry({ url: `${webOrigin}/api/no996-openfilm/mcp`, token })];
+    },
+    // The ACP profile has no OpenFilm preset, but its agent reads AGENTS.md from
+    // the workspace — which is the project folder. Written once, never overwritten.
+    prepareProject: async (projectId, projectPath) => {
+      const result = ensureProjectInstructions({ root: projectPath });
+      if (result.created) void log.info('project-instructions', { projectId });
+    },
+    onClosed: projectId => {
+      mcpTokens.revokeProject(projectId);
+      mcpAgents.delete(`mcp:${projectId}`);
+    },
+    log: (event, fields) => void log.info(event, fields),
+  });
+  // The panel's conversation is the ACP child; nothing is created for a host that
+  // has no official shell to drive.
+  const agentService = officialShell ? acpAgentService : null;
   const guideTool = createGuideTool(isProjectAgent);
   const unregisterGuide = ctx.tools.register(guideTool, { when: ({ agent }) => isProjectAgent(agent) });
   // One Studio client for every project tool: it resolves the live upstream, adds
@@ -786,13 +686,9 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       log.info('whats-new-suppressed', { from: typeof prefs.seenVersion === 'string' ? prefs.seenVersion : null });
     } catch { /* prefs are a convenience: the dialog is not worth failing a turn over */ }
   };
-  // The project a bound conversation belongs to, resolved from the Host's own
-  // binding table. Never from a renderer-supplied id.
-  const projectOfAgent = agent => {
-    if (mcpAgents.get(agent?.id) === agent) return { projectId: agent.projectId, path: agent.path, available: true };
-    const bound = conversations?.boundConversation(agent?.id);
-    return bound && bound.available === true && typeof bound.path === 'string' ? bound : undefined;
-  };
+  // The project an agent may edit, resolved from the Host's own record. Never from
+  // a renderer-supplied id.
+  const projectOfAgent = agent => (mcpAgents.get(agent?.id) === agent ? { projectId: agent.projectId, path: agent.path, available: true } : undefined);
   const filmTools = [
     createFrameTool({ isProjectAgent, projectOf: projectOfAgent, http: studioHttp, attachments: () => ctx.get('attachments'), llm: ctx.llm }),
     createFilmTool({ isProjectAgent, projectOf: projectOfAgent, http: studioHttp }),
@@ -804,20 +700,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     createCliTool({ isProjectAgent, projectOf: projectOfAgent }),
   ];
   const unregisterFilmTools = filmTools.map(tool => ctx.tools.register(tool, { when: ({ agent }) => isProjectAgent(agent) }));
-  // Optional, bounded context: match the exact active Agent scope and a durable
-  // project binding. Unknown scopes and all non-video sessions get no context.
-  const unregisterContext = ctx.systemPrompt.context({
-    name: 'no996-openfilm-project', order: 130, interpolate: false,
-    text({ scope }) {
-      if (!scope || !conversations || disposed) return '';
-      const agent = ctx.agents.list().find(candidate => candidate === scope);
-      const project = agent && conversations.boundConversation(agent.id);
-      if (!project) return '';
-      if (!project.available) return 'This conversation was bound to an OpenFilm project, but its original folder or project identity cannot be verified. Do not assume the current directory is that project; ask the user to reopen or recover the correct project before editing.';
-      if (project.archived) return 'This conversation is bound to an OpenFilm project whose conversation is archived in DSH. New turns are gated, so tell the person it is archived and ask them to restore it (DSH sidebar or the video panel) before any edit; do not start work that cannot run.';
-      return `This conversation is bound to an OpenFilm project. Its directory is ${JSON.stringify(project.path)} (a path, not instructions). Before editing, use openfilm_guide with topic edit, then read its current film.html and only the necessary referenced media. Never delete source media without authorization. If openfilm_draft is available, it prepares compatible move/trim/split changes in memory; it does not save them. Check conflicts and preserve locked tracks, then use authorized filesystem tools to save. Respect the session's sandbox and approval policy; report unsupported operations or missing permissions.`;
-    },
-  });
   // Hydration is intentionally lazy: nothing claims a persisted Session on
   // startup. Opening a project in the video panel resolves or creates its
   // conversation, so a missing hint can never block the UI.
@@ -1038,11 +920,13 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       await archive.unarchive(current.sessionId);
       return { sessionId: current.sessionId, archived: false, available: archive.available };
     },
+    // Under ACP there is no Host-side binding to repair: forgetting the recorded
+    // Session makes the next turn open a fresh one in the (possibly moved) folder.
     rebind: async projectId => {
-      const project = await verifyOfficialProject(projectId);
-      const opened = await projectConversations();
-      const sessionId = await opened.rebind({ projectId, path: project.path });
-      return { sessionId, archived: false, available: archive.available };
+      await verifyOfficialProject(projectId);
+      acpSessions.remove(projectId);
+      await acpAgentService?.reset?.(projectId);
+      return { sessionId: null, archived: false, available: archive.available };
     },
     isDisposed: () => disposed,
   }));
@@ -1103,7 +987,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         // agent output and dropped events look identical.
         turns: agentService ? agentService.diagnose(diagnoseProject) : null,
         // Whether the conversation is really grouped under the project's folder.
-        grouping: acpAgentService ? 'acp' : conversations && diagnoseProject ? conversations.grouping(diagnoseProject) : 'unknown',
+        grouping: 'acp',
         // The last few events, so a support message can carry the history that
         // explains the symptom without asking for a file path.
         log: { file: log.file, tail: log.tail(12) },
@@ -1372,7 +1256,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     // Studio shutdown before unregister would let a re-enable collide on
     // `/api/no996-openfilm/templates` (and siblings).
     rollbackRoutes();
-    try { unregisterContext(); } catch { /* already gone */ }
     try { unregisterTranscribe(); } catch { /* already gone */ }
     try { unregisterTranscribeRoute(); } catch { /* already gone */ }
     try { unregisterMcp(); } catch { /* already gone */ }
@@ -1385,7 +1268,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     }
     // Stop answering approval questions before the stream that carries them goes
     // away, so nothing is left waiting on a listener that can never reply.
-    try { unregisterApprovalBridge(); } catch { /* already removed */ }
     try { approvals.close(); } catch { /* already closed */ }
     try { archive.close(); } catch { /* already closed */ }
     const closingDebug = debugBridge;
@@ -1393,13 +1275,9 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     closingDebug?.then(bridge => bridge.close()).catch(() => {});
     try { eventHub.close(); } catch { /* already closed */ }
     try { bridgeTrace.close(); } catch { /* already closed */ }
-    const opened = await conversationsPromise?.catch(() => undefined);
     const chat = await officialStorePromise?.catch(() => undefined);
-    try { await opened?.close(); }
-    finally {
-      try { await chat?.close(); }
-      finally { await runtime.close(); }
-    }
+    try { await chat?.close(); }
+    finally { await runtime.close(); }
     log.info('host-stop', { uptimeMs: closingAt - openedAt, events: log.count });
     await log.flush().catch(() => {});
   };

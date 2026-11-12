@@ -89,7 +89,7 @@
 
 面板的对话不再由 Host 手工模拟回合：`acp-client.mjs`（ndjson 线级客户端：initialize / session/new|resume|prompt / set_config_option / cancel）、`acp-agent-service.mjs`（每项目一个 `dsh --profile acp` 子进程；会话 id 存 `acp-session-store.mjs`；模型与思考走 configOptions；权限预设以 `DSH_PERMISSION_MODE` 在 spawn 时传给子进程）、`mcp-server.mjs`（Host 的 MCP 端点，把 `openfilm_*` 工具交给子进程，令牌按会话签发、滑动过期、随退出吊销）、`project-instructions.mjs`（首开项目写 `AGENTS.md`）。外层仍是：`official-chat-rpc.mjs`（RPC 白名单与校验）、`official-chat-store.mjs`、`official-event-hub.mjs` / `official-event-stream.mjs`（fan-out + SSE）、`official-facade.mjs`（注入页面的 `openfilmNative`）、`official-permission.mjs`（权限行与决策）、`official-approvals.mjs`（`session/request_permission` → 页面）。
 
-旧路径（`official-agent-service.mjs` + `official-agent-events.mjs` + Host 侧会话绑定）仅在 `NO996_OPENFILM_ACP=0` 时启用，真机验收后按 `docs/ARCHITECTURE.md §10` 删除。
+旧路径（进程内回合服务、事件翻译层、Host 侧会话绑定、审批桥）已按 `docs/ARCHITECTURE.md §10` 删除；`NO996_OPENFILM_ACP` 变量不再存在。
 
 ### 影片工具（10 个，只对项目会话可见）
 

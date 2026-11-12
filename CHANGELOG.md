@@ -9,7 +9,7 @@
 - 影片工具跟着走：Host 新增 `/api/no996-openfilm/mcp`（MCP streamable-http：initialize / tools/list / tools/call / ping），`session/new` 时以 `mcpServers` 交给子进程；令牌按会话签发（Bearer），子进程退出或切换权限时吊销。真机探测确认子进程连上端点并完成 `initialize`。没有这一步，ACP 会话只有 dsh-base 工具，面板里的 `openfilm_*` 全部消失。
 - 编辑指令跟着项目走：ACP 会话拿不到 `openfilm-video-editing` 预设，改为在会话打开时写 `<项目>/AGENTS.md`（schema 见 `src/project-instructions.mjs`；8 KB 上限；已有文件绝不覆盖）。acp profile 自带 `@deepseek-ai/dsh-agent-instructions`，按 cwd 读取，所以面板里的助手与侧栏会话读到同一份规则。
 - 失败可读：`OFFICIAL_AGENT_*` 失败在代理层带一句固定中文说明进气泡（如 `OFFICIAL_AGENT_FAILED: 对话子进程出错了，请重试；多次失败就重启 DSH (agent:prompt)`），异常文本、路径、provider 原话一律不出现在响应里。
-- 兜底：`NO996_OPENFILM_ACP=0` 回到旧的进程内桥；CLI 解析优先用桌面应用自带的 `resources/runtime/cli/bin/dsh.cmd`。
+- 旧路径删除（M5）：进程内回合服务、事件翻译层、Host 侧会话绑定、审批桥与思考存档全部移除，面板对话只有 ACP 一条；CLI 解析优先用桌面应用自带的 `resources/runtime/cli/bin/dsh.cmd`。
 - 图片按当前模型决策：每项目起子进程时用 `--patch` 把当前 DSH 的 provider/model 覆盖进 acp profile（ACP 只在 `initialize` 时按该模型决定"能否收图"）；当前模型是看图模型时 `imageEnabled` 为真，图片以内联 image block 送入，否则退回"临时文件 + 绝对路径"。真机验过：纯红 PNG → 模型答 "Red"。overlay 只在 spawn 时计算，切换到看图模型要等下一轮子进程重建（改权限或重启 Host）才生效。
 - 真机侧证据（手动）：一轮真实回合经真 `dsh --profile acp` 与真模型跑通，模型调用 `mcp__no996-openfilm__openfilm_guide` 并把工具结果带回，`end_turn`；续聊（跨进程 `session/resume`）与模型/思考切换也在真子进程上验过。
 - 测试：`tests/acp-agent-service.test.mjs`（17 项，对着线级假代理，不碰真实模型）覆盖会话复用、模型/思考、图片两条路径、权限询问与拒绝、并发拒绝、cancel、预设随子进程生效、reset、MCP 传递；`tests/mcp-server.test.mjs`（9 项）覆盖 MCP 协议、令牌与错误形状。
