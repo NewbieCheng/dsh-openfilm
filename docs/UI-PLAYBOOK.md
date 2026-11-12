@@ -139,18 +139,17 @@ src/theme.mjs             ← 读取 + 注入（按 surface 注册表）
 
 ### 侧栏工作区：只许追加，不许替换
 
-`sidebar.workspaces` 是 **single** 槽：一个优先级一个注册，最小者独占渲染，且官方浏览器不可复用（未导出）。所以占用它等于重写整块界面，置顶、归档、运行中、右键菜单、拖拽都会丢掉——2026-11 真机试过，已撤回。
+`sidebar.workspaces` 是 **single** 槽：一个优先级一个注册，最小者独占渲染，且官方浏览器不可复用（未导出）。占用它等于重写整块界面，置顶、归档、运行中、右键菜单、拖拽都会丢——2026-11 真机试过，已撤回。
 
-要在这块区域里加东西，只能用官方已经开出的行级扩展点：
+官方开出的行级扩展点（`sidebar.workspaces.session.row.action` 悬停按钮、`sidebar.workspaces.session.menu.item` 菜单项、`sidebar.session.row.trailing` 行尾图标）可以用，但**会话菜单已有固定习惯**，往里加业务项会冲突；0.13.0 试过"在剪辑素材区打开"，已按用户要求删除。需要"找到项目"时用筛选，不要往会话菜单塞入口。
 
-| 扩展点 | 能加什么 | 用途 |
-|---|---|---|
-| `sidebar.workspaces.session.row.action` | 行悬停时的一个图标按钮 | 「在剪辑素材区打开」（0.13.0 已用） |
-| `sidebar.workspaces.session.menu.item` | 右键 / ⋯ 菜单项（带 `sessionId`、`displayTitle`、`useMenuOpenState`） | 同一动作的菜单入口（0.13.0 已用，`MenuItemButton` + `separatorBefore`） |
-| `sidebar.session.row.trailing` / `hover` / `leading` | 行尾非交互图标 / 悬停扩展 / 行首 | 标记项目对话 |
-| `sidebar.workspaces.directoryFlow` | 目录选择交互（已被组合包占用） | 不用 |
+### 视图筛选（B2）
 
-这些都按 `ctx.slots.inject(名字, () => ctx.slots.register(...))` 注册；不要为了一个按钮去占 `sidebar.workspaces`。
+| 注入 | 位置 | 为什么 | 退出条件 |
+|---|---|---|---|
+| 「只看视频创作项目」 | `src/project-filter.mjs` | 视图菜单的条目是 primitives `Menu` 的固定数组，没有插槽；只能往已打开的弹层追加一个**克隆的原生项**，筛选靠"给项目行打标记 + 一条样式"，组级隐藏靠 `[class*="_groupSection"]` 计数 | DSH 给视图菜单开插槽/过滤扩展点时删除 |
+
+失败面：DSH 改了菜单类名（`*viewOptionsMenu`）→ 项不出现；改了行属性（`data-row-key`）→ 不筛选。两种情况都只是"没有效果"，不会错藏别的行（标记只打在项目会话上）。真机排错顺序：先看 `plugin.log` 的 `client` 事件（`filter-installed` / `filter-menu`），再确认页面刷新过。
 
 ---
 

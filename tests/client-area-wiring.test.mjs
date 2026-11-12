@@ -14,14 +14,20 @@ test('the shipped Workspace browser is never replaced', () => {
   assert.equal(entry.includes('priority: -100'), false);
 });
 
-test('the project entry is two native contributions, not a takeover', () => {
+test('the plugin adds no session-row entries any more', () => {
   const entry = read('src/studio-entry.js');
-  assert.match(entry, /name: 'sidebar\.workspaces\.session\.row\.action'/);
-  assert.match(entry, /menus\.register\(\{/, 'the menu item takes the structured path native items use');
-  assert.match(entry, /target: 'session'/);
-  assert.match(entry, /resolve: \(\{ sessionId \}\) => \{/, 'the item is resolved per Session');
-  assert.match(entry, /return \[\];/, 'an ordinary Session contributes no item');
-  assert.equal((entry.match(/name: 'sidebar\.workspaces'/g) ?? []).length, 0);
+  assert.equal((entry.match(/session\.row\.action/g) ?? []).length, 0);
+  assert.equal((entry.match(/contextMenus/g) ?? []).length, 0);
+  assert.equal(entry.includes('openInEditing'), false);
+});
+
+test('the one sidebar contribution is the view-menu filter', () => {
+  const entry = read('src/studio-entry.js');
+  assert.match(entry, /createProjectFilter\(\{/);
+  assert.match(entry, /projectFilter\.start\(\)/);
+  const filter = read('src/project-filter.mjs');
+  assert.match(filter, /viewOptionsMenu/, 'the entry is appended to the shipped menu');
+  assert.match(filter, /data-row-key\^="session:"/, 'rows are hidden by their own key');
 });
 
 test('the video panel is still the only conversation-area panel the plugin adds', () => {

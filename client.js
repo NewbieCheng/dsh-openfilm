@@ -550,106 +550,14 @@
     };
   }
 
-  // src/session-actions.mjs
-  var STYLE_TAG = "no996-openfilm-session-action";
-  var CSS = `
-.nof-session-action{width:20px;height:20px;padding:0;border:0;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-tertiary);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
-.nof-session-action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.nof-session-action:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
-.nof-session-action-menu{display:block;width:100%;padding:6px 8px;border:0;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-primary);text-align:left;font:inherit;font-size:12.5px;line-height:20px;cursor:pointer}
-.nof-session-action-menu:hover{background:var(--dsw-alias-interactive-bg-hover)}
-`;
-  function ensureSessionActionStyles(doc = typeof document === "undefined" ? void 0 : document) {
-    if (!doc || doc.querySelector(`style[data-no996="${STYLE_TAG}"]`)) return;
-    const tag = doc.createElement("style");
-    tag.dataset.no996 = STYLE_TAG;
-    tag.textContent = CSS;
-    doc.head.appendChild(tag);
-  }
-  function discoverRowButtonClass(doc = typeof document === "undefined" ? void 0 : document) {
-    if (!doc) return null;
-    const tag = doc.querySelector('style[data-plugin-css$="Rows.module.css"]');
-    const text = tag?.textContent ?? "";
-    const match = /\.([A-Za-z][\w-]*)_iconButton\b/.exec(text);
-    return match ? `${match[1]}_iconButton` : null;
-  }
-  function createSessionActions(React, deps) {
-    const { t, store, openInEditing, primitives, report } = deps;
-    const h = React.createElement;
-    const MenuItemButton = primitives?.MenuItemButton ?? null;
-    const buttonClass = discoverRowButtonClass() ?? "nof-session-action";
-    ensureSessionActionStyles();
-    const icon = () => h(
-      "svg",
-      {
-        width: 14,
-        height: 14,
-        viewBox: "0 0 24 24",
-        fill: "none",
-        "aria-hidden": true
-      },
-      h("rect", { x: 3.5, y: 5, width: 17, height: 13, rx: 2.5, stroke: "currentColor", strokeWidth: 1.6 }),
-      h("path", { d: "m10.5 9 4.5 2.6-4.5 2.6V9Z", fill: "currentColor" })
-    );
-    const useProject = (sessionId) => {
-      const [, bump] = React.useState(0);
-      React.useEffect(() => store.subscribe(() => bump((value) => value + 1)), []);
-      return store.projectOf(sessionId);
-    };
-    function RowAction({ sessionId }) {
-      const project = useProject(sessionId);
-      try {
-        report?.(String(sessionId), { mapped: Boolean(project) });
-      } catch {
-      }
-      if (!project) return null;
-      const label = t("openInEditing");
-      return h("button", {
-        type: "button",
-        className: buttonClass,
-        title: label,
-        "aria-label": label,
-        onClick: (event) => {
-          event.stopPropagation();
-          openInEditing(project.projectId);
-        }
-      }, icon());
-    }
-    function MenuItem({ sessionId, useMenuOpenState }) {
-      const project = useProject(sessionId);
-      const setMenuOpen = typeof useMenuOpenState === "function" ? useMenuOpenState()[1] : () => {
-      };
-      if (!project) return null;
-      const label = t("openInEditing");
-      if (MenuItemButton) {
-        return h(MenuItemButton, {
-          separatorBefore: true,
-          onSelect: () => {
-            setMenuOpen(false);
-            openInEditing(project.projectId);
-          }
-        }, label);
-      }
-      return h("button", {
-        type: "button",
-        className: "nof-session-action-menu",
-        onClick: () => {
-          setMenuOpen(false);
-          openInEditing(project.projectId);
-        }
-      }, label);
-    }
-    return { RowAction, MenuItem };
-  }
-
   // src/project-filter.mjs
   var STORAGE_KEY = "no996.openfilm.filter.projects";
-  var STYLE_TAG2 = "no996-openfilm-project-filter";
+  var STYLE_TAG = "no996-openfilm-project-filter";
   var FLAG = "data-no996-projects";
   var MARK = "data-no996-project";
-  var CSS2 = `
+  var CSS = `
 html[${FLAG}="on"] [data-row-key^="session:"]:not([${MARK}]){display:none!important}
-html[${FLAG}="on"] [data-row-key^="workspace:"][data-no996-empty]{display:none!important}
+html[${FLAG}="on"] [data-no996-empty]{display:none!important}
 `;
   function readProjectFilter(storage) {
     try {
@@ -666,8 +574,8 @@ html[${FLAG}="on"] [data-row-key^="workspace:"][data-no996-empty]{display:none!i
   }
   function projectSessionIds(payload) {
     const ids = /* @__PURE__ */ new Set();
-    for (const project of payload?.projects ?? []) {
-      if (typeof project?.sessionId === "string" && project.sessionId) ids.add(project.sessionId);
+    for (const id of payload?.hidden ?? payload?.hiddenSessionIds ?? []) {
+      if (typeof id === "string" && id) ids.add(id);
     }
     return ids;
   }
@@ -680,8 +588,8 @@ html[${FLAG}="on"] [data-row-key^="workspace:"][data-no996-empty]{display:none!i
     let scheduled = false;
     let ids = projectSessionIds(store.snapshot());
     const style = doc.createElement("style");
-    style.dataset.no996 = STYLE_TAG2;
-    style.textContent = CSS2;
+    style.dataset.no996 = STYLE_TAG;
+    style.textContent = CSS;
     doc.head.appendChild(style);
     const applyFlag = () => {
       doc.documentElement.setAttribute(FLAG, on ? "on" : "off");
@@ -694,12 +602,11 @@ html[${FLAG}="on"] [data-row-key^="workspace:"][data-no996-empty]{display:none!i
         if (project) row.setAttribute(MARK, "1");
         else row.removeAttribute(MARK);
       }
-      for (const header of doc.querySelectorAll('[data-row-key^="workspace:"]')) {
-        const section = header.parentElement;
-        const sessions = section ? [...section.querySelectorAll('[data-row-key^="session:"]')] : [];
+      for (const section of doc.querySelectorAll('[class*="_groupSection"]')) {
+        const sessions = [...section.querySelectorAll('[data-row-key^="session:"]')];
         const anyProject = sessions.some((row) => ids.has(sessionKey(row).slice("session:".length)));
-        if (on && sessions.length > 0 && !anyProject) header.setAttribute("data-no996-empty", "1");
-        else header.removeAttribute("data-no996-empty");
+        if (on && sessions.length > 0 && !anyProject) section.setAttribute("data-no996-empty", "1");
+        else section.removeAttribute("data-no996-empty");
       }
     };
     const sync = () => {
@@ -793,8 +700,6 @@ html[${FLAG}="on"] [data-row-key^="workspace:"][data-no996-empty]{display:none!i
       const PANEL = "no996-openfilm";
       const en = {
         panel: "Video studio",
-        openInEditing: "Open in the editing area",
-        openInEditingHint: "Show this project in the video studio",
         projectsOnly: "Projects only",
         studioLoading: "Starting OpenFilm Studio\u2026",
         studioFailed: "Unable to start OpenFilm Studio.",
@@ -815,8 +720,6 @@ html[${FLAG}="on"] [data-row-key^="workspace:"][data-no996-empty]{display:none!i
       };
       const zh = {
         panel: "\u89C6\u9891\u521B\u4F5C",
-        openInEditing: "\u5728\u526A\u8F91\u7D20\u6750\u533A\u6253\u5F00",
-        openInEditingHint: "\u5728\u89C6\u9891\u521B\u4F5C\u9762\u677F\u91CC\u6253\u5F00\u8FD9\u4E2A\u9879\u76EE",
         projectsOnly: "\u53EA\u770B\u89C6\u9891\u521B\u4F5C\u9879\u76EE",
         studioLoading: "\u6B63\u5728\u542F\u52A8 OpenFilm \u5DE5\u4F5C\u53F0\u2026",
         studioFailed: "\u65E0\u6CD5\u542F\u52A8 OpenFilm \u5DE5\u4F5C\u53F0\u3002",
@@ -919,13 +822,6 @@ html[${FLAG}="on"] [data-row-key^="workspace:"][data-no996-empty]{display:none!i
         apply(ctx) {
           ctx.effect(() => ctx.locale.register(NS, { en, zh }), "openfilm: dictionaries");
           const t = ctx.locale.bind(NS);
-          const primitives = (() => {
-            try {
-              return require2("@deepseek-ai/dsh-client-ui-primitives");
-            } catch {
-              return {};
-            }
-          })();
           const fetchArea = async () => {
             if (DESKTOP_PROTOCOL) return { projects: [], hiddenSessionIds: [] };
             const response = await fetch("/api/no996-openfilm/area", { credentials: "same-origin", cache: "no-store" });
@@ -961,70 +857,6 @@ html[${FLAG}="on"] [data-row-key^="workspace:"][data-no996-empty]{display:none!i
             report
           });
           projectFilter.start();
-          const { RowAction, MenuItem } = createSessionActions(React, {
-            t,
-            store: areaStore,
-            primitives,
-            openInEditing: (projectId) => {
-              areaBus.navigate(projectId);
-              selectPanel();
-            },
-            report
-          });
-          ctx.slots.inject("sidebar.workspaces.session.row.action", () => ctx.slots.register({
-            name: "sidebar.workspaces.session.row.action",
-            id: "no996-openfilm-open-in-editing",
-            order: 400,
-            locale: NS
-          }, RowAction));
-          const menus = (() => {
-            try {
-              return ctx.get?.("contextMenus");
-            } catch {
-              return void 0;
-            }
-          })();
-          report("menu-service", { found: Boolean(menus && typeof menus.register === "function") });
-          if (menus && typeof menus.register === "function") {
-            ctx.effect(() => menus.register({
-              id: "no996-openfilm.open-in-editing",
-              target: "session",
-              order: 350,
-              observe: () => [areaStore],
-              resolve: ({ sessionId }) => {
-                const project = areaStore.projectOf(sessionId);
-                report(`menu-resolve:${sessionId}`, { mapped: Boolean(project) });
-                if (!project) return [];
-                return [{
-                  id: "open-in-editing",
-                  label: t("openInEditing"),
-                  separatorBefore: true,
-                  run: () => {
-                    areaBus.navigate(project.projectId);
-                    selectPanel();
-                  }
-                }];
-              }
-            }), "openfilm: session menu");
-            report("menu-registered", { ok: true });
-          } else {
-            ctx.slots.inject("sidebar.workspaces.session.menu.item", () => ctx.slots.register({
-              name: "sidebar.workspaces.session.menu.item",
-              id: "no996-openfilm-open-in-editing",
-              order: 400,
-              locale: NS
-            }, MenuItem));
-          }
-          const selectPanel = () => {
-            const layout = ctx.get?.("layout");
-            if (!layout || typeof layout.selectPanel !== "function") return false;
-            try {
-              layout.selectPanel(PANEL);
-              return true;
-            } catch {
-              return false;
-            }
-          };
           ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PANEL, locale: NS }, PanelSeat));
           ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: PANEL, order: 21, locale: NS, label: () => t("panel") }, PanelIcon));
           ctx.slots.inject("shell.overlay", () => ctx.slots.register({ name: "shell.overlay", id: "no996-openfilm-panel", order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));

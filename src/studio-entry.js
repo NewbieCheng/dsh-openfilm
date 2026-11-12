@@ -1,8 +1,6 @@
 import { createStudioPanel } from './studio-panel.mjs';
 import { createActivationStore } from './panel-keepalive.mjs';
-import { areaBus } from './area-bus.mjs';
 import { createAreaStore } from './area-store.mjs';
-import { createSessionActions } from './session-actions.mjs';
 import { createProjectFilter } from './project-filter.mjs';
 
 window.__ModuleLoader__.load({
@@ -14,8 +12,6 @@ window.__ModuleLoader__.load({
     const PANEL = 'no996-openfilm';
     const en = {
       panel: 'Video studio',
-      openInEditing: 'Open in the editing area',
-      openInEditingHint: 'Show this project in the video studio',
       projectsOnly: 'Projects only',
       studioLoading: 'Starting OpenFilm Studio…',
       studioFailed: 'Unable to start OpenFilm Studio.',
@@ -27,8 +23,6 @@ window.__ModuleLoader__.load({
     };
     const zh = {
       panel: '视频创作',
-      openInEditing: '在剪辑素材区打开',
-      openInEditingHint: '在视频创作面板里打开这个项目',
       projectsOnly: '只看视频创作项目',
       studioLoading: '正在启动 OpenFilm 工作台…',
       studioFailed: '无法启动 OpenFilm 工作台。',
@@ -122,9 +116,6 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'openfilm: dictionaries');
         const t = ctx.locale.bind(NS);
-        const primitives = (() => {
-          try { return require('@deepseek-ai/dsh-client-ui-primitives'); } catch { return {}; }
-        })();
         const fetchArea = async () => {
           // The desktop page (dsh-app://app) cannot reach /api/... at all; there
           // no Session is known to be a project, so no row action appears.
@@ -160,59 +151,6 @@ window.__ModuleLoader__.load({
           report,
         });
         projectFilter.start();
-        const { RowAction, MenuItem } = createSessionActions(React, {
-          t,
-          store: areaStore,
-          primitives,
-          openInEditing: projectId => {
-            areaBus.navigate(projectId);
-            selectPanel();
-          },
-          report,
-        });
-        // Additive only: the shipped list keeps every native affordance; these two
-        // entries appear on a project's Session row and in its ⋯ menu.
-        ctx.slots.inject('sidebar.workspaces.session.row.action', () => ctx.slots.register({
-          name: 'sidebar.workspaces.session.row.action', id: 'no996-openfilm-open-in-editing', order: 400, locale: NS,
-        }, RowAction));
-        // The session menu's own items are structured contributions, not slot
-        // entries, and that is the path the shipped Pin/Rename/Archive rows take.
-        // Registering the same way is what guarantees the item is in the menu at
-        // all; the legacy slot is kept only for a build without the service.
-        const menus = (() => { try { return ctx.get?.('contextMenus'); } catch { return undefined; } })();
-        report('menu-service', { found: Boolean(menus && typeof menus.register === 'function') });
-        if (menus && typeof menus.register === 'function') {
-          ctx.effect(() => menus.register({
-            id: 'no996-openfilm.open-in-editing',
-            target: 'session',
-            order: 350,
-            observe: () => [areaStore],
-            resolve: ({ sessionId }) => {
-              const project = areaStore.projectOf(sessionId);
-              report(`menu-resolve:${sessionId}`, { mapped: Boolean(project) });
-              if (!project) return [];
-              return [{
-                id: 'open-in-editing',
-                label: t('openInEditing'),
-                separatorBefore: true,
-                run: () => {
-                  areaBus.navigate(project.projectId);
-                  selectPanel();
-                },
-              }];
-            },
-          }), 'openfilm: session menu');
-          report('menu-registered', { ok: true });
-        } else {
-          ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
-            name: 'sidebar.workspaces.session.menu.item', id: 'no996-openfilm-open-in-editing', order: 400, locale: NS,
-          }, MenuItem));
-        }
-        const selectPanel = () => {
-          const layout = ctx.get?.('layout');
-          if (!layout || typeof layout.selectPanel !== 'function') return false;
-          try { layout.selectPanel(PANEL); return true; } catch { return false; }
-        };
         ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL, locale: NS }, PanelSeat));
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PANEL, order: 21, locale: NS, label: () => t('panel') }, PanelIcon));
         // `shell.overlay` is rendered for the whole frame lifetime, so the panel

@@ -17,7 +17,7 @@ const MARK = 'data-no996-project';
 
 const CSS = `
 html[${FLAG}="on"] [data-row-key^="session:"]:not([${MARK}]){display:none!important}
-html[${FLAG}="on"] [data-row-key^="workspace:"][data-no996-empty]{display:none!important}
+html[${FLAG}="on"] [data-no996-empty]{display:none!important}
 `;
 
 export function readProjectFilter(storage) {
@@ -28,11 +28,16 @@ export function writeProjectFilter(storage, on) {
   try { storage?.setItem(STORAGE_KEY, on ? '1' : '0'); } catch { /* private mode */ }
 }
 
-/** Session IDs that belong to a project, from the area store's payload. */
+/**
+ * The project's conversations. The Host already computes this set: every stored
+ * binding plus any catalog Session whose `cwd` is a project folder — the second
+ * half is what catches a conversation that was opened before the binding
+ * existed, which is exactly the row a user points at and calls "my project".
+ */
 export function projectSessionIds(payload) {
   const ids = new Set();
-  for (const project of payload?.projects ?? []) {
-    if (typeof project?.sessionId === 'string' && project.sessionId) ids.add(project.sessionId);
+  for (const id of payload?.hidden ?? payload?.hiddenSessionIds ?? []) {
+    if (typeof id === 'string' && id) ids.add(id);
   }
   return ids;
 }
@@ -68,14 +73,14 @@ export function createProjectFilter({ store, storage, doc = typeof document === 
       if (project) row.setAttribute(MARK, '1');
       else row.removeAttribute(MARK);
     }
-    // A Workspace header with nothing left to show goes away with its rows, so
-    // the list does not turn into a column of empty folders.
-    for (const header of doc.querySelectorAll('[data-row-key^="workspace:"]')) {
-      const section = header.parentElement;
-      const sessions = section ? [...section.querySelectorAll('[data-row-key^="session:"]')] : [];
+    // The shipped browser wraps each Workspace group in its own section element;
+    // a group with no project conversation left is hidden whole, so the list does
+    // not turn into a column of empty folders.
+    for (const section of doc.querySelectorAll('[class*="_groupSection"]')) {
+      const sessions = [...section.querySelectorAll('[data-row-key^="session:"]')];
       const anyProject = sessions.some(row => ids.has(sessionKey(row).slice('session:'.length)));
-      if (on && sessions.length > 0 && !anyProject) header.setAttribute('data-no996-empty', '1');
-      else header.removeAttribute('data-no996-empty');
+      if (on && sessions.length > 0 && !anyProject) section.setAttribute('data-no996-empty', '1');
+      else section.removeAttribute('data-no996-empty');
     }
   };
 

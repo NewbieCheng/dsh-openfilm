@@ -26,16 +26,10 @@ test('a hostile or absent storage never throws', () => {
   assert.doesNotThrow(() => writeProjectFilter(broken, true));
 });
 
-test('only sessions bound to a project are kept', () => {
-  const ids = projectSessionIds({
-    projects: [
-      { projectId: 'a', sessionId: 'session-1' },
-      { projectId: 'b', sessionId: 'session-2' },
-      { projectId: 'c', sessionId: null },
-      { projectId: 'd' },
-    ],
-  });
-  assert.deepEqual([...ids].sort(), ['session-1', 'session-2']);
+test('the Host\'s project-conversation set is what gets kept', () => {
+  const ids = projectSessionIds({ hidden: ['session-1', 'session-2'], projects: [{ projectId: 'a', sessionId: 'session-1' }] });
+  assert.deepEqual([...ids].sort(), ['session-1', 'session-2'], 'a cwd-matched conversation counts too');
+  assert.equal(projectSessionIds({ hiddenSessionIds: ['session-3'] }).has('session-3'), true);
   assert.equal(projectSessionIds(undefined).size, 0);
 });
 
