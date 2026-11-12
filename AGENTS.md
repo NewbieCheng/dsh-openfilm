@@ -8,7 +8,7 @@
 
 ## 0. 一句话
 
-把官方 **OpenFilm 0.3.2** 工作台封装成可分发的 **DSH 插件**：Host 拉起官方 Studio 并反向代理，浏览器用 `shell.overlay` 常驻 iframe，官方对话经 Host RPC 桥到 DSH 会话（模型、审批、会话都是 DSH 的）。当前 `0.13.0`（上一个发布包是 `0.12.1`）。仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。
+把官方 **OpenFilm 0.3.2** 工作台封装成可分发的 **DSH 插件**：Host 拉起官方 Studio 并反向代理，浏览器用 `shell.overlay` 常驻 iframe，官方对话由 Host 交给 `dsh --profile acp` 子进程（会话、模型、审批、思考、续聊都是 DSH 的）。当前 `0.13.0`（上一个发布包是 `0.12.1`）。仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。
 
 ---
 
@@ -49,7 +49,7 @@
 |---|---|
 | Host | `index.js`、`cordis.patch.yml`、`src/studio-controller.mjs` |
 | 运行时/代理 | `src/studio-runtime.mjs`、`src/studio-proxy.mjs`、`src/official-shell.mjs` |
-| 对话桥 | `src/official-agent-*`、`official-chat-*`、`official-event-*`、`official-facade.mjs` |
+| 对话桥 | `src/acp-client.mjs`、`acp-agent-service.mjs`、`acp-session-store.mjs`、`mcp-server.mjs`、`project-instructions.mjs`（ACP）；`official-chat-*`、`official-event-*`、`official-facade.mjs`、`official-permission.mjs`（外层） |
 | 影片工具 | `src/film-*`、`draft-*`、`timeline-*`、`*-tool.mjs` |
 | 模板/动效 | `vendor/templates/**`、`vendor/motion/**` |
 | 界面注入 | `src/shell-extras.mjs` + `assets/shell-ui.js` / `shell-login.js` / `login-city.js` |
@@ -122,7 +122,7 @@ node --test tests/*.test.mjs       # 全库（数量以输出为准，不抄）
 
 `POST /api/no996-openfilm/diagnose {projectId}`（面板静默 20 秒后自动贴出）；`%TEMP%\dsh-openfilm\plugin.log`（JSON Lines，自动脱敏）；`%TEMP%\dsh-openfilm-frames.jsonl`（每轮覆盖）；`%TEMP%\dsh-openfilm-preset.json`；`%TEMP%\dsh-openfilm-host.json`（重载后 `startedAt` 必须更新）。
 
-**不要靠猜分片形状**：`official-agent-events.mjs` 的 bug 必须用真实 `type` 名反推。
+**不要靠猜形状**：ACP 的 `session/update` / `session/request_permission` 字段必须用真机日志或 `fake-acp-agent.mjs` 校准；旧路径的 `official-agent-events.mjs` 已不是主线。
 
 ---
 
@@ -138,7 +138,7 @@ node --test tests/*.test.mjs       # 全库（数量以输出为准，不抄）
 
 ## 9. 当前未完成（别写进"已完成"）
 
-账号余额与引流卡收口；官方壳 O1/O2 真机验收、素材入库确认、O3 注入收口；完整真机验收按 `docs/TEST-CHECKLIST.md`；官方输入框部分场景只读；默认权限不是完全访问；模板字体子集化；技能卡；口播转写的 Mac 验收与一键安装。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
+账号余额与引流卡收口；官方壳 O1/O2 真机验收、素材入库确认、O3 注入收口；ACP 面板真机验收（`docs/TEST-CHECKLIST.md` 第 11 步：发一句、切模型、拖图、侧栏同一会话）与验收后的旧路径删除（`docs/ARCHITECTURE.md §10`）；官方输入框部分场景只读；模板字体子集化；技能卡；口播转写的 Mac 验收与一键安装。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
 
 ---
 
