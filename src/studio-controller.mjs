@@ -656,7 +656,13 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       // from the environment at boot, so the child is spawned with the preset the
       // person chose here.
       permissionMode: async projectId => {
-        try { const store = await permissions(); return store?.remembered?.(projectId); } catch { return undefined; }
+        // A project with no recorded decision starts the way the bridge always
+        // started: full access. The menu's own default must not disagree with the
+        // sandbox the child actually boots with.
+        try {
+          const store = await permissions();
+          return store?.remembered?.(projectId) ?? store?.defaultPreset?.() ?? 'danger-full-access';
+        } catch { return undefined; }
       },
       // A fresh child gets a fresh bearer token for this Host's MCP endpoint, so
       // the film tools travel with the conversation (they live here, not there).
