@@ -42,7 +42,7 @@ export function discoverRowButtonClass(doc = typeof document === 'undefined' ? u
  * @param {object} [deps.primitives]
  */
 export function createSessionActions(React, deps) {
-  const { t, store, openInEditing, primitives } = deps;
+  const { t, store, openInEditing, primitives, report } = deps;
   const h = React.createElement;
   const MenuItemButton = primitives?.MenuItemButton ?? null;
   const buttonClass = discoverRowButtonClass() ?? 'nof-session-action';
@@ -61,6 +61,7 @@ export function createSessionActions(React, deps) {
 
   function RowAction({ sessionId }) {
     const project = useProject(sessionId);
+    try { report?.(String(sessionId), { mapped: Boolean(project) }); } catch { /* diagnostics only */ }
     if (!project) return null;
     const label = t('openInEditing');
     return h('button', {

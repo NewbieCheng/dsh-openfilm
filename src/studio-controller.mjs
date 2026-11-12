@@ -34,6 +34,7 @@ import { createDshAskAgent } from './dsh-ai.mjs';
 import { reportPresetStatus } from './preset-report.mjs';
 import { openProjectConversations } from './project-conversation.mjs';
 import { createAreaRoute } from './area-route.mjs';
+import { createClientLogRoute } from './client-log-route.mjs';
 import { createGuideTool } from './guide-tool.mjs';
 import { createStudioHttp } from './studio-http.mjs';
 import { createFrameTool } from './frame-tool.mjs';
@@ -941,6 +942,15 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     // One line of evidence that the sidebar's data route is really mounted: a
     // 401/403 from outside cannot tell "mounted and refusing" from "missing".
     void log.info('area-route', { mounted: true, path: '/api/no996-openfilm/area' });
+    // The browser half has no way to write to this log; without it a missing
+    // menu item is indistinguishable from a browser that still runs old code.
+    unregisterArea = trackRoute(ctx.webServer.register(createClientLogRoute({
+      admit: req => {
+        const admission = ctx.connection.admit({ headers: req.headers });
+        return !('rejection' in admission) && admission.peer.id === ctx.connection.browserPeer.id;
+      },
+      log,
+    })));
   }
   unregister = trackRoute(ctx.webServer.register({
     kind: 'exact', path: '/api/no996-openfilm/diagnose',

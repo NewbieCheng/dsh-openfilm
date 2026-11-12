@@ -130,7 +130,25 @@ window.__ModuleLoader__.load({
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return response.json();
         };
-        const areaStore = createAreaStore({ fetchArea });
+        // Evidence for the GUI: a page that runs old code and a page whose menu
+        // registration was refused look identical from the outside.
+        const reported = new Set();
+        const report = (event, detail) => {
+          if (reported.has(event)) return;
+          reported.add(event);
+          try {
+            void fetch('/api/no996-openfilm/client-log', {
+              method: 'POST', credentials: 'same-origin', keepalive: true,
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ event, detail }),
+            }).catch(() => {});
+          } catch { /* diagnostics must never break the UI */ }
+        };
+        report('client-apply', { panel: PANEL });
+        const areaStore = createAreaStore({
+          fetchArea,
+          onLoad: info => report('store-loaded', info),
+        });
         areaStore.start();
         const { RowAction, MenuItem } = createSessionActions(React, {
           t,
@@ -140,6 +158,7 @@ window.__ModuleLoader__.load({
             areaBus.navigate(projectId);
             selectPanel();
           },
+          report,
         });
         // Additive only: the shipped list keeps every native affordance; these two
         // entries appear on a project's Session row and in its ⋯ menu.
@@ -151,6 +170,7 @@ window.__ModuleLoader__.load({
         // Registering the same way is what guarantees the item is in the menu at
         // all; the legacy slot is kept only for a build without the service.
         const menus = (() => { try { return ctx.get?.('contextMenus'); } catch { return undefined; } })();
+        report('menu-service', { found: Boolean(menus && typeof menus.register === 'function') });
         if (menus && typeof menus.register === 'function') {
           ctx.effect(() => menus.register({
             id: 'no996-openfilm.open-in-editing',
@@ -159,6 +179,7 @@ window.__ModuleLoader__.load({
             observe: () => [areaStore],
             resolve: ({ sessionId }) => {
               const project = areaStore.projectOf(sessionId);
+              report(`menu-resolve:${sessionId}`, { mapped: Boolean(project) });
               if (!project) return [];
               return [{
                 id: 'open-in-editing',
@@ -171,6 +192,7 @@ window.__ModuleLoader__.load({
               }];
             },
           }), 'openfilm: session menu');
+          report('menu-registered', { ok: true });
         } else {
           ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
             name: 'sidebar.workspaces.session.menu.item', id: 'no996-openfilm-open-in-editing', order: 400, locale: NS,

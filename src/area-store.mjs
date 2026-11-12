@@ -3,7 +3,7 @@
 // area payload and never opens, creates or renames anything.
 import { parseAreaPayload } from './area-client.mjs';
 
-export function createAreaStore({ fetchArea, intervalMs = 20000, now = () => Date.now() }) {
+export function createAreaStore({ fetchArea, intervalMs = 20000, now = () => Date.now(), onLoad }) {
   let payload = { projects: [], hidden: [] };
   const bySession = new Map();
   const listeners = new Set();
@@ -20,6 +20,7 @@ export function createAreaStore({ fetchArea, intervalMs = 20000, now = () => Dat
       if (project.sessionId) bySession.set(project.sessionId, project);
     }
     lastAt = now();
+    try { onLoad?.({ projects: payload.projects.length, hidden: payload.hidden.length }); } catch { /* diagnostics only */ }
     publish();
   };
   const load = () => fetchArea().then(absorb).catch(() => {});

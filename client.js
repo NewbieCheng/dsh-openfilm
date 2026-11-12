@@ -492,7 +492,7 @@
   }
 
   // src/area-store.mjs
-  function createAreaStore({ fetchArea, intervalMs = 2e4, now = () => Date.now() }) {
+  function createAreaStore({ fetchArea, intervalMs = 2e4, now = () => Date.now(), onLoad }) {
     let payload = { projects: [], hidden: [] };
     const bySession = /* @__PURE__ */ new Map();
     const listeners = /* @__PURE__ */ new Set();
@@ -513,6 +513,10 @@
         if (project.sessionId) bySession.set(project.sessionId, project);
       }
       lastAt = now();
+      try {
+        onLoad?.({ projects: payload.projects.length, hidden: payload.hidden.length });
+      } catch {
+      }
       publish();
     };
     const load = () => fetchArea().then(absorb).catch(() => {
@@ -570,7 +574,7 @@
     return match ? `${match[1]}_iconButton` : null;
   }
   function createSessionActions(React, deps) {
-    const { t, store, openInEditing, primitives } = deps;
+    const { t, store, openInEditing, primitives, report } = deps;
     const h = React.createElement;
     const MenuItemButton = primitives?.MenuItemButton ?? null;
     const buttonClass = discoverRowButtonClass() ?? "nof-session-action";
@@ -594,6 +598,10 @@
     };
     function RowAction({ sessionId }) {
       const project = useProject(sessionId);
+      try {
+        report?.(String(sessionId), { mapped: Boolean(project) });
+      } catch {
+      }
       if (!project) return null;
       const label = t("openInEditing");
       return h("button", {
@@ -781,7 +789,27 @@
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             return response.json();
           };
-          const areaStore = createAreaStore({ fetchArea });
+          const reported = /* @__PURE__ */ new Set();
+          const report = (event, detail) => {
+            if (reported.has(event)) return;
+            reported.add(event);
+            try {
+              void fetch("/api/no996-openfilm/client-log", {
+                method: "POST",
+                credentials: "same-origin",
+                keepalive: true,
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ event, detail })
+              }).catch(() => {
+              });
+            } catch {
+            }
+          };
+          report("client-apply", { panel: PANEL });
+          const areaStore = createAreaStore({
+            fetchArea,
+            onLoad: (info) => report("store-loaded", info)
+          });
           areaStore.start();
           const { RowAction, MenuItem } = createSessionActions(React, {
             t,
@@ -790,7 +818,8 @@
             openInEditing: (projectId) => {
               areaBus.navigate(projectId);
               selectPanel();
-            }
+            },
+            report
           });
           ctx.slots.inject("sidebar.workspaces.session.row.action", () => ctx.slots.register({
             name: "sidebar.workspaces.session.row.action",
@@ -805,6 +834,7 @@
               return void 0;
             }
           })();
+          report("menu-service", { found: Boolean(menus && typeof menus.register === "function") });
           if (menus && typeof menus.register === "function") {
             ctx.effect(() => menus.register({
               id: "no996-openfilm.open-in-editing",
@@ -813,6 +843,7 @@
               observe: () => [areaStore],
               resolve: ({ sessionId }) => {
                 const project = areaStore.projectOf(sessionId);
+                report(`menu-resolve:${sessionId}`, { mapped: Boolean(project) });
                 if (!project) return [];
                 return [{
                   id: "open-in-editing",
@@ -825,6 +856,7 @@
                 }];
               }
             }), "openfilm: session menu");
+            report("menu-registered", { ok: true });
           } else {
             ctx.slots.inject("sidebar.workspaces.session.menu.item", () => ctx.slots.register({
               name: "sidebar.workspaces.session.menu.item",
