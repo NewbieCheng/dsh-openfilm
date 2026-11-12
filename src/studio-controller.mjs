@@ -564,6 +564,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     }
     return turnPolicyPromise;
   };
+  const acpSessions = createAcpSessionStore({ file: join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'no996-openfilm', 'acp-sessions.json') });
   // The Session bound to a project, resolved in the Host from the binding table.
   // Null when the project has no conversation yet — reading a permission must
   // never create one.
@@ -577,6 +578,14 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // creates a Session — reading chat history must not have that side effect.
   const archiveState = async projectId => {
     await verifyOfficialProject(projectId);
+    // Under ACP the conversation lives in the child; the only Session id this
+    // Host knows is the one it recorded when the child created it. Falling back
+    // to the old binding keeps a project that still has a Host-side Session
+    // working through the same archive set.
+    const acp = acpSessions.get(projectId);
+    if (acp && typeof acp.sessionId === 'string') {
+      return { sessionId: acp.sessionId, archived: archive.isArchived(acp.sessionId) === true, available: archive.available };
+    }
     const opened = await projectConversations();
     const binding = opened.peek(projectId);
     if (!binding || binding.projectId !== projectId || typeof binding.sessionId !== 'string') {
@@ -651,7 +660,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // shell's own ACP surface (thinking, tools, resume, model menu) is what the page
   // draws. NO996_OPENFILM_ACP=0 keeps the old in-process bridge as an escape hatch
   // until the ACP path is verified on a real GUI.
-  const acpSessions = createAcpSessionStore({ file: join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'no996-openfilm', 'acp-sessions.json') });
   const acpAgentService = acpEnabled()
     ? createAcpAgentService({
       verifier: verifyOfficialProject,
