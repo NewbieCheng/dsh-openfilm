@@ -50,6 +50,9 @@
     "locale",
     "icon.svg",
     "README.md",
+    "CHANGELOG.md",
+    "AGENTS.md",
+    "docs",
     "LICENSE"
   ],
   "dsh": {
