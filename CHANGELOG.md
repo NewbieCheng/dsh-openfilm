@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.11.3 —— 项目对话真正坐进项目工作区
+
+- 根因：DSH 0.11 的 `workspace/create` 返回 `{ workspace: { workspaceId, sessionIds }, created }`，插件按旧的扁平 `id` 读，永远拿不到 id（日志里每次打开项目都是 `WORKSPACE_CREATE_NO_ID`），于是退回 `cwd` 建会话；而 DSH 把一个会话算进工作区只认 `workspace.sessionIds`（`SessionSummary` 上没有 `workspaceId`），所以每个项目的对话都落在「未分组」。
+- 修复：按真实契约解包（旧扁平形状继续兼容）；新会话一律带 `workspaceId` 创建；创建后回读 `workspace.sessionIds` 当作归组证据，不再依赖并不存在的 `attachSession`。
+- 存量：绑定的会话还在但工作区不认领时——空会话（`blank`）换一条归组的新会话，旧会话原样保留；有历史绝不自动换绑，只在日志报 `WORKSPACE_SESSION_UNGROUPED`。
+- 诊断：`workspace-join` 带 `step`/`code`；换绑记 `project-conversation-rebound`（旧会话 → 新会话）；同一条件每个项目只报一次。
+- 测试：`tests/project-conversation.test.mjs` 改成真实返回形状，覆盖旧扁平兼容、回读归组、未确认不重试、有历史不换绑、空会话归位、catalog 不可读不重复建。
+- 边界：DSH 没有"把已有会话塞进工作区"的 API，非空的旧会话只能留在未分组；Host 代码要重启 DSH 才生效（管理器返回 `restart-required`），重启后的真机归组待复测。
+
 ## 0.11.2 —— Mac 上的删除文案
 
 - 删除失败的提示按平台区分：只有 Windows 说"被 DSH 会话或文件监视占用"；macOS 说"检查访达完全磁盘访问，或关闭仍在使用它的程序"；其他平台给通用说法。

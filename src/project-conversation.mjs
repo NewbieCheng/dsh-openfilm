@@ -10,8 +10,8 @@ const ID = /^[A-Za-z0-9_-]{6,40}$/;
  * Whether two paths name the same directory.
  *
  * `path.resolve` alone is not enough on Windows: it keeps the case it was given,
- * while the same folder can come back as `F:\Dev\X` from the project lookup and
- * `f:\dev\x` from a Session record. A case mismatch used to read as "this Session
+ * while the same folder can come back as `F:\\Dev\\X` from the project lookup and
+ * `f:\\dev\\x` from a Session record. A case mismatch used to read as "this Session
  * is not the project's", so every open created another empty conversation — the
  * stray "新建会话" under 无工作区.
  */
@@ -21,6 +21,31 @@ function samePath(left, right) {
     return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
   };
   return normal(left) === normal(right);
+}
+
+/**
+ * Read one Workspace registration from whatever `workspace/create` answers.
+ *
+ * DSH 0.11 answers the Remote value `{ workspace: { workspaceId, sessionIds, … }, created }`.
+ * Earlier shapes answered the Workspace itself, so both stay readable. The shape
+ * matters beyond the field names: membership lives only in `sessionIds` — a
+ * `SessionSummary` carries no `workspaceId`, so an ungrouped conversation cannot
+ * be proven grouped from the session catalog alone.
+ */
+function workspaceView(created) {
+  if (!created || typeof created !== 'object') return undefined;
+  const view = created.workspace && typeof created.workspace === 'object' ? created.workspace : created;
+  const id = typeof view.workspaceId === 'string' && view.workspaceId ? view.workspaceId
+    : typeof view.id === 'string' && view.id ? view.id
+      : typeof created.workspaceId === 'string' && created.workspaceId ? created.workspaceId
+        : undefined;
+  if (!id) return undefined;
+  // Omitted when the deployment does not expose the projection; an empty array
+  // is a real answer ("no Session is accounted to this Workspace").
+  const sessionIds = Array.isArray(view.sessionIds)
+    ? view.sessionIds.filter(sessionId => typeof sessionId === 'string')
+    : undefined;
+  return { id, sessionIds };
 }
 
 /**
@@ -56,6 +81,12 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
   const inFlight = new Map();
   // Per-project: the Session could not be proven to be under its Workspace.
   const degraded = new Map();
+  // A blank ungrouped conversation is replaced once. Retrying after that would
+  // spin against a Host that keeps answering the same way.
+  const rebound = new Set();
+  // Codes that describe a standing condition are logged once per project, not
+  // once per open: the panel opens a project many times a minute.
+  const reportedOnce = new Set();
 
   /** One place for the grouping trail: a silent catch is what hid this bug for a release. */
   function report(event, fields) {
@@ -63,6 +94,14 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
       try { onFailure(event, fields); } catch { /* reporting must not break the open */ }
     }
   }
+
+  function reportOnce(projectId, event, fields) {
+    const key = `${projectId}\u0000${event}\u0000${fields?.code ?? ''}`;
+    if (reportedOnce.has(key)) return;
+    reportedOnce.add(key);
+    report(event, fields);
+  }
+
   let closing = false;
   let closePromise;
 
@@ -80,31 +119,46 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
     live.set(sessionId, { projectId, path: projectPath, available: true, archived: extra.archived === true });
   }
 
-  async function sessionExists(sessionId, projectPath, workspaceId) {
-    // 'archived': confirmed present but hidden from grouping surfaces; 'live':
-    // present and usable; false: confirmed absent or foreign; undefined: catalog
-    // could not be read. An unreadable catalog must not spawn a duplicate
-    // conversation on every open, so the stored hint is kept.
+  /** The session catalog, read once per decision; unreadable is not "absent". */
+  async function catalog() {
     try {
       const page = await ctx.sessionController.list({}, AbortSignal.timeout(15000));
-      const items = Array.isArray(page?.items) ? page.items : null;
-      if (!items) return undefined;
-      const item = items.find(candidate => candidate?.sessionId === sessionId);
-      if (!item || item.agentAvailable === false || item.origin === 'subagent') return false;
-      // Membership is proof too: a Session created inside the project's Workspace
-      // may report the Workspace rather than a cwd.
-      const inWorkspace = Boolean(workspaceId) && item.workspaceId === workspaceId;
-      const inFolder = typeof item.cwd === 'string' && samePath(item.cwd, projectPath);
-      if (!inWorkspace && !inFolder) return false;
-      return { state: isArchived(sessionId) === true ? 'archived' : 'live', title: typeof item.title === 'string' ? item.title.trim() : '' };
+      return Array.isArray(page?.items) ? page.items : undefined;
     } catch { return undefined; }
+  }
+
+  /**
+   * Whether the catalog still carries the project's Session.
+   *
+   * @returns {Promise<false|undefined|{state:'live'|'archived', title:string, blank:boolean}>}
+   *   false: confirmed absent or foreign; undefined: the catalog could not be
+   *   read, so the stored hint must survive; an object: present and usable.
+   */
+  async function sessionFor(sessionId, projectPath, workspace) {
+    const items = await catalog();
+    if (!items) return undefined;
+    const item = items.find(candidate => candidate?.sessionId === sessionId);
+    if (!item || item.agentAvailable === false || item.origin === 'subagent') return false;
+    const inFolder = typeof item.cwd === 'string' && samePath(item.cwd, projectPath);
+    // A Session created inside the project's Workspace may report the Workspace
+    // rather than a cwd, and membership is the stronger proof.
+    const member = memberOf(workspace, sessionId);
+    if (!inFolder && member !== true) return false;
+    const projected = item.projections && typeof item.projections === 'object' ? item.projections.values : undefined;
+    const title = typeof projected?.title === 'string' ? projected.title.trim()
+      : typeof item.title === 'string' ? item.title.trim() : '';
+    return { state: isArchived(sessionId) === true ? 'archived' : 'live', title, blank: item.blank === true };
+  }
+
+  function memberOf(workspace, sessionId) {
+    return workspace?.sessionIds ? workspace.sessionIds.includes(sessionId) : undefined;
   }
 
   async function createSession(canonical, workspace) {
     let sessionId;
-    // A Session that joins the project's Workspace is grouped under that folder;
-    // one that only owns a cwd has no group, which is the stray "新建会话" under
-    // 无工作区. `workspaceId` and `cwd` are exclusive by contract.
+    // `workspaceId` and `cwd` are exclusive by contract. A Session that joins the
+    // Workspace is accounted to it (the sidebar's group); one that only owns a
+    // cwd can never be adopted later — DSH has no attach for an existing Session.
     const request = workspace?.id
       ? { workspaceId: workspace.id, agentPreset: 'openfilm-video-editing' }
       : { cwd: canonical, agentPreset: 'openfilm-video-editing' };
@@ -118,7 +172,7 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
       const wrapped = error('PROJECT_CONVERSATION_CREATE', 'A conversation for this project could not be created');
       wrapped.cause = cause;
       wrapped.detail = detail;
-      if (typeof onFailure === 'function') onFailure('project-conversation-create', { detail, workspace: workspace?.id ? 'workspace' : 'cwd' });
+      report('project-conversation-create', { detail, workspace: workspace?.id ? 'workspace' : 'cwd' });
       throw wrapped;
     }
     if (typeof sessionId !== 'string' || !sessionId.trim()) {
@@ -131,10 +185,11 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
    * Resolve the Workspace that covers the project's folder.
    *
    * `workspace/create` is idempotent over an existing directory, so calling it on
-   * every open is cheap and also repairs a Workspace someone deleted. Its result
-   * is the live Workspace (id, path, title, sessionIds, attachSession), which the
-   * Session then joins. Best-effort: without the controller the project still
-   * opens — it just stays where DSH would put it on its own.
+   * every open is cheap and also repairs a Workspace someone deleted. The value
+   * names the live Workspace and the Sessions accounted to it; that is the same
+   * record the sidebar groups by, so it is also the membership check.
+   * Best-effort: without the controller the project still opens — it just stays
+   * where DSH would put it on its own.
    */
   async function ensureWorkspace(canonical) {
     const controller = typeof ctx?.get === 'function' ? ctx.get('workspaceController') : undefined;
@@ -151,12 +206,12 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
         report('workspace-join', { step: 'create', ok: false, code: 'WORKSPACE_CREATE_EMPTY' });
         return undefined;
       }
-      // The service answers either the live Workspace (`id`, `attachSession`) or a
-      // plain view of it (`workspaceId`); both name the same registration.
-      const id = typeof created.id === 'string' ? created.id
-        : typeof created.workspaceId === 'string' ? created.workspaceId : undefined;
-      if (!id) report('workspace-join', { step: 'create', ok: false, code: 'WORKSPACE_CREATE_NO_ID' });
-      return { id, attachSession: created.attachSession, workspace: created };
+      const workspace = workspaceView(created);
+      if (!workspace) {
+        report('workspace-join', { step: 'create', ok: false, code: 'WORKSPACE_CREATE_NO_ID' });
+        return undefined;
+      }
+      return workspace;
     } catch (cause) {
       report('workspace-join', { step: 'create', ok: false, code: String(cause?.code ?? cause?.message ?? cause).slice(0, 120) });
       return undefined;
@@ -172,66 +227,26 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
   }
 
   /**
-   * Make sure a Session is a member of the Workspace.
-   *
-   * `session/create` joins the Workspace when it is given `workspaceId`, but a
-   * Session bound before that (or created while the registry was unavailable)
-   * has to be attached, otherwise it never leaves the ungrouped pile. Both paths
-   * are attempted and both are best-effort: membership is presentation, and a
-   * failure must not stop the person from working.
-   */
-  async function joinWorkspace(workspace, sessionId) {
-    if (!workspace || typeof workspace.attachSession !== 'function') {
-      if (workspace?.id) report('workspace-join', { step: 'attach', ok: false, code: 'ATTACH_UNAVAILABLE' });
-      return false;
-    }
-    try { await workspace.attachSession(sessionId); return true; } catch (cause) {
-      report('workspace-join', { step: 'attach', ok: false, code: String(cause?.code ?? cause?.message ?? cause).slice(0, 120) });
-      return false;
-    }
-  }
-
-  /**
-   * Whether the catalog says this Session really belongs to `workspaceId`.
+   * Whether the Workspace now accounts this Session, read back from the Host.
    *
    * `create({ workspaceId })` returning an id is not proof of membership: a
    * Session can come back bound to a cwd, or to nothing at all, and that is
-   * exactly the 未分组 case. Reading the catalog back is the only check that
+   * exactly the 未分组 case. Reading the Workspace back is the only check that
    * looks at the same record the sidebar groups by.
    *
-   * @returns {Promise<boolean|undefined>} undefined when the catalog cannot be read
+   * @returns {Promise<'seated'|'ungrouped'|'unknown'>}
    */
-  async function memberOfWorkspace(sessionId, workspaceId) {
-    if (!workspaceId) return undefined;
-    try {
-      const page = await ctx.sessionController.list({}, AbortSignal.timeout(15000));
-      const items = Array.isArray(page?.items) ? page.items : null;
-      if (!items) return undefined;
-      const item = items.find(candidate => candidate?.sessionId === sessionId);
-      if (!item) return undefined;
-      return item.workspaceId === workspaceId;
-    } catch { return undefined; }
+  async function verifySeat(canonical, sessionId) {
+    const workspace = await ensureWorkspace(canonical);
+    if (!workspace) return 'unknown';
+    const member = memberOf(workspace, sessionId);
+    if (member === true) return 'seated';
+    if (member === undefined) return 'unknown';
+    return 'ungrouped';
   }
 
-  /**
-   * Put a Session under its project's Workspace, proving it happened.
-   *
-   * One attach, one read-back, one second attempt at most: a loop here would
-   * spin against a Host that keeps answering the same way.
-   */
-  async function seatSession(workspace, canonical, sessionId) {
-    if (!workspace?.id) return { seated: false, degraded: true };
-    if (await memberOfWorkspace(sessionId, workspace.id) === true) {
-      report('workspace-join', { step: 'verify', ok: true });
-      return { seated: true, degraded: false };
-    }
-    await joinWorkspace(workspace, sessionId);
-    if (await memberOfWorkspace(sessionId, workspace.id) === true) {
-      report('workspace-join', { step: 'verify', ok: true });
-      return { seated: true, degraded: false };
-    }
-    report('workspace-join', { step: 'verify', ok: false, code: 'WORKSPACE_MEMBERSHIP_UNCONFIRMED' });
-    return { seated: false, degraded: true };
+  function seatCode(state) {
+    return state === 'unknown' ? 'WORKSPACE_MEMBERSHIP_UNKNOWN' : 'WORKSPACE_MEMBERSHIP_UNCONFIRMED';
   }
 
   async function store(projectId, canonical, sessionId) {
@@ -243,7 +258,7 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
 
   function checkInput({ projectId, path: projectPath } = {}) {
     if (typeof projectId !== 'string' || !ID.test(projectId) ||
-        typeof projectPath !== 'string' || !path.isAbsolute(projectPath) || projectPath.includes('\0')) {
+        typeof projectPath !== 'string' || !path.isAbsolute(projectPath) || projectPath.includes('\\0')) {
       throw error('PROJECT_CONVERSATION_INPUT', 'A confirmed project ID and absolute path are required');
     }
     return path.resolve(projectPath);
@@ -263,22 +278,54 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
       const marked = await markProjectOpened(canonical);
       if (!marked) report('project-marker', { ok: false, code: 'OPENED_MARKER_UNWRITABLE' });
       if (kept && kept.projectId === projectId && typeof kept.sessionId === 'string' && samePath(kept.path, canonical)) {
-        const found = await sessionExists(kept.sessionId, canonical, workspace?.id);
+        const found = await sessionFor(kept.sessionId, canonical, workspace);
+        if (found === undefined) {
+          // An unreadable catalog must not spawn a duplicate conversation on every
+          // open, so the stored hint is kept and the grouping stays unproven.
+          remember(projectId, canonical, kept.sessionId, { archived: false });
+          return kept.sessionId;
+        }
         if (found !== false) {
-          remember(projectId, canonical, kept.sessionId, { archived: found?.state === 'archived' });
-          // A Session bound before Workspaces were registered still needs to join
-          // one, or it stays in the ungrouped pile forever. Seating it reads the
-          // catalog back, so a silent miss is now a logged miss.
-          const seat = await seatSession(workspace, canonical, kept.sessionId);
-          degraded.set(projectId, seat.degraded);
-          if (found && !found.title) await titleSession(kept.sessionId, canonical);
+          const member = memberOf(workspace, kept.sessionId);
+          if (member !== false) {
+            remember(projectId, canonical, kept.sessionId, { archived: found.state === 'archived' });
+            degraded.set(projectId, member === true ? false : true);
+            if (member === undefined && workspace) {
+              reportOnce(projectId, 'workspace-join', { step: 'verify', ok: false, code: 'WORKSPACE_MEMBERSHIP_UNKNOWN' });
+            }
+            if (!found.title && !found.archived) await titleSession(kept.sessionId, canonical);
+            return kept.sessionId;
+          }
+          // The stored conversation exists but the Workspace does not account it:
+          // that is the 未分组 bug. DSH cannot adopt an existing Session, so a
+          // blank one is left behind in favour of a new, seated one; a Session
+          // with history is never swapped behind the person's back.
+          if (found.blank && !rebound.has(projectId)) {
+            rebound.add(projectId);
+            const sessionId = await createSession(canonical, workspace);
+            await created(sessionId);
+            const seat = await verifySeat(canonical, sessionId);
+            degraded.set(projectId, seat === 'seated' ? false : true);
+            if (seat !== 'seated') report('workspace-join', { step: 'verify', ok: false, code: seatCode(seat) });
+            await titleSession(sessionId, canonical);
+            await store(projectId, canonical, sessionId);
+            report('project-conversation-rebound', { from: kept.sessionId, to: sessionId });
+            return sessionId;
+          }
+          remember(projectId, canonical, kept.sessionId, { archived: found.state === 'archived' });
+          degraded.set(projectId, true);
+          reportOnce(projectId, 'workspace-join', { step: 'verify', ok: false, code: 'WORKSPACE_SESSION_UNGROUPED' });
           return kept.sessionId;
         }
       }
       const sessionId = await createSession(canonical, workspace);
       await created(sessionId);
-      const seat = await seatSession(workspace, canonical, sessionId);
-      degraded.set(projectId, seat.degraded);
+      const seat = workspace ? await verifySeat(canonical, sessionId) : 'unknown';
+      degraded.set(projectId, seat === 'seated' ? false : true);
+      // A conversation this process just made is never replaced by itself on the
+      // next open when the Host would not confirm the join.
+      if (seat !== 'seated') rebound.add(projectId);
+      if (seat !== 'seated' && workspace) report('workspace-join', { step: 'verify', ok: false, code: seatCode(seat) });
       await titleSession(sessionId, canonical);
       await store(projectId, canonical, sessionId);
       return sessionId;
@@ -298,8 +345,9 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
       await markProjectOpened(canonical);
       const sessionId = await createSession(canonical, workspace);
       await created(sessionId);
-      const seat = await seatSession(workspace, canonical, sessionId);
-      degraded.set(projectId, seat.degraded);
+      const seat = workspace ? await verifySeat(canonical, sessionId) : 'unknown';
+      degraded.set(projectId, seat === 'seated' ? false : true);
+      if (seat !== 'seated' && workspace) report('workspace-join', { step: 'verify', ok: false, code: seatCode(seat) });
       await titleSession(sessionId, canonical);
       await store(projectId, canonical, sessionId);
       return sessionId;
@@ -317,7 +365,7 @@ export async function openProjectConversations(ctx, { z, archived, onFailure, on
   /**
    * Whether the project's Session could be proven to sit under its Workspace.
    *
-   * 	rue means the sidebar will show it inside the project's folder. alse`n   * means it opened anyway but is either ungrouped or on the way there — worth
+   * \true means the sidebar will show it inside the project's folder. \false`n   * means it opened anyway but is either ungrouped or on the way there — worth
    * knowing in diagnostics, never worth refusing to work over.
    */
   function grouping(projectId) {

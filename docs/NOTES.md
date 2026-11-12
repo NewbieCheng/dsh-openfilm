@@ -58,11 +58,22 @@
 
 **边界**：`409` 只保证"不再出现原始命令"，不保证目录一定删得掉——目录被别的进程占用时仍需先关掉占用方。真实 GUI 删除未复测。
 
+### 2026-11-12：项目对话总是掉进「未分组」
+
+**现象**：每次打开视频创作区的项目，侧栏都会出现该项目的文件夹（工作区建对了），但对话不在文件夹下面，而是留在「未分组」里一条「新会话」。
+
+**根因**：两层形状假设错。`workspaceController.create({ path })` 在 DSH 0.11 返回 Remote 值 `{ workspace: { workspaceId, sessionIds, … }, created }`，代码只读 `created.id` / `created.workspaceId`，于是每次打开都报 `WORKSPACE_CREATE_NO_ID` 并退回 `{ cwd }` 建会话。工作区分组只认 `workspace.sessionIds`：`SessionSummary` 没有 `workspaceId`，`workspace/insertSessionBefore` 只移动已在组里的会话（"Move one accounted Session"），`attachSession` 根本不在契约里。cwd 建出来的会话永远进不了组。
+
+**改法**：解包 `created.workspace`（旧扁平形状继续兼容）；会话一律带 `workspaceId` 创建；建完再 `create({ path })` 回读 `sessionIds` 作为归组证据。存量里空会话换一条归组的新会话（旧的不删、不改名），有历史的不自动换绑，只报 `WORKSPACE_SESSION_UNGROUPED`。
+
+**边界**：非空的旧会话没法归位（没有 attach API），只能留在未分组；Host 代码要重启 DSH 才生效（插件管理器返回 `restart-required`）。
+
 ### 反复出现的坑（按主题）
 
 - **顺序假设**：严格顺序丢增量；反向把 unchanged 当流失效。→ 按 index 去重，允许跳跃。
 - **归因假设**：只认 `user/message`，真实事件是 `agent/inbox/spliced`；注入的 AGENTS 块带 `source.kind:'agent-instructions'`，不是人。→ 两种归因都认，只有 `kind:'user'` 且 rpcId 不匹配才算冲突。
 - **状态假设**：绑定表不校验归档 → 每次发送 503；`running` 位不代表上游活着。→ 发送前探针 + 健康检查。
+- **分组假设**：把"会话属于哪个工作区"当成会话自身字段。→ 只认 `workspace.sessionIds`；`SessionSummary` 没有 `workspaceId`，`attachSession` 不存在。
 - **平台假设**：只在 http 语境设计前端。`dsh-app://app` 下相对 `/api` 是 404，`frame-ancestors` 不列 `dsh-app:` 会静默白屏。
 - **重载假设**：把"重启插件"当万能药；请求根本没到 Host。→ 先 `curl` 同一路由 + 看页面 `location.origin`。
 - **构建假设**：手改 `vendor/official-shell/ui` 不重算 manifest → 启动即 `OFFICIAL_SHELL_UNAVAILABLE`。

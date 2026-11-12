@@ -2,9 +2,10 @@
 //
 // Two failures made every video project show up as a stray "新建会话" under
 // 无工作区: a case-only path mismatch read as "the stored Session is not this
-// project's" (so a fresh empty conversation was created on every open), and
-// nothing registered the project's folder as a Workspace, so DSH had no group to
-// put the Session in.
+// project's" (so a fresh empty conversation was created on every open), and the
+// Workspace value was read as a flat object while DSH 0.11 answers
+// `{ workspace: { workspaceId, sessionIds }, created }` — so no id, no join, and
+// a cwd-only Session that DSH can never adopt into a group.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -13,92 +14,114 @@ import { openProjectConversations } from '../src/project-conversation.mjs';
 const chain = () => ({ min: chain, regex: chain, strict: chain });
 const z = { object: chain, string: chain, literal: chain, discriminatedUnion: chain };
 
-function fixture({ items = [], workspace = true, rename = true, createFails = false, attachWorks = true } = {}) {
+const projectPath = path.resolve('F:/Dev/Films/demo-film');
+
+/**
+ * A Host that answers the way DSH 0.11 does.
+ *
+ * `workspace/create` returns the Remote value; `session/create` with a
+ * `workspaceId` accounts the Session to the Workspace, with a `cwd` it does not
+ * (that is the ungrouped pile); `session/list` returns `SessionSummary` rows,
+ * which carry no `workspaceId`, only the projections carry a title.
+ */
+function fixture({
+  items = [], workspace = true, rename = true, createFails = false, seat = true, legacy = false, catalog = true, seated = [],
+} = {}) {
   const records = new Map();
-  const calls = { create: [], list: 0, rename: [], workspace: [], attach: [] };
+  const calls = { create: [], list: 0, rename: [], workspace: [] };
+  const state = { path: '', sessionIds: [...seated] };
+
+  const view = () => ({ workspaceId: 'workspace-1', path: state.path, title: 'demo-film', sessionIds: [...state.sessionIds] });
+
   const ctx = {
     storageDomain: { async open() { return { table: () => ({ get: key => records.get(key), put: async (key, value) => records.set(key, value) }), close: async () => {} }; } },
     sessionController: {
       async create(request) {
         calls.create.push(request);
         if (createFails) throw new Error('nope');
-        return { sessionId: `session-${calls.create.length}` };
+        // One id per conversation, so a replaced Session never collides with its successor.
+        const sessionId = `session-${items.length + 1}`;
+        // The Host accounts a Workspace-created Session; a cwd-only one cannot be
+        // adopted later, so it stays out of the list.
+        if (seat && request.workspaceId === 'workspace-1') state.sessionIds.push(sessionId);
+        items.push({ sessionId, cwd: projectPath, blank: true });
+        return { sessionId };
       },
-      async list() { calls.list += 1; return { items }; },
-      ...(rename ? { async rename(request) { calls.rename.push(request); return { ok: true }; } } : {}),
+      async list() {
+        calls.list += 1;
+        if (!catalog) throw new Error('catalog unavailable');
+        return { items };
+      },
+      ...(rename ? {
+        async rename(request) {
+          calls.rename.push(request);
+          const item = items.find(candidate => candidate.sessionId === request.sessionId);
+          if (item) item.projections = { kind: 'sequenced', asOfSeq: 1, values: { title: request.title } };
+          return { ok: true };
+        },
+      } : {}),
     },
     get: name => (name === 'workspaceController' && workspace
       ? {
         async create(request) {
           calls.workspace.push(request);
-          return {
-            id: 'workspace-1',
-            path: request.path,
-            title: 'demo-film',
-            sessionIds: [],
-            // A real attach makes the Session a member, and the catalog says so: the
-        // read-back is what proves membership, so the fake must move too.
-        async attachSession(sessionId) {
-          calls.attach.push(sessionId);
-          if (!attachWorks) return;
-          const item = items.find(candidate => candidate.sessionId === sessionId);
-          if (item) item.workspaceId = 'workspace-1';
-          else items.push({ sessionId, workspaceId: 'workspace-1' });
-        },
-          };
+          state.path = request.path;
+          // The shape DSH 0.11 actually answers; `legacy` keeps the old flat view readable.
+          return legacy ? view() : { workspace: view(), created: true };
         },
       }
       : undefined),
   };
-  return { ctx, records, calls };
+  return { ctx, records, calls, items, state };
 }
 
-const projectPath = path.resolve('F:/Dev/Films/demo-film');
+function hint(records, sessionId = 'session-1') {
+  records.set('proj123456', { projectId: 'proj123456', path: projectPath, sessionId });
+}
 
-test('a new project registers its folder as a Workspace and names the conversation', async () => {
-  const { ctx, calls, records } = fixture();
+test('a new project registers its folder as a Workspace and seats the conversation in it', async () => {
+  const { ctx, calls, records, state } = fixture();
   const conversations = await openProjectConversations(ctx, { z });
   const sessionId = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
 
   assert.equal(sessionId, 'session-1');
-  assert.deepEqual(calls.workspace, [{ path: projectPath }], 'the folder must be on the Workspace list, or DSH has no group for it');
+  assert.deepEqual(calls.workspace, [{ path: projectPath }, { path: projectPath }], 'create is idempotent, so the read-back reuses it');
   // workspaceId and cwd are exclusive: joining is what puts the Session in the
   // project's group instead of the ungrouped pile.
   assert.deepEqual(calls.create[0], { workspaceId: 'workspace-1', agentPreset: 'openfilm-video-editing' });
-  assert.deepEqual(calls.attach, ['session-1']);
+  assert.deepEqual(state.sessionIds, ['session-1'], 'the Host accounts the Session to the Workspace');
   assert.equal(calls.rename.length, 1);
   assert.equal(calls.rename[0].title, 'demo-film', 'the conversation is named after its project folder');
   assert.equal(records.get('proj123456').sessionId, 'session-1');
+  assert.equal(conversations.grouping('proj123456'), 'seated');
+});
+
+test('the older flat Workspace view still groups the conversation', async () => {
+  const { ctx, calls } = fixture({ legacy: true });
+  const conversations = await openProjectConversations(ctx, { z });
+  const sessionId = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
+  assert.equal(sessionId, 'session-1');
+  assert.deepEqual(calls.create[0], { workspaceId: 'workspace-1', agentPreset: 'openfilm-video-editing' });
+  assert.equal(conversations.grouping('proj123456'), 'seated');
 });
 
 test('reopening the same project reuses its conversation instead of making another', async () => {
-  const { ctx, calls } = fixture({ items: [{ sessionId: 'session-1', cwd: projectPath, title: 'demo-film' }] });
+  const { ctx, records, calls } = fixture({ items: [{ sessionId: 'session-1', cwd: projectPath, blank: false }], seated: ['session-1'] });
+  hint(records);
   const conversations = await openProjectConversations(ctx, { z });
-  // First open binds the project to a conversation and names it once.
   assert.equal(await conversations.resolve({ projectId: 'proj123456', path: projectPath }), 'session-1');
+  // The title is read from the Session's projections, so it is never overwritten.
   assert.equal(calls.rename.length, 1);
-  // Every later open must find that same conversation.
   const again = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
   assert.equal(again, 'session-1');
-  assert.equal(calls.create.length, 1, 'one project, one conversation');
+  assert.equal(calls.create.length, 0, 'one project, one conversation');
   assert.equal(calls.rename.length, 1, 'a title the person chose is never overwritten');
-  assert.equal(calls.workspace.length, 2, 'grouping is repaired on every open, and it is idempotent');
-});
-
-test('an untitled conversation is named on the next open', async () => {
-  const { ctx, calls } = fixture({ items: [{ sessionId: 'session-1', cwd: projectPath, title: '' }] });
-  const conversations = await openProjectConversations(ctx, { z });
-  // Seed the hint the way a previous run would have.
-  await conversations.resolve({ projectId: 'proj123456', path: projectPath });
-  calls.rename.length = 0;
-  const sessionId = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
-  assert.equal(sessionId, 'session-1');
+  assert.equal(conversations.grouping('proj123456'), 'seated');
 });
 
 test('a cwd that differs only in case still counts as the same folder on Windows', { skip: process.platform !== 'win32' ? 'case-insensitive paths are a Windows fact' : false }, async () => {
-  const shouted = projectPath.toUpperCase();
-  const { ctx, records, calls } = fixture({ items: [{ sessionId: 'session-1', cwd: shouted, title: 'demo-film' }] });
-  records.set('proj123456', { projectId: 'proj123456', path: projectPath, sessionId: 'session-1' });
+  const { ctx, records, calls } = fixture({ items: [{ sessionId: 'session-1', cwd: projectPath.toUpperCase(), blank: false }], seated: ['session-1'] });
+  hint(records);
   const conversations = await openProjectConversations(ctx, { z });
   const sessionId = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
   assert.equal(sessionId, 'session-1');
@@ -111,37 +134,99 @@ test('a profile without the Workspace controller still opens the project, owning
   const sessionId = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
   assert.equal(sessionId, 'session-1');
   assert.deepEqual(calls.create[0], { cwd: projectPath, agentPreset: 'openfilm-video-editing' });
-  assert.deepEqual(calls.attach, []);
+  assert.equal(conversations.grouping('proj123456'), 'degraded');
 });
 
 test('a foreign Session with the same id but another folder is not adopted', async () => {
-  const { ctx, records, calls } = fixture({ items: [{ sessionId: 'session-foreign', cwd: path.resolve('F:/Dev/Films/other'), title: 'x' }] });
-  records.set('proj123456', { projectId: 'proj123456', path: projectPath, sessionId: 'session-foreign' });
+  const { ctx, records, calls } = fixture({ items: [{ sessionId: 'session-1', cwd: path.resolve('F:/Dev/Films/other'), blank: false }] });
+  hint(records);
   const conversations = await openProjectConversations(ctx, { z });
   const sessionId = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
-  assert.equal(sessionId, 'session-1', 'a Session in another folder is never claimed, so a new one is made');
+  assert.equal(sessionId, 'session-2', 'a Session in another folder is never claimed, so a new one is made');
   assert.equal(calls.create.length, 1);
 });
-// The service may answer a plain Workspace view (`workspaceId`) rather than the
-// live object; the Session still has to join it.
-test('a Workspace view without attachSession still groups the conversation', async () => {
+
+test('an empty ungrouped conversation is replaced by one that joins the Workspace', async () => {
+  // The regression: the stored conversation exists but the Workspace does not
+  // account it, which is exactly what the sidebar draws as 未分组. DSH has no
+  // attach for an existing Session, so a blank one is left behind for a new,
+  // seated conversation. The old Session is never deleted or renamed.
+  const { ctx, records, calls, items } = fixture({ items: [{ sessionId: 'session-1', cwd: projectPath, blank: true }] });
+  hint(records);
+  const failures = [];
+  const conversations = await openProjectConversations(ctx, { z, onFailure: (event, fields) => failures.push([event, fields]) });
+  const sessionId = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
+  assert.equal(sessionId, 'session-2');
+  assert.deepEqual(calls.create, [{ workspaceId: 'workspace-1', agentPreset: 'openfilm-video-editing' }]);
+  assert.equal(records.get('proj123456').sessionId, 'session-2', 'the hint moves to the seated conversation');
+  assert.ok(items.some(item => item.sessionId === 'session-1'), 'the previous Session still exists');
+  assert.equal(conversations.grouping('proj123456'), 'seated');
+  const rebindEvent = failures.find(([event]) => event === 'project-conversation-rebound');
+  assert.deepEqual(rebindEvent?.[1], { from: 'session-1', to: 'session-2' });
+});
+
+test('a conversation with history is never swapped behind the person back', async () => {
+  const { ctx, records, calls } = fixture({ items: [{ sessionId: 'session-1', cwd: projectPath, blank: false }] });
+  hint(records);
+  const failures = [];
+  const conversations = await openProjectConversations(ctx, { z, onFailure: (event, fields) => failures.push([event, fields]) });
+  const sessionId = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
+  assert.equal(sessionId, 'session-1');
+  assert.equal(calls.create.length, 0);
+  assert.equal(conversations.grouping('proj123456'), 'degraded');
+  assert.deepEqual(failures.filter(([event, fields]) => event === 'workspace-join' && fields.step === 'verify'),
+    [['workspace-join', { step: 'verify', ok: false, code: 'WORKSPACE_SESSION_UNGROUPED' }]]);
+});
+
+test('a workspace join the Host does not confirm is reported once, not retried forever', async () => {
+  const { ctx, records, calls } = fixture({ seat: false });
+  const conversations = await openProjectConversations(ctx, { z });
+  await conversations.resolve({ projectId: 'proj123456', path: projectPath });
+  assert.equal(conversations.grouping('proj123456'), 'degraded');
+  const first = calls.create.length;
+  assert.equal(first, 1);
+  // Every later open keeps the same conversation: replacing it again would be a
+  // loop against a Host that answers the same way.
+  await conversations.resolve({ projectId: 'proj123456', path: projectPath });
+  assert.equal(calls.create.length, first);
+  assert.equal(records.get('proj123456').sessionId, 'session-1');
+});
+
+test('a conversation the catalog already groups needs no new Session', async () => {
+  const { ctx, calls, records } = fixture({ items: [{ sessionId: 'session-1', cwd: projectPath, blank: false }], seated: ['session-1'] });
+  hint(records);
+  const conversations = await openProjectConversations(ctx, { z });
+  await conversations.resolve({ projectId: 'proj123456', path: projectPath });
+  assert.deepEqual(calls.create, [], 'membership is proven by the Workspace, not re-applied');
+  assert.equal(conversations.grouping('proj123456'), 'seated');
+});
+
+test('an unreadable catalog keeps the saved conversation instead of duplicating it', async () => {
+  const { ctx, records, calls } = fixture({ catalog: false });
+  hint(records);
+  const conversations = await openProjectConversations(ctx, { z });
+  assert.equal(await conversations.resolve({ projectId: 'proj123456', path: projectPath }), 'session-1');
+  assert.deepEqual(calls.create, []);
+});
+
+test('a Workspace create without an id falls back to a cwd Session and says so', async () => {
   const records = new Map();
-  const calls = { create: [], workspace: [] };
+  const calls = [];
   const ctx = {
     storageDomain: { async open() { return { table: () => ({ get: k => records.get(k), put: async (k, v) => records.set(k, v) }), close: async () => {} }; } },
     sessionController: {
-      async create(request) { calls.create.push(request); return { sessionId: 'session-1' }; },
+      async create(request) { calls.push(request); return { sessionId: 'session-1' }; },
       async list() { return { items: [] }; },
     },
-    get: name => (name === 'workspaceController'
-      ? { async create(request) { calls.workspace.push(request); return { workspaceId: 'workspace-9', path: request.path, title: 'demo-film', sessionIds: [] }; } }
-      : undefined),
+    get: name => (name === 'workspaceController' ? { async create() { return { created: false }; } } : undefined),
   };
-  const conversations = await openProjectConversations(ctx, { z });
-  const sessionId = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
-  assert.equal(sessionId, 'session-1');
-  assert.deepEqual(calls.create[0], { workspaceId: 'workspace-9', agentPreset: 'openfilm-video-editing' });
+  const failures = [];
+  const conversations = await openProjectConversations(ctx, { z, onFailure: (event, fields) => failures.push([event, fields]) });
+  await conversations.resolve({ projectId: 'proj123456', path: projectPath });
+  assert.deepEqual(calls[0], { cwd: projectPath, agentPreset: 'openfilm-video-editing' });
+  assert.deepEqual(failures[0], ['workspace-join', { step: 'create', ok: false, code: 'WORKSPACE_CREATE_NO_ID' }]);
 });
+
 // When the Host refuses to create the Session, the reason has to survive.
 //
 // A preset that failed to load made `sessionController.create` throw, the bare
@@ -167,29 +252,6 @@ test('a refused session creation keeps the Host reason', async () => {
     ['project-conversation-create', { detail: 'nope', workspace: 'cwd' }],
   ]);
   assert.equal(records.size, 0, 'a failed creation stores no hint');
-});
-test('a conversation the catalog already groups needs no attach', async () => {
-  // The bug being guarded: 未分组 came from never proving membership. When it is
-  // already proven, touching the Workspace would be noise.
-  const { ctx, calls } = fixture({ items: [{ sessionId: 'session-1', cwd: projectPath, title: 'demo-film', workspaceId: 'workspace-1' }] });
-  const conversations = await openProjectConversations(ctx, { z });
-  await conversations.resolve({ projectId: 'proj123456', path: projectPath });
-  assert.deepEqual(calls.attach, [], 'membership is read back, not re-applied');
-  assert.equal(conversations.grouping('proj123456'), 'seated');
-});
-
-test('an attach that does not take is reported, and the project still opens', async () => {
-  // Membership is presentation: it must never stop the person from working, but a
-  // failure that leaves the Session ungrouped has to be visible in diagnostics.
-  const { ctx, calls } = fixture({ attachWorks: false });
-  const failures = [];
-  const conversations = await openProjectConversations(ctx, { z, onFailure: (event, fields) => failures.push([event, fields]) });
-  const sessionId = await conversations.resolve({ projectId: 'proj123456', path: projectPath });
-  assert.equal(sessionId, 'session-1');
-  assert.equal(calls.attach.length, 1, 'one retry at most: a loop would spin against a Host that answers the same way');
-  assert.equal(conversations.grouping('proj123456'), 'degraded');
-  const verify = failures.filter(([event, fields]) => event === 'workspace-join' && fields.step === 'verify');
-  assert.deepEqual(verify, [['workspace-join', { step: 'verify', ok: false, code: 'WORKSPACE_MEMBERSHIP_UNCONFIRMED' }]]);
 });
 
 test('binding a project marks it as shown, so the CLI never starts Studio for it', async () => {

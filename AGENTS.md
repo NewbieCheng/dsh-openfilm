@@ -8,7 +8,7 @@
 
 ## 0. 一句话
 
-把官方 **OpenFilm 0.3.2** 工作台封装成可分发的 **DSH 插件**：Host 拉起官方 Studio 并反向代理，浏览器用 `shell.overlay` 常驻 iframe，官方对话经 Host RPC 桥到 DSH 会话（模型、审批、会话都是 DSH 的）。当前 `0.11.2`（上一个发布包是 `0.11.1`）。仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。
+把官方 **OpenFilm 0.3.2** 工作台封装成可分发的 **DSH 插件**：Host 拉起官方 Studio 并反向代理，浏览器用 `shell.overlay` 常驻 iframe，官方对话经 Host RPC 桥到 DSH 会话（模型、审批、会话都是 DSH 的）。当前 `0.11.3`（上一个发布包是 `0.11.0`）。仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。
 
 ---
 
