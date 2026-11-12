@@ -149,6 +149,7 @@
 | 图片（内联） | 通过 | 子进程按当前 DSH 模型加 `--patch` overlay → `initialize` 报到 `image:true`；32×32 纯红 PNG 以 image block 送入，模型答 "Red"，`end_turn` |
 | 图片（回落路径） | 通过 | 默认模型 `image:false` → 服务把它们写成临时文件并在正文附 `[reference image] <绝对路径>`；模型自己读文件后答 "Red"，`end_turn` |
 | 项目 `AGENTS.md` 生效 | 通过 | 临时项目写入唯一允许答案 `MARKER-42` → 提问后模型只回 `MARKER-42`（子进程 cwd 即项目目录） |
+| 注入页面（离线） | 通过 | 在 VM 里执行代理注入的那段原样代码：`probe` 生成模型/思考/权限三行；`start` 返回 key；`setOption` 分别打到三条通道；`prompt` 收到 update 与匹配的 `done` 后返回 `end_turn` |
 | 面板线路（离线） | 通过 | 真代理 + 真 SSE + 真 ACP 服务：`ready` → 逐条 `update`（带面板 key）→ 一条 `done`；伪造来源被 403 |
 | 面板真机验收 | 待做 | 刷新页面后：面板发一句 → 侧栏同一会话；模型/思考菜单可切；权限行仍在；SenseVoice 不受影响 |
 
