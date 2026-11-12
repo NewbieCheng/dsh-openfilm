@@ -26,6 +26,9 @@ import { randomBytes } from 'node:crypto';
 const HOST_VERSION = (() => { try { return String(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version); } catch { return 'unknown'; } })();
 
 const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.url));
+
+/** The ACP path is the default; an explicit 0 is the escape hatch. */
+const acpEnabled = () => String(process.env.NO996_OPENFILM_ACP ?? '1') !== '0';
 /** Page events the Host will record; anything else is refused. */
 const CLIENT_EVENTS = new Set(['recovery-shown', 'restart-click', 'picker-placed', 'session-expired', 'permission-shown', 'permission-chosen']);
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
@@ -53,6 +56,8 @@ import { createOfficialEventHub } from './official-event-hub.mjs';
 import { createOfficialApprovals } from './official-approvals.mjs';
 import { attachApprovalBridge } from './official-approval-bridge.mjs';
 import { createOfficialAgentService } from './official-agent-service.mjs';
+import { createAcpAgentService } from './acp-agent-service.mjs';
+import { createAcpSessionStore } from './acp-session-store.mjs';
 import { attachOfficialEventStream } from './official-event-stream.mjs';
 import { z } from 'zod';
 import { realpath } from 'node:fs/promises';
@@ -620,16 +625,36 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     return delivered;
   };
   const approvals = createOfficialApprovals({ deliver: deliverToPanel });
-  const agentService = officialShell ? createOfficialAgentService(ctx, {
-    verifier: verifyOfficialProject,
-    openProjectSessions: { ensure: args => projectConversations().then(opened => opened.resolve(args)) },
-    // Every published envelope is recorded next to whether a live panel stream
-    // took it: accept-then-nothing and never-accepted look identical in the UI.
-    emit: async (projectId, event) => deliverToPanel(projectId, event),
-    isArchived: id => archive.isArchived(id),
-    policy: turnPolicy,
-    approvals,
-  }) : null;
+  // Two ways to drive the panel's conversation. ACP is the target: the agent
+  // owns the Session, so the panel and the sidebar share one conversation and the
+  // shell's own ACP surface (thinking, tools, resume, model menu) is what the page
+  // draws. NO996_OPENFILM_ACP=0 keeps the old in-process bridge as an escape hatch
+  // until the ACP path is verified on a real GUI.
+  const acpSessions = createAcpSessionStore({ file: join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'no996-openfilm', 'acp-sessions.json') });
+  const acpAgentService = acpEnabled()
+    ? createAcpAgentService({
+      verifier: verifyOfficialProject,
+      store: acpSessions,
+      emit: async (projectId, event) => deliverToPanel(projectId, event),
+      approvals,
+      // The panel starts on the model the person already chose for DSH, not on the
+      // acp profile's own default.
+      defaultSelection: () => { try { return ctx.agentDefaultModel?.currentSelection?.(); } catch { return undefined; } },
+      log: (event, fields) => void log.info(event, fields),
+    })
+    : null;
+  const agentService = officialShell
+    ? acpAgentService ?? createOfficialAgentService(ctx, {
+      verifier: verifyOfficialProject,
+      openProjectSessions: { ensure: args => projectConversations().then(opened => opened.resolve(args)) },
+      // Every published envelope is recorded next to whether a live panel stream
+      // took it: accept-then-nothing and never-accepted look identical in the UI.
+      emit: async (projectId, event) => deliverToPanel(projectId, event),
+      isArchived: id => archive.isArchived(id),
+      policy: turnPolicy,
+      approvals,
+    })
+    : null;
   // DSH asks the person before a sensitive tool call through a waterfall event.
   // Without this the panel simply stopped moving, with no way to see why.
   const unregisterApprovalBridge = agentService ? attachApprovalBridge(ctx, {
@@ -1223,6 +1248,9 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   return async () => {
     const closingAt = Date.now();
     disposed = true;
+    // Stop the ACP children before the routes go away: a child that outlives the
+    // Host keeps holding the project's Session open.
+    try { await acpAgentService?.close?.(); } catch { /* already closed */ }
     // Drop exact routes synchronously first. An async disposer that awaits
     // Studio shutdown before unregister would let a re-enable collide on
     // `/api/no996-openfilm/templates` (and siblings).
