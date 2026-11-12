@@ -16,7 +16,11 @@ function memoryStore(seed = {}) {
   return { get: id => table.get(id), set: (id, value) => table.set(id, value), all: () => [...table] };
 }
 
-function harness({ mode, image = false, emptyList = false, store = memoryStore(), approvals, defaultSelection, permissionMode, onOptions, mcpServers, onClosed, prepareProject, startModel, spawnArgs } = {}) {
+// The Host always has an approvals coordinator; a granted request is the normal
+// answer in these tests, unless a test supplies its own (or null for the missing case).
+const allowOnce = () => ({ request: async () => 'allowed-once', answerRequest: () => true, close() {} });
+
+function harness({ mode, image = false, emptyList = false, store = memoryStore(), approvals = allowOnce(), defaultSelection, permissionMode, onOptions, mcpServers, onClosed, prepareProject, startModel, spawnArgs } = {}) {
   const events = [];
   const service = createAcpAgentService({
     verifier: async projectId => ({ projectId, path: 'C:\\fake' }),
@@ -293,5 +297,31 @@ test('cancel reaches the agent and a second concurrent turn is refused by name',
   const cancelled = await service.cancel(PROJECT);
   assert.equal(cancelled.ok, true);
   await first;
+  await service.close();
+});
+
+test('without an approvals coordinator a permission request is refused, not auto-allowed', async () => {
+  let handler = null;
+  const service = createAcpAgentService({
+    verifier: async projectId => ({ projectId, path: 'C:\\fake' }),
+    store: memoryStore(),
+    emit: () => true,
+    createClient: () => ({
+      onUpdate() {},
+      on() {},
+      setPermissionHandler(fn) { handler = fn; },
+      async start() { return { agentCapabilities: { promptCapabilities: { image: false } } }; },
+      async newSession() { return { sessionId: 'session-x', configOptions: [] }; },
+      async resumeSession() { return { sessionId: 'session-x', configOptions: [] }; },
+      async listSessions() { return { sessions: [] }; },
+      async setConfigOption() { return { configOptions: [] }; },
+      async prompt() { return { stopReason: 'end_turn' }; },
+      async close() {},
+      cancel() {},
+    }),
+  });
+  await service.modelCatalog(PROJECT).catch(() => {});
+  assert.equal(typeof handler, 'function');
+  assert.equal(await handler({ toolCall: { title: 'Write' } }), null);
   await service.close();
 });

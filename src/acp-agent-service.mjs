@@ -291,7 +291,13 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
   }
 
   async function askPermission(entry, params) {
-    if (!approvals || typeof approvals.request !== 'function') return 'allow-once';
+    // No approvals coordinator means the Host cannot show the permission row, so
+    // the only safe answer is to refuse: silently allowing would contradict the
+    // promise that a tool never runs without the person seeing the request.
+    if (!approvals || typeof approvals.request !== 'function') {
+      void log?.('acp-permission-unavailable', { projectId: entry.projectId });
+      return null;
+    }
     const title = text(params?.toolCall?.title) && TOOL_NAME.test(params.toolCall.title) ? params.toolCall.title : 'tool';
     const outcome = await approvals.request({
       projectId: entry.projectId,
