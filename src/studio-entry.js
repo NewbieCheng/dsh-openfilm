@@ -77,30 +77,41 @@ window.__ModuleLoader__.load({
     // to the Host. Ask the loopback console for a ticketed editor address there.
     const DESKTOP_PROTOCOL = ['dsh-app:', 'app:'].includes(window.location.protocol);
     const CONSOLE_URL = 'http://127.0.0.1:47821/api/studio-url';
-    const startStudio = async signal => {
-      if (DESKTOP_PROTOCOL) {
-        const response = await fetch(CONSOLE_URL, { method: 'GET', credentials: 'omit', cache: 'no-store', signal });
-        if (!response.ok) throw new Error(`HTTP ${response.status} @ ${window.location.origin} (console)`);
-        const data = await response.json();
-        if (typeof data?.origin !== 'string' || typeof data?.ticket !== 'string') throw new Error('Invalid console response');
-        return { editorOrigin: data.origin, ticket: data.ticket, webOrigin: '' };
-      }
+    const bootstrapStudio = async signal => {
       // The Host answers with the editor origin, a desktop ticket and the mode.
-      // Project resolution belongs to the official shell itself; this panel no
-      // longer creates or maps DSH conversations.
       const surface = `${window.location.protocol}//${window.location.host}`;
-      const response = await fetch('/api/no996-openfilm/bootstrap', { method: 'POST', credentials: 'same-origin', headers: { 'x-no996-surface': surface }, signal });
+      const response = await fetch('/api/no996-openfilm/bootstrap', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'x-no996-surface': surface }, signal,
+      });
       if (!response.ok) {
         const code = await response.text();
         const known = ['DSH_ORIGIN_REJECTED', 'DSH_SESSION_REQUIRED', 'DSH_BROWSER_REQUIRED', 'STUDIO_DISPOSED'];
-        // The origin is part of the message on purpose: a 404 here means the
-        // request never reached this Host, and the only way to tell why without
-        // a console is to see which origin the page thinks it is on.
-        throw new Error(`HTTP ${response.status}${known.includes(code) ? ` (${code})` : ''} @ ${window.location.origin}`);
+        throw new Error(`HTTP ${response.status}${known.includes(code) ? ` (${code})` : ''} @ ${window.location.origin} (host)`);
       }
       const data = await response.json();
       if (typeof data?.editorOrigin !== 'string') throw new Error('Invalid Studio response');
       return data;
+    };
+    // The debug console only knows a Studio that a debug window already opened,
+    // so it answers 503 "not ready" until then. The desktop app scheme forwards
+    // /api/* to the Host with its own cookie, so the bootstrap route above is the
+    // one that can start Studio on demand; the console stays as a last resort.
+    const consoleStudio = async signal => {
+      const response = await fetch(CONSOLE_URL, { method: 'GET', credentials: 'omit', cache: 'no-store', signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status} @ ${window.location.origin} (console)`);
+      const data = await response.json();
+      if (typeof data?.origin !== 'string' || typeof data?.ticket !== 'string') throw new Error('Invalid console response');
+      return { editorOrigin: data.origin, ticket: data.ticket, webOrigin: '' };
+    };
+    const startStudio = async signal => {
+      if (!DESKTOP_PROTOCOL) return bootstrapStudio(signal);
+      try {
+        return await bootstrapStudio(signal);
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        return consoleStudio(signal);
+      }
     };
     function PanelIcon({ size }) {
       return h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true },

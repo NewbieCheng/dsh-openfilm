@@ -6,6 +6,7 @@
 - 删除的代码（连同测试一起）：`src/project-filter.mjs`（视图菜单「工作区类型」注入与生成式筛选样式）、`src/area-store.mjs`、`src/area-client.mjs`、`src/area-view.mjs`、`src/area-route.mjs`（只读的 `/api/no996-openfilm/area`）、`project-conversation.bindings()`，以及 `studio-entry.js` 里对应的 store / 菜单 / 诊断上报接线。
 - 保留且不涉及侧栏的能力：视频创作面板（`main` + 一个 `sidebar.panellist` 入口 + `shell.overlay` 常驻）、Host 反向代理与对话桥、`no996-openfilm:navigate` 父页面 → iframe 导航、只读诊断 `POST /api/no996-openfilm/diagnose`、`GET /__dsh/...` 诊断端点。
 - 保留的基础设施修复：所有本地路由经 `registerRoute`（函数声明、重复注册降级为警告、注册失败回滚），避免管理开关重复 apply 或残留路径时插件整体激活失败；`client-log` 复用已有路由，不重复注册。
+- 桌面端启动修复：面板在 `dsh-app://app` 下改为走 Host 的 `/api/no996-openfilm/bootstrap`（桌面壳会把该请求连同宿主 cookie 转发给 Host），本地调试 console（47821）只在兜底时使用。之前桌面端直接读 console，而 console 只有在调试窗口开过 Studio 之后才知道地址，所以稳定 503。
 - 回归测试：`tests/sidebar-untouched.test.mjs` 断言源码里不再出现 `sidebar.workspaces`、`session.row.action`、`contextMenus`、`viewOptionsMenu`、`data-row-key`、`hiddenSessionIds`，且五个已删模块不再存在；`tests/route-registration-order.test.mjs` 断言路由守卫是函数声明且只有它直接调用注册表。
 ## 0.12.1 —— 本地服务 SenseVoice 改回原生渲染
 

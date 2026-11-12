@@ -546,24 +546,38 @@
       }
       const DESKTOP_PROTOCOL = ["dsh-app:", "app:"].includes(window.location.protocol);
       const CONSOLE_URL = "http://127.0.0.1:47821/api/studio-url";
-      const startStudio = async (signal) => {
-        if (DESKTOP_PROTOCOL) {
-          const response2 = await fetch(CONSOLE_URL, { method: "GET", credentials: "omit", cache: "no-store", signal });
-          if (!response2.ok) throw new Error(`HTTP ${response2.status} @ ${window.location.origin} (console)`);
-          const data2 = await response2.json();
-          if (typeof data2?.origin !== "string" || typeof data2?.ticket !== "string") throw new Error("Invalid console response");
-          return { editorOrigin: data2.origin, ticket: data2.ticket, webOrigin: "" };
-        }
+      const bootstrapStudio = async (signal) => {
         const surface = `${window.location.protocol}//${window.location.host}`;
-        const response = await fetch("/api/no996-openfilm/bootstrap", { method: "POST", credentials: "same-origin", headers: { "x-no996-surface": surface }, signal });
+        const response = await fetch("/api/no996-openfilm/bootstrap", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "x-no996-surface": surface },
+          signal
+        });
         if (!response.ok) {
           const code = await response.text();
           const known = ["DSH_ORIGIN_REJECTED", "DSH_SESSION_REQUIRED", "DSH_BROWSER_REQUIRED", "STUDIO_DISPOSED"];
-          throw new Error(`HTTP ${response.status}${known.includes(code) ? ` (${code})` : ""} @ ${window.location.origin}`);
+          throw new Error(`HTTP ${response.status}${known.includes(code) ? ` (${code})` : ""} @ ${window.location.origin} (host)`);
         }
         const data = await response.json();
         if (typeof data?.editorOrigin !== "string") throw new Error("Invalid Studio response");
         return data;
+      };
+      const consoleStudio = async (signal) => {
+        const response = await fetch(CONSOLE_URL, { method: "GET", credentials: "omit", cache: "no-store", signal });
+        if (!response.ok) throw new Error(`HTTP ${response.status} @ ${window.location.origin} (console)`);
+        const data = await response.json();
+        if (typeof data?.origin !== "string" || typeof data?.ticket !== "string") throw new Error("Invalid console response");
+        return { editorOrigin: data.origin, ticket: data.ticket, webOrigin: "" };
+      };
+      const startStudio = async (signal) => {
+        if (!DESKTOP_PROTOCOL) return bootstrapStudio(signal);
+        try {
+          return await bootstrapStudio(signal);
+        } catch (error) {
+          if (signal?.aborted) throw error;
+          return consoleStudio(signal);
+        }
       };
       function PanelIcon({ size }) {
         return h(
