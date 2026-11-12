@@ -100,6 +100,9 @@ UI 完全由 `/api/local-models` 返回的数据驱动，所以**不需要重建
 - **文档假设**：测试数量、文件清单写死在多份文档里，几版之后全对不上。→ 数字不抄，链接靠 `docs:check`。
 - **日志字段**：`path`/`session`/`cookie` 会被脱敏成 `[redacted]`；写日志换名字（`route`/`authed`）。
 
+- **插件被启用两次**：profile 里同时有用户层的 `dsh-openfilm` 条目和 bundle 的 `no996-openfilm` 条目时，两个实例都会 apply，第二个在注册 `openfilm_draft` 时抛"already registered"，整个插件 `application: failed`（面板空白）。管理开关把它从 false 切到 true 就会制造这个状态。修复：只留一个条目（本次是关掉 bundle 条目）。
+- **TDZ 复发**：路由注册块必须在 `registerRoute`/`trackRoute` 声明之后。MCP 路由一度写在 `const trackRoute` 之前，激活直接 `Cannot access 'trackRoute' before initialization`。症状与 0.13.0 的重复路由事故同类：apply 抛错 = 整个插件失败。
+
 ---
 
 ## 3. 五条不变的规矩
