@@ -54,7 +54,7 @@ test('a raw child-process failure is replaced with a clear, non-retryable answer
   assert.equal(response.status, 409);
   const body = await response.json();
   assert.equal(body.code, 'no996-command-failed');
-  assert.match(body.error, /占用/);
+  assert.match(body.error, /无法移入/);
   assert.doesNotMatch(JSON.stringify(body), /powershell|Command failed/);
 });
 

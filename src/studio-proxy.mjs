@@ -39,12 +39,25 @@ const MAX_RESPONSE = 32 * 1024 * 1024;
  */
 const COMMAND_FAILURE = /Command failed:|powershell\.exe|spawn .* ENOENT/i;
 
+/**
+ * The same failed move has different causes per platform. Windows refuses a
+ * directory a watcher still holds; macOS moves it by rename (POSIX allows that
+ * with open handles), so a failure there is a permission or cross-volume one.
+ */
+function projectDeleteMessage() {
+  if (process.platform === 'win32') {
+    return '这个项目的文件夹正被其他程序占用（通常是仍打开的 DSH 会话或文件监视），无法移入回收站。请关闭使用该文件夹的会话后再删除。';
+  }
+  if (process.platform === 'darwin') {
+    return '这个项目的文件夹无法移入废纸篓。请检查访达权限（完全磁盘访问），或关闭仍在使用它的程序后再试。';
+  }
+  return '这个项目的文件夹无法移入回收站。请关闭仍在使用它的程序后再试。';
+}
+
 function friendlyCommandFailure(text, pathname) {
   if (!COMMAND_FAILURE.test(text)) return null;
   const projectDelete = /^\/api\/projects\/[A-Za-z0-9_-]+\/?$/.test(pathname);
-  const error = projectDelete
-    ? '这个项目的文件夹正被其他程序占用（通常是仍打开的 DSH 会话或文件监视），无法移入回收站。请关闭使用该文件夹的会话后再删除。'
-    : '操作失败：系统命令执行出错。详细原因已写入插件日志。';
+  const error = projectDelete ? projectDeleteMessage() : '操作失败：系统命令执行出错。详细原因已写入插件日志。';
   let json = null;
   try { json = JSON.parse(text); } catch { /* not JSON: answer with ours */ }
   const body = json && typeof json === 'object'

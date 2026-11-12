@@ -1,6 +1,6 @@
 # 统一验收清单（最后跑一次，由你执行）
 
-> 面向 **0.11.1** 的真机验收：8 步，全部已写满，按顺序走一遍。
+> 面向 **0.11.2** 的真机验收：8 步，全部已写满，按顺序走一遍。
 > 能自证的（单测、HTTP 路由、文件落盘）已经跑过（358 项 / 357 通过 / 1 跳过）；**只有"浏览器里到底画出什么"必须由人看**。
 > 任何一条不对：把那一条的编号 + 你看到的样子 + 该条「失败要贴」里要的东西发回来，据此修。
 
@@ -31,7 +31,7 @@ npm run build F:/Dev/Desktop-Projects/dsh-openfilm     # 只有改了客户端�
   "F:\apps\DSH_harness\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add "link:F:\Dev\Desktop-Projects\dsh-openfilm" --offline
   ```
   成功会打印 `+ dsh-openfilm link:…`，并把 `dsh-openfilm` 同时写进 `~/.dsh/profiles/desktop/package.json` 的 `dependencies` 和 `dsh.profile.bundles`；③ 改完 profile 需要**重启 DSH 应用**才生效。
-- **每次都要确认「当前版本」与 `package.json` 一致（发行版 0.11.1）。**
+- **每次都要确认「当前版本」与 `package.json` 一致（发行版 0.11.2）。**
 
 ### 1.0.1 页面控制台没有红字
 
