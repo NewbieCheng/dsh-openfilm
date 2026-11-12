@@ -2,7 +2,7 @@
 
 > 面向接手本仓的人（或智能体）。最短操作约束看 [`../AGENTS.md`](../AGENTS.md)；接下来做什么看 [`ROADMAP.md`](ROADMAP.md)；为什么这么定看 [`NOTES.md`](NOTES.md)；已发布的改动看 [`../CHANGELOG.md`](../CHANGELOG.md)。
 >
-> 版本：`0.9.0`（未发布）· 上游 `openfilm@0.3.2` · Node 20+ · 全库 358 项测试（357 通过 / 1 跳过）
+> 版本：`0.9.0`（已发布：`dsh-openfilm-0.9.0.tgz`）· 上游 `openfilm@0.3.2` · Node 20+ · 全库 358 项测试（357 通过 / 1 跳过）
 
 ---
 

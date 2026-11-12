@@ -32,7 +32,7 @@ OpenFilm 视频创作作为 DSH 插件：整页官方 Studio 0.3.2 + 官方对�
 ## 需要什么
 
 - DSH 内核（含 `session-controller`、`storageDomain`、`webServer`）
-- Node.js 22.2+（与 OpenFilm 0.3.1 的运行时要求一致）
+- Node.js 22.2+（与 OpenFilm 0.3.2 的运行时要求一致）
 - 首次打开会启动官方 Studio（随包内置构建产物，端口固定 47822/47821）
 - 视频信息读取和部分视频处理需要系统可执行的 `ffprobe` 和 `ffmpeg`（通常随 FFmpeg 一起安装）。
 
@@ -56,22 +56,22 @@ OpenFilm 视频创作作为 DSH 插件：整页官方 Studio 0.3.2 + 官方对�
 - 思考与工具调用在对话里显示：思考块、工具卡片（名称 / 参数摘要 / 运行中→完成或失败 / 结果摘要）
 - 归档与 DSH 侧边栏是同一份集合：DSH 归档 → 面板隐藏并可恢复；面板归档 → DSH 侧边栏也消失；归档不删除、不换绑
 - 审批不经过本插件（走 DSH 自身界面），不会被静默放行
-- skills / 截图 / 撤销仍未接通（fail closed）
+- 工具行显示真名、对话内联图片、空的思考块不画（0.9.0）
+- 账号与登录尚未接入（0.9.1 规划，见 `docs/ROADMAP.md`）；skills 卡与撤销仍未接通（fail closed）
 
 ## 许可
 
 本仓库为接入代码（MIT）。官方 OpenFilm 的构建产物与许可证见 `vendor/official-shell/`。
 ---
 
-# DSH video studio (in development)
+# DSH video studio
 
-This package is an early DSH-native plugin. A local Host-side bridge displays the original OpenFilm Studio beside an embedded DSH conversation. The earlier global-conversation UI was confirmed visible; the per-project conversation, route bridge, contextual manual and resizable panel are implemented in source but have not yet been exercised in the live UI. The pre-existing global video conversation is not deleted or automatically assigned to a project.
-
+This package is a DSH-native plugin (0.9.0). The Host-side bridge serves the official OpenFilm Studio shell inside the DSH sidebar, and that shell's own chat column talks to a DSH Session through `/__dsh/official-rpc` (models, approvals and cancellation are DSH's). A project's conversation shows the agent's text, thinking, tool calls by their real names, rendered frames inline, and the plan — the transcript is what DSH produced, not a re-implementation of it.
 A project's conversation is resolved by `project-conversation.mjs`: the Host asks Studio for the canonical project directory, reuses the previously mapped DSH Session when that Session still exists with the same cwd, and otherwise creates a new empty Session. The mapping is only a hint: a failed hint write is not an error and a lost hint opens a new conversation, so there is no pending state and no unrecoverable project error. Nothing is deleted or reassigned. `project-sessions.mjs` (the former two-phase registry) is retained but no longer used; its old records are left untouched. `openfilm_guide` reads the pinned upstream package's manuals for project Sessions; the existing `openfilm_draft` Agent tool remains a pure, in-memory operation. Sending messages, project-aware edits, preview, and export have not yet been verified. The upstream Studio runtime uses its own file and process permissions; DSH workspace tool sandbox policies do not constrain it. OpenFilm's text-only `askAgent` integration is wired to the DSH default model in source; image, video and audio generation are not bridged to DSH. Some Studio routes and representations are restricted by the bridge; full feature compatibility, preview and export remain unverified.
 
-## Official desktop Chat integration (stage 1: shell served, Agent not yet bridged)
+## Official desktop Chat integration (bridged to DSH sessions)
 
-The pinned OpenFilm 0.3.1 desktop shell is built separately from its matching official source and packaged into `vendor/official-shell/ui`. `scripts/build-official-shell.mjs` checks the source checkout's exact commit and records asset hashes; it packages a previously built shell and does **not** establish build provenance or download dependencies. The generated manifest includes OpenFilm's license and upstream notices. Review the bundled third-party licenses before distribution: the upstream notice is short and does not carry the full React / Inter / Lexical texts.
+The pinned OpenFilm 0.3.2 desktop shell is built separately from its matching official source and packaged into `vendor/official-shell/ui`. `scripts/build-official-shell.mjs` checks the source checkout's exact commit and records asset hashes; it packages a previously built shell and does **not** establish build provenance or download dependencies. The generated manifest includes OpenFilm's license and upstream notices. Review the bundled third-party licenses before distribution: the upstream notice is short and does not carry the full React / Inter / Lexical texts.
 
 By default the video panel now serves that official shell, whose own chat column replaces the DSH conversation beside Studio. Set `NO996_OPENFILM_DSH_CHAT=1` before the Host starts to fall back to the embedded DSH conversation. Stage 1 status:
 
