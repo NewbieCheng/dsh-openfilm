@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.11.1 —— 删除项目的报错与占用
+
+- 删除项目不再把整段 `Command failed: powershell.exe …` 和 stderr 弹给用户：代理把这一类 5xx 改写成 409 + 一句人话（文件夹被谁占用、下一步怎么办），失败原文只留在诊断日志里。
+- 删除前先归档该项目绑定的对话（`stopActivity`），释放它作为 DSH 工作区对项目目录的文件监视；归档失败不影响删除继续。
+- 新增 `tests/proxy-error-sanitize.test.mjs`：原始命令失败被替换、普通 5xx 原样透传、归档先于转发。
+- 边界：409 只保证错误可读、不被壳当 5xx 重试；目录被其他进程占用时仍需先关掉占用方，真实 GUI 删除未复测。
+
 ## 0.11.0 —— 自有品牌与样式产线
 
 - 文档收敛：`AGENTS.md` 28.9 KB → 9.1 KB；删除 `HANDOVER.md`×2、`PROGRESS.md`、`HOT-RELOAD.md` 与 4 份已实现/被取代的 `计划-*`；新增 `docs/UI-PLAYBOOK.md`（改哪一层）、`docs/UPSTREAM.md`（补丁与升级）、`docs/BRAND.md`（品牌边界）。

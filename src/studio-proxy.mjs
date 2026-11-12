@@ -28,6 +28,31 @@ const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const MAX_FRAME = 1024 * 1024;
 const MAX_RESPONSE = 32 * 1024 * 1024;
 
+/**
+ * Upstream 5xx bodies can be raw child-process failures: Node's `Command failed:`
+ * message carries the whole PowerShell script. Showing that to a person is
+ * useless and, worse, the shell's fetch wrapper retries 5xx up to four times —
+ * so a delete that cannot finish is attempted again and again.
+ *
+ * Recognise the class, answer with a short explanation, and use 409 so nothing
+ * retries it. The original text still goes to the failure log for diagnosis.
+ */
+const COMMAND_FAILURE = /Command failed:|powershell\.exe|spawn .* ENOENT/i;
+
+function friendlyCommandFailure(text, pathname) {
+  if (!COMMAND_FAILURE.test(text)) return null;
+  const projectDelete = /^\/api\/projects\/[A-Za-z0-9_-]+\/?$/.test(pathname);
+  const error = projectDelete
+    ? '这个项目的文件夹正被其他程序占用（通常是仍打开的 DSH 会话或文件监视），无法移入回收站。请关闭使用该文件夹的会话后再删除。'
+    : '操作失败：系统命令执行出错。详细原因已写入插件日志。';
+  let json = null;
+  try { json = JSON.parse(text); } catch { /* not JSON: answer with ours */ }
+  const body = json && typeof json === 'object'
+    ? JSON.stringify({ ...json, error, code: 'no996-command-failed' })
+    : JSON.stringify({ error, code: 'no996-command-failed' });
+  return { status: 409, body };
+}
+
 // The 0.3.1 server sends unfragmented JSON frames and ping controls. Reject
 // unsupported extensions, fragmented frames, invalid masks and oversized frames.
 function wsFrame(opcode, payload, masked) {
@@ -137,7 +162,7 @@ function fail(res, status = 403) {
  * retains its native file and process permissions; DSH workspace tool restrictions
  * do not constrain these APIs.
  */
-export async function startStudioProxy({ upstream, authenticateBrowser, webOrigin, desktop = false, officialShell = false, officialRpc, authorizeOfficialProject, attachOfficialEvents, readProjectFile, openProjectFile, log } = {}) {
+export async function startStudioProxy({ upstream, authenticateBrowser, webOrigin, desktop = false, officialShell = false, officialRpc, authorizeOfficialProject, attachOfficialEvents, readProjectFile, openProjectFile, beforeProjectDelete, log } = {}) {
   // A proxy without a logger is valid (tests, embedders); the calls are no-ops.
   const say = typeof log?.write === 'function' ? log : { write() {}, info() {}, warn() {}, error() {} };
   if (typeof officialShell !== 'boolean') throw new TypeError('officialShell must be a boolean');
@@ -146,6 +171,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
   if (attachOfficialEvents !== undefined && typeof attachOfficialEvents !== 'function') throw new TypeError('attachOfficialEvents must be a function');
   if (readProjectFile !== undefined && typeof readProjectFile !== 'function') throw new TypeError('readProjectFile must be a function');
   if (openProjectFile !== undefined && typeof openProjectFile !== 'function') throw new TypeError('openProjectFile must be a function');
+  if (beforeProjectDelete !== undefined && typeof beforeProjectDelete !== 'function') throw new TypeError('beforeProjectDelete must be a function');
   const web = new URL(webOrigin);
   if (desktop ? !['dsh-app://app', 'app://app'].includes(webOrigin) :
       web.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(web.hostname) || !web.port || web.origin !== webOrigin || web.username || web.password) throw new TypeError('Invalid DSH origin');
@@ -367,6 +393,7 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
             chunks.push(chunk);
           }
           if (res.destroyed || res.writableEnded) return;
+          let finalStatus = status;
           let body = Buffer.concat(chunks);
           if (text) {
             let value = body.toString('utf8');
@@ -375,6 +402,12 @@ export async function startStudioProxy({ upstream, authenticateBrowser, webOrigi
             if (status >= 500 && !film) {
               recordFailure(req.method, url.pathname, status, value);
               say.warn('upstream-5xx', { method: req.method, path: url.pathname, status });
+              const friendly = friendlyCommandFailure(value, url.pathname);
+              if (friendly) {
+                value = friendly.body;
+                finalStatus = friendly.status;
+                out['content-type'] = 'application/json; charset=utf-8';
+              }
             }
             if (film && type.startsWith('text/html')) {
               value = value.replaceAll(`const EDITOR = ${JSON.stringify(editorUpstream.origin)};`, `const EDITOR = ${JSON.stringify(editorOrigin)};`);
@@ -475,7 +508,7 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
           }
           if (containsForbidden(body)) return fail(res, 502);
           out['content-length'] = String(body.length);
-          res.writeHead(status, out);
+          res.writeHead(finalStatus, out);
           res.end(body);
         } catch {
           up.destroy();
@@ -741,7 +774,23 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
     })();
     return true;
   }
-  const editor = createServer((req, res) => { if (!officialEvents(req, res) && !officialUpload(req, res) && !shellVersion(req, res) && !projectFile(req, res) && !openFile(req, res) && !officialBridge(req, res) && !desktopBridge(req, res)) forward(req, res, false); });
+  const editor = createServer((req, res) => {
+    // A project folder is often also a DSH workspace (the project's own
+    // conversation). Its watcher keeps Windows from moving the folder to the
+    // Recycle Bin, so stop that conversation before Studio tries. Only an
+    // authenticated, permitted request may have that side effect. The forward
+    // happens either way: a missing registry must not block a delete.
+    const deleting = typeof beforeProjectDelete === 'function' && req.method === 'DELETE'
+      ? /^\/api\/projects\/([A-Za-z0-9_-]{6,40})\/?$/.exec(req.url || '')
+      : null;
+    if (deleting && authenticated(req) && permitted(req, false)) {
+      Promise.resolve().then(() => beforeProjectDelete(deleting[1])).catch(() => {}).then(() => {
+        if (!res.writableEnded && !res.destroyed) forward(req, res, false);
+      });
+      return;
+    }
+    if (!officialEvents(req, res) && !officialUpload(req, res) && !shellVersion(req, res) && !projectFile(req, res) && !openFile(req, res) && !officialBridge(req, res) && !desktopBridge(req, res)) forward(req, res, false);
+  });
   const film = createServer((req, res) => forward(req, res, true));
   film.on('upgrade', (_req, socket) => socket.destroy());
   editor.on('upgrade', (req, socket, head) => {

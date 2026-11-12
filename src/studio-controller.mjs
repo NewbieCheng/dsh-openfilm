@@ -554,6 +554,15 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     }
     return { sessionId: binding.sessionId, archived: archive.isArchived(binding.sessionId) === true, available: archive.available };
   };
+  // The project's folder is also its conversation's workspace; a live watcher
+  // keeps Windows from moving it to the Recycle Bin. Stop that conversation
+  // first. Best effort: a missing registry must not block the delete itself.
+  const beforeProjectDelete = async projectId => {
+    try {
+      const current = await archiveState(projectId);
+      if (current.sessionId && !current.archived) await archive.archive(current.sessionId, { stopActivity: true });
+    } catch { /* the delete still has to run */ }
+  };
   const isProjectAgent = agent => Boolean(agent && conversations && !disposed && ctx.agents.get(agent.id) === agent && conversations.boundConversation(agent.id)?.available);
   // One project-scoped event fan-out feeds the official chat's stream.
   const eventHub = createOfficialEventHub();
@@ -821,7 +830,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const admission = ctx.connection.admit({ headers });
       return !('rejection' in admission) && admission.peer.id === ctx.connection.browserPeer.id;
     };
-    const pending = Promise.resolve().then(() => createProxy({ upstream, webOrigin: browserOrigin, authenticateBrowser, desktop, officialShell, log, ...(officialShell ? { officialRpc, authorizeOfficialProject, attachOfficialEvents, readProjectFile: projectFiles.read, openProjectFile: projectFiles.open } : {}) })).then(async next => {
+    const pending = Promise.resolve().then(() => createProxy({ upstream, webOrigin: browserOrigin, authenticateBrowser, desktop, officialShell, log, beforeProjectDelete, ...(officialShell ? { officialRpc, authorizeOfficialProject, attachOfficialEvents, readProjectFile: projectFiles.read, openProjectFile: projectFiles.open } : {}) })).then(async next => {
       if (!next || typeof next.bootstrap !== 'function' || typeof next.close !== 'function' || typeof next.editorOrigin !== 'string' || disposed) {
         await next?.close?.();
         throw new Error('Studio proxy is unavailable');
