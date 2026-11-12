@@ -16,7 +16,7 @@ function memoryStore(seed = {}) {
   return { get: id => table.get(id), set: (id, value) => table.set(id, value), all: () => [...table] };
 }
 
-function harness({ mode, image = false, emptyList = false, store = memoryStore(), approvals, defaultSelection, permissionMode, onOptions, mcpServers, onClosed, prepareProject, startModel } = {}) {
+function harness({ mode, image = false, emptyList = false, store = memoryStore(), approvals, defaultSelection, permissionMode, onOptions, mcpServers, onClosed, prepareProject, startModel, spawnArgs } = {}) {
   const events = [];
   const service = createAcpAgentService({
     verifier: async projectId => ({ projectId, path: 'C:\\fake' }),
@@ -28,10 +28,12 @@ function harness({ mode, image = false, emptyList = false, store = memoryStore()
     mcpServers: mcpServers ?? undefined,
     onClosed,
     prepareProject,
+    spawnArgs,
     createClient: options => {
       onOptions?.(options);
       return createAcpClient({
         resolve: () => ({ command: process.execPath, args: [fixture] }),
+        ...(options?.args ? { args: options.args } : {}),
         env: { ...process.env, ...(mode ? { FAKE_ACP_MODE: mode } : {}), ...(image ? { FAKE_ACP_IMAGE: '1' } : {}), ...(emptyList ? { FAKE_ACP_EMPTY_LIST: '1' } : {}), ...(mcpServers ? { FAKE_ACP_MCP: '1' } : {}), ...(startModel ? { FAKE_ACP_START_MODEL: startModel } : {}), ...(options?.env ?? {}) },
         requestTimeoutMs: 5000,
         spawnChild: (command, args, spawnOptions) => spawn(command, args, spawnOptions),
@@ -154,6 +156,14 @@ test('the first turn creates a Session; the id is remembered for resume', async 
   assert.equal(second.service.sessionOf(PROJECT), sessionId, 'the stored id is resumed, not recreated');
   assert.ok(catalog.groups.length > 0);
   await second.service.close();
+});
+
+test('per-spawn flags reach the child (the model overlay needs them before initialize)', async () => {
+  let options;
+  const { service } = harness({ spawnArgs: async () => ['--patch', 'C:\\tmp\\p.yml'], onOptions: value => { options = value; } });
+  await service.modelCatalog(PROJECT);
+  assert.deepEqual(options.args, ['--patch', 'C:\\tmp\\p.yml']);
+  await service.close();
 });
 
 test('a new session also adopts the DSH-side thinking level', async () => {

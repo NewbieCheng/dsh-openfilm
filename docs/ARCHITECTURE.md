@@ -146,6 +146,7 @@
 | 工具 | 完成（待真机） | Host 的 `/api/no996-openfilm/mcp` 实现 MCP streamable-http（initialize / tools/list / tools/call / ping），`session/new` 时以 `mcpServers` 把 `openfilm_guide`、9 个影片工具与转写工具交给子进程；令牌按会话签发、随子进程退出吊销。真机探测：子进程连上端点并完成 `initialize` → `notifications/initialized` |
 | 集成自检（无模型调用） | 通过 | 真服务 + 真 `dsh --profile acp` + 本地 MCP 端点 + 临时项目：`session/new`（带 `mcpServers`，`failOnStartupError:true`）成功；模型默认切到 `deepseek-official/deepseek-flash`（V4.1 Flash）；`AGENTS.md` 写入项目；会话 id 落 `acp-sessions.json`；日志 `acp-session` / `acp-default-model` |
 | 一轮真实回合（手动，非测试） | 通过 | 真子进程 + 真模型 + 本地 MCP：`session/prompt` → 模型调用 `mcp__no996-openfilm__openfilm_guide`（参数 `{topic:"edit"}`）→ 工具结果回到模型 → 回复含工具返回值 → `stopReason: end_turn`；`agent_message_chunk` 流式可见 |
+| 图片（内联） | 通过 | 子进程按当前 DSH 模型加 `--patch` overlay → `initialize` 报到 `image:true`；32×32 纯红 PNG 以 image block 送入，模型答 "Red"，`end_turn` |
 | 面板真机验收 | 待做 | 刷新页面后：面板发一句 → 侧栏同一会话；模型/思考菜单可切；权限行仍在；SenseVoice 不受影响 |
 
 里程碑口径修正：M1/M2 已在代码层完成，M4（工作区命名）在 ACP 下不需要——会话的 cwd 就是项目目录，侧栏按目录自然分组，没有注入。工具已通过 MCP 端点补齐，剩下的就是 M5 真机验收：**刷新页面后由人发一句**，然后看 `plugin.log` 里的 `acp-session` / `acp-prompt-failed`。

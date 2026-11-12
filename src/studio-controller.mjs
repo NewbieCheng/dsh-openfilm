@@ -664,6 +664,22 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       // The panel's permission row is the child's sandbox too: DSH reads the mode
       // from the environment at boot, so the child is spawned with the preset the
       // person chose here.
+      // The acp profile boots with its own model, and the ACP bridge decides
+      // "may this session carry images?" from it at initialize. Overlay the
+      // person's current DSH model so a vision route is not silently downgraded
+      // to a text-only one before the first turn.
+      spawnArgs: async () => {
+        try {
+          const selection = ctx.agentDefaultModel?.currentSelection?.();
+          const provider = typeof selection?.provider === 'string' ? selection.provider : '';
+          const model = typeof selection?.model === 'string' ? selection.model : '';
+          if (!provider || !model) return [];
+          const safe = value => value.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60);
+          const file = join(tmpdir(), `dsh-openfilm-acp-${safe(provider)}-${safe(model)}.yml`);
+          await writeFile(file, `- id: acp\n  config:\n    provider: ${JSON.stringify(provider)}\n    model: ${JSON.stringify(model)}\n`, 'utf8');
+          return ['--patch', file];
+        } catch { return []; }
+      },
       permissionMode: async projectId => {
         // A project with no recorded decision starts the way the bridge always
         // started: full access. The menu's own default must not disagree with the

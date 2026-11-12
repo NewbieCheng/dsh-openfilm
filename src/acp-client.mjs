@@ -58,7 +58,7 @@ export function resolveAcpCommand({ env = process.env, platform = process.platfo
  * @param {Function} [deps.spawnChild] - injectable for tests
  * @param {Function} [deps.log] - optional `(event, fields)` sink
  */
-export function createAcpClient({ resolve = resolveAcpCommand, env = process.env, requestTimeoutMs = 180000, spawnChild = nodeSpawn, log } = {}) {
+export function createAcpClient({ resolve = resolveAcpCommand, env = process.env, requestTimeoutMs = 180000, spawnChild = nodeSpawn, log, args: extraArgs = [] } = {}) {
   let child = null;
   let state = 'idle';
   let buffer = '';
@@ -159,6 +159,8 @@ export function createAcpClient({ resolve = resolveAcpCommand, env = process.env
       if (state === 'closed') throw fail('ACP_CLOSED');
       state = 'starting';
       const { command, args, shell = false } = resolve();
+      // Extra flags (a per-spawn --patch overlay) ride after the launcher's own.
+      if (Array.isArray(extraArgs) && extraArgs.length > 0) args.push(...extraArgs);
       child = spawnChild(command, args, {
         cwd: env.NO996_OPENFILM_ACP_CWD || process.cwd(),
         env: { ...env },

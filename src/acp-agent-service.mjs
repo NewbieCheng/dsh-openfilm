@@ -126,7 +126,7 @@ function thinkingFromConfigOptions(configOptions = []) {
  * @param {Function} [deps.createClient] - injectable for tests
  * @param {string} [deps.imageDir] - where unsupported inline images are materialised
  */
-export function createAcpAgentService({ verifier, store, emit, approvals, log, createClient = options => createAcpClient(options), imageDir = join(tmpdir(), 'no996-openfilm-chat-images'), defaultSelection = () => undefined, permissionMode = () => undefined, mcpServers, onClosed, prepareProject }) {
+export function createAcpAgentService({ verifier, store, emit, approvals, log, createClient = options => createAcpClient(options), imageDir = join(tmpdir(), 'no996-openfilm-chat-images'), defaultSelection = () => undefined, permissionMode = () => undefined, mcpServers, onClosed, prepareProject, spawnArgs }) {
   if (typeof verifier !== 'function' || typeof emit !== 'function' || !store || typeof store.get !== 'function' || typeof store.set !== 'function') {
     throw new TypeError('verifier, store and emit are required');
   }
@@ -188,11 +188,16 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       // The approval preset is the child's sandbox + approval policy too, so it is
       // chosen at spawn: DSH itself reads DSH_PERMISSION_MODE.
       const mode = await modeOf(projectId);
+      // Flags that must be in place *before* initialize (the acp profile's own
+      // model decides whether images may be sent at all), so they are computed
+      // per spawn rather than per session.
+      let extraArgs = [];
+      try { extraArgs = (await spawnArgs?.()) ?? []; } catch (error) { void log?.('acp-spawn-args-failed', { projectId, reason: String(error?.code ?? error).slice(0, 60) }); }
       // A fresh process means fresh MCP credentials: the endpoint is this Host,
       // and only the child holding the token may call the film tools.
       const servers = typeof mcpServers === 'function' ? await mcpServers(projectId, project.path) : undefined;
       const wiring = Array.isArray(servers) && servers.length > 0 ? { mcpServers: servers } : {};
-      entry.client = createClient({ env: { ...process.env, ...(mode ? { DSH_PERMISSION_MODE: mode } : {}) } });
+      entry.client = createClient({ env: { ...process.env, ...(mode ? { DSH_PERMISSION_MODE: mode } : {}) }, ...(extraArgs.length > 0 ? { args: extraArgs } : {}) });
       attach(entry);
       const capabilities = await entry.client.start();
       entry.imageEnabled = capabilities?.agentCapabilities?.promptCapabilities?.image === true;
