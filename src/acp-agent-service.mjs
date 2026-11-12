@@ -224,7 +224,18 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       await adoptDefaultSelection(entry);
       return entry;
     })();
-    try { return await entry.ready; } catch (error) { entry.ready = undefined; throw error; }
+    try {
+      return await entry.ready;
+    } catch (error) {
+      // A half-open child (spawned but failed to announce a session) must not be
+      // orphaned: the retry builds a new one, and the old process would linger.
+      entry.ready = undefined;
+      const dead = entry.client;
+      entry.client = undefined;
+      entry.sessionId = undefined;
+      if (dead) { try { await dead.close(); } catch { /* already gone */ } }
+      throw error;
+    }
   }
 
   async function discover(entry, projectPath) {

@@ -45,6 +45,33 @@ function harness({ mode, image = false, emptyList = false, store = memoryStore()
 
 const updatesOf = events => events.filter(event => event.kind === 'update').map(event => event.update);
 
+test('a child that fails to announce a session is closed before the retry', async () => {
+  const made = [];
+  const service = createAcpAgentService({
+    verifier: async projectId => ({ projectId, path: 'C:\\fake' }),
+    store: memoryStore(),
+    emit: () => true,
+    createClient: () => {
+      const client = {
+        closed: false,
+        onUpdate() {},
+        on() {},
+        setPermissionHandler() {},
+        async start() { throw Object.assign(new Error('spawn failed'), { code: 'ACP_SPAWN' }); },
+        async close() { client.closed = true; },
+      };
+      made.push(client);
+      return client;
+    },
+  });
+  await assert.rejects(service.modelCatalog(PROJECT), error => error.code === 'ACP_SPAWN');
+  await assert.rejects(service.modelCatalog(PROJECT), error => error.code === 'ACP_SPAWN');
+  assert.equal(made.length, 2, 'each attempt builds its own child');
+  assert.equal(made[0].closed, true, 'the failed child is stopped, not orphaned');
+  assert.equal(made[1].closed, true);
+  await service.close();
+});
+
 test('the advertised model catalog becomes the DSH shape the menu expects', async () => {
   const { service } = harness();
   const catalog = await service.modelCatalog(PROJECT);
