@@ -147,9 +147,11 @@ src/theme.mjs             ← 读取 + 注入（按 surface 注册表）
 
 | 注入 | 位置 | 为什么 | 退出条件 |
 |---|---|---|---|
-| 「只看视频创作项目」 | `src/project-filter.mjs` | 视图菜单的条目是 primitives `Menu` 的固定数组，没有插槽；只能往已打开的弹层追加一个**克隆的原生项**，筛选靠"给项目行打标记 + 一条样式"，组级隐藏靠 `[class*="_groupSection"]` 计数 | DSH 给视图菜单开插槽/过滤扩展点时删除 |
+| 「工作区类型」小节 | `src/project-filter.mjs` | 视图菜单的条目是 primitives `Menu` 的固定数组，没有插槽；只能往已打开的弹层追加**克隆的原生节点**（标签/分隔线/条目/勾选位） | DSH 给视图菜单开插槽/过滤扩展点时删除 |
 
-失败面：DSH 改了菜单类名（`*viewOptionsMenu`）→ 项不出现；改了行属性（`data-row-key`）→ 不筛选。两种情况都只是"没有效果"，不会错藏别的行（标记只打在项目会话上）。真机排错顺序：先看 `plugin.log` 的 `client` 事件（`filter-installed` / `filter-menu`），再确认页面刷新过。
+隐藏不靠"渲染后打标记"，而是**生成样式表**：按项目会话 id 生成 `:not([data-row-key="session:…"])` 保留项目行，`:has()` 隐藏没有项目会话的组。打标记的版本会在每次 React 重渲染时闪一下（先隐藏再标记），不要再用。
+
+失败面：DSH 改了菜单类名（`*viewOptionsMenu`）→ 小节不出现；改了行属性（`data-row-key`）→ 不筛选。都只是"没有效果"，不会错藏别的行。真机排错：先看 `plugin.log` 的 `page-filter-installed` / `page-filter-menu` / `page-store-loaded`。
 
 ---
 

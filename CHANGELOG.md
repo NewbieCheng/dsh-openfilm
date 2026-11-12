@@ -1,15 +1,16 @@
 # 更新记录
 
-## 0.13.0 —— 视图菜单多一个「只看视频创作项目」筛选
+## 0.13.0 —— 视图菜单「工作区类型」筛选
 
-- 侧栏仍是官方 `WorkspaceBrowser`：不接管、不改样式、不隐藏；唯一的界面改动是往"分组/排序/筛选"那个视图菜单里追加一项 **只看视频创作项目**（B2，已登记 UI-PLAYBOOK）。条目克隆自原生菜单项（同一套图标位/勾选位/字号/悬停），勾选状态存 `no996.openfilm.filter.projects`。
-- 筛选判据用宿主给出的**项目对话集合** `hiddenSessionIds`：已存的绑定 + 目录**与项目文件夹相关**的会话——项目目录本身、它下面的子目录、以及创建项目时所用的父目录（工作区常常就开在父目录上，"自定义-xxxx"这类不吃亏）。所以"先生成过对话、后来才绑定"的项目会话也算，勾上后只剩它们；没有项目对话的工作区组整组隐藏，不会留一排空文件夹。取消勾选立刻恢复全部行。
-- 之前的"行悬停按钮 + 会话菜单项『在剪辑素材区打开』"两处入口按用户要求删掉（`src/session-actions.mjs` 删除）：与原生会话菜单的习惯冲突，且筛选已能覆盖"找到项目"的诉求。
-- 保留的底层能力（不触碰界面）：只读路由 `GET /api/no996-openfilm/area`、`project-conversation.bindings()`、父页面 → iframe 的 `no996-openfilm:navigate`（壳未就绪时排队，壳不响应则退化整页跳转）。
-- 诊断：新增 `POST /api/no996-openfilm/client-log`，客户端把 `client-apply` / `store-loaded` / `filter-installed` / `filter-menu` / `filter-toggle` 写进 `plugin.log`，界面里看不到效果时不用再靠猜。
-- 移除上一版的侧栏接管、项目页、行级入口实现；本地路由重复注册降级为日志警告，避免管理开关重复 apply 时插件被判成未激活。
-- 测试：`tests/project-filter.test.mjs`（开关持久化、宿主集合、无 DOM 退化）、`tests/client-area-wiring.test.mjs`（无行级入口、筛选已接入、Host 路由只读）。
-
+- 侧栏仍是官方 `WorkspaceBrowser`：不接管、不改行样式、不隐藏行级交互。唯一改动是在视图菜单（分组/排序/筛选）末尾追加一个小节 **工作区类型**：全部类型 / 仅视频创作项目（同一组内互斥，勾选状态存 `no996.openfilm.filter.type`，旧的 `filter.projects` 值会迁移）。
+- **和归档筛选是两条独立轴、同时生效**：归档那组保持原生行为，类型这组只决定"哪些会话属于视频创作"；两组各有自己的勾，列表是两者的交集。
+- 判据用宿主给出的项目对话集合：已存绑定 + 目录与项目目录相关的会话（项目目录本身、其子目录、创建项目时用的父目录）。第二部分覆盖旧会话与"工作区开在项目文件夹上"的情况。
+- 筛选实现改为**生成式样式表**：按项目会话 id 生成 `:not([data-row-key="session:…"])` 只保留这些行，并用 `:has()` 把不含项目会话的工作区组整组隐藏。行怎么重渲染都不会闪——上一版"先渲染后打标记"会让行闪一下，已废弃。
+- 菜单项是克隆的原生节点（标签/分隔线/条目同一套样式与勾选位），不新增自绘控件；DSH 改类名时只是不出现，不会错藏别的行。
+- 保留的底层能力（不触碰界面）：只读路由 `GET /api/no996-openfilm/area`、`project-conversation.bindings()`、父页面 → iframe 的 `no996-openfilm:navigate`。
+- 路由：所有本地路由重复注册降级为警告，避免管理开关重复 apply 时插件被判成未激活；client-log 复用已有路由，只加事件白名单与 detail 字段。
+- 移除：侧栏接管、项目页、行悬停按钮与会话菜单项「在剪辑素材区打开」。
+- 测试：`tests/project-filter.test.mjs`（取值/迁移/宿主集合/生成的选择器/无 DOM 退化）、`tests/area-view.test.mjs`（目录包含判定）、`tests/client-area-wiring.test.mjs`（只保留筛选、无接管、路由只读）。
 ## 0.12.1 —— 本地服务 SenseVoice 改回原生渲染
 
 - 撤掉 `assets/shell-ui.js` 里往「本地服务」弹窗追加卡片的 B2 注入，改为改上游源码数据：`studio/server/local-models.mjs` 的 `ABOUT` 加一条 `sensevoice-small`，`library/local-models.json` 加模型文件清单。UI 完全由这份数据驱动，所以 SenseVoice 现在作为「语音转写」组里的普通一行渲染（名称 / FunAudioLLM · 228 MB / 安装 / 原生进度条 / 已开启），没有额外卡片。

@@ -12,7 +12,9 @@ window.__ModuleLoader__.load({
     const PANEL = 'no996-openfilm';
     const en = {
       panel: 'Video studio',
-      projectsOnly: 'Projects only',
+      filterTypeSection: 'Workspace type',
+      filterTypeAll: 'All types',
+      filterTypeProjects: 'Video projects only',
       studioLoading: 'Starting OpenFilm Studio…',
       studioFailed: 'Unable to start OpenFilm Studio.',
       studioRetry: 'Try again', studioStopped: 'Video workspace stopped', studioStoppedHint: 'The editing service is not running. Restart it to continue; projects and media are untouched.', studioRestart: 'Restart workspace',
@@ -23,7 +25,9 @@ window.__ModuleLoader__.load({
     };
     const zh = {
       panel: '视频创作',
-      projectsOnly: '只看视频创作项目',
+      filterTypeSection: '工作区类型',
+      filterTypeAll: '全部类型',
+      filterTypeProjects: '仅视频创作项目',
       studioLoading: '正在启动 OpenFilm 工作台…',
       studioFailed: '无法启动 OpenFilm 工作台。',
       studioRetry: '重试', studioStopped: '工作台已停止运行', studioStoppedHint: '视频编辑服务已断开。重新启动即可继续，项目和素材不受影响。', studioRestart: '重新启动工作台',
@@ -147,7 +151,11 @@ window.__ModuleLoader__.load({
         const projectFilter = createProjectFilter({
           store: areaStore,
           storage: typeof window === 'undefined' ? undefined : window.localStorage,
-          label: t('projectsOnly'),
+          labels: {
+            section: t('filterTypeSection'),
+            all: t('filterTypeAll'),
+            projects: t('filterTypeProjects'),
+          },
           report,
         });
         projectFilter.start();

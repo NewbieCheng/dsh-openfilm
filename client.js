@@ -551,111 +551,128 @@
   }
 
   // src/project-filter.mjs
-  var STORAGE_KEY = "no996.openfilm.filter.projects";
+  var STORAGE_KEY = "no996.openfilm.filter.type";
+  var LEGACY_KEY = "no996.openfilm.filter.projects";
   var STYLE_TAG = "no996-openfilm-project-filter";
-  var FLAG = "data-no996-projects";
-  var MARK = "data-no996-project";
-  var CSS = `
-html[${FLAG}="on"] [data-row-key^="session:"]:not([${MARK}]){display:none!important}
-html[${FLAG}="on"] [data-no996-empty]{display:none!important}
-`;
+  var FLAG = "data-no996-type";
+  var FILTER_ALL = "all";
+  var FILTER_PROJECTS = "projects";
   function readProjectFilter(storage) {
     try {
-      return storage?.getItem(STORAGE_KEY) === "1";
+      const value = storage?.getItem(STORAGE_KEY);
+      if (value === FILTER_PROJECTS || value === FILTER_ALL) return value;
+      return storage?.getItem(LEGACY_KEY) === "1" ? FILTER_PROJECTS : FILTER_ALL;
     } catch {
-      return false;
+      return FILTER_ALL;
     }
   }
-  function writeProjectFilter(storage, on) {
+  function writeProjectFilter(storage, type) {
     try {
-      storage?.setItem(STORAGE_KEY, on ? "1" : "0");
+      storage?.setItem(STORAGE_KEY, type === FILTER_PROJECTS ? FILTER_PROJECTS : FILTER_ALL);
     } catch {
     }
   }
   function projectSessionIds(payload) {
     const ids = /* @__PURE__ */ new Set();
     for (const id of payload?.hidden ?? payload?.hiddenSessionIds ?? []) {
-      if (typeof id === "string" && id) ids.add(id);
+      if (typeof id === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(id)) ids.add(id);
     }
     return ids;
   }
-  var sessionKey = (element) => element?.getAttribute?.("data-row-key") ?? "";
-  function createProjectFilter({ store, storage, doc = typeof document === "undefined" ? void 0 : document, report, label = "Projects only" }) {
+  function buildFilterCss(type, sessionIds) {
+    if (type !== FILTER_PROJECTS) return "";
+    const ids = [.../* @__PURE__ */ new Set([...sessionIds])].sort();
+    const keepRows = ids.map((id) => `:not([data-row-key="session:${id}"])`).join("");
+    const keepSections = ids.map((id) => `:not(:has([data-row-key="session:${id}"]))`).join("");
+    return [
+      `html[${FLAG}="projects"] [data-row-key^="session:"]${keepRows}{display:none!important}`,
+      keepSections ? `html[${FLAG}="projects"] [class*="_groupSection"]${keepSections}{display:none!important}` : ""
+    ].filter(Boolean).join("\n");
+  }
+  var textOf = (node) => (node?.textContent ?? "").trim();
+  function createProjectFilter({ store, storage, doc = typeof document === "undefined" ? void 0 : document, report, labels }) {
     if (!doc) return { start() {
-    }, toggle() {
-    }, isOn: () => false };
-    let on = readProjectFilter(storage);
-    let scheduled = false;
+    }, choose() {
+    }, getType: () => FILTER_ALL };
+    let type = readProjectFilter(storage);
     let ids = projectSessionIds(store.snapshot());
     const style = doc.createElement("style");
     style.dataset.no996 = STYLE_TAG;
-    style.textContent = CSS;
     doc.head.appendChild(style);
-    const applyFlag = () => {
-      doc.documentElement.setAttribute(FLAG, on ? "on" : "off");
+    const apply = () => {
+      doc.documentElement.setAttribute(FLAG, type === FILTER_PROJECTS ? "projects" : "all");
+      style.textContent = buildFilterCss(type, ids);
     };
-    const markRows = () => {
-      const rows = doc.querySelectorAll('[data-row-key^="session:"]');
-      for (const row of rows) {
-        const id = sessionKey(row).slice("session:".length);
-        const project = ids.has(id);
-        if (project) row.setAttribute(MARK, "1");
-        else row.removeAttribute(MARK);
+    const section = (list) => {
+      const children = [...list.children];
+      const items = children.filter((node) => node.getAttribute("role") === "menuitem");
+      const labels_ = children.filter((node) => node.getAttribute("role") !== "menuitem" && textOf(node));
+      const separators = children.filter((node) => node.getAttribute("role") !== "menuitem" && !textOf(node));
+      if (items.length === 0) return null;
+      const ticks = items.map((node) => node.querySelectorAll("svg").length);
+      const richest = Math.max(0, ...ticks);
+      const checked = richest >= 2 ? items[ticks.indexOf(richest)] : void 0;
+      const template = checked ?? items[0];
+      const labelNode = labels_.length > 0 ? labels_[labels_.length - 1].cloneNode(true) : null;
+      const separatorNode = separators.length > 0 ? separators[separators.length - 1].cloneNode(true) : null;
+      if (labelNode) labelNode.textContent = labels.section;
+      const option = (text) => {
+        const clone = template.cloneNode(true);
+        clone.setAttribute("data-no996-option", text);
+        const spans = [...clone.querySelectorAll("span")];
+        const target = spans.find((span) => textOf(span)) ?? null;
+        if (target) target.textContent = text;
+        else clone.textContent = text;
+        const svgs = clone.querySelectorAll("svg");
+        const tick = svgs.length >= 2 ? svgs[svgs.length - 1] : null;
+        if (tick) tick.style.opacity = "0";
+        return { clone, tick };
+      };
+      return { labelNode, separatorNode, all: option(labels.all), projects: option(labels.projects) };
+    };
+    const paintTicks = () => {
+      for (const [node, on] of [
+        [allItem, type === FILTER_ALL],
+        [projectsItem, type === FILTER_PROJECTS]
+      ]) {
+        if (node?.tick) node.tick.style.opacity = on ? "1" : "0";
       }
-      for (const section of doc.querySelectorAll('[class*="_groupSection"]')) {
-        const sessions = [...section.querySelectorAll('[data-row-key^="session:"]')];
-        const anyProject = sessions.some((row) => ids.has(sessionKey(row).slice("session:".length)));
-        if (on && sessions.length > 0 && !anyProject) section.setAttribute("data-no996-empty", "1");
-        else section.removeAttribute("data-no996-empty");
-      }
     };
-    const sync = () => {
-      scheduled = false;
-      applyFlag();
-      try {
-        markRows();
-      } catch {
-      }
-    };
-    const schedule = () => {
-      if (scheduled) return;
-      scheduled = true;
-      (doc.defaultView?.requestAnimationFrame ?? ((fn) => setTimeout(fn, 16)))(sync);
-    };
-    const menuItem = () => {
+    let allItem;
+    let projectsItem;
+    const inject = () => {
       const list = doc.querySelector('[class*="viewOptionsMenu"]');
-      if (!list || list.querySelector("[data-no996-filter-item]")) return;
-      const items = [...list.querySelectorAll('[role="menuitem"], button')].filter((node) => node.textContent?.trim());
-      const counts = items.map((node) => node.querySelectorAll("svg").length);
-      const richest = Math.max(0, ...counts);
-      const selected = richest >= 2 ? items[counts.indexOf(richest)] : void 0;
-      const template = selected ?? items[items.length - 1];
-      if (!template) return;
-      const clone = template.cloneNode(true);
-      clone.setAttribute("data-no996-filter-item", "1");
-      const labelNode = [...clone.querySelectorAll("span")].find((span) => span.textContent?.trim());
-      if (labelNode) labelNode.textContent = label;
-      else clone.textContent = label;
-      const svgs = clone.querySelectorAll("svg");
-      const check = svgs[svgs.length - 1];
-      if (check) check.style.opacity = on ? "1" : "0";
-      clone.addEventListener("click", (event) => {
+      if (!list || list.querySelector("[data-no996-section]")) return;
+      const built = section(list);
+      if (!built) return;
+      const wrap = doc.createElement("div");
+      wrap.setAttribute("data-no996-section", "1");
+      wrap.style.display = "contents";
+      const nodes = [built.separatorNode, built.labelNode, built.all.clone, built.projects.clone].filter(Boolean);
+      for (const node of nodes) wrap.appendChild(node);
+      allItem = built.all;
+      projectsItem = built.projects;
+      const choose = (value) => {
+        type = value;
+        writeProjectFilter(storage, type);
+        report?.("filter-toggle", { type, sessions: ids.size });
+        apply();
+        paintTicks();
+        doc.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      };
+      built.all.clone.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        toggle();
-        if (check) check.style.opacity = on ? "1" : "0";
+        choose(FILTER_ALL);
       }, true);
-      list.appendChild(clone);
-      report?.("filter-menu", { injected: true, on });
-    };
-    const toggle = () => {
-      on = !on;
-      writeProjectFilter(storage, on);
-      report?.("filter-toggle", { on });
-      sync();
-      const item = doc.querySelector("[data-no996-filter-item]");
-      const check = item?.querySelectorAll("svg");
-      if (check && check.length > 0) check[check.length - 1].style.opacity = on ? "1" : "0";
+      built.projects.clone.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        choose(FILTER_PROJECTS);
+      }, true);
+      list.appendChild(wrap);
+      paintTicks();
+      report?.("filter-menu", { type, sessions: ids.size });
     };
     const observer = new (doc.defaultView?.MutationObserver ?? class {
       observe() {
@@ -664,24 +681,27 @@ html[${FLAG}="on"] [data-no996-empty]{display:none!important}
       }
     })(() => {
       try {
-        menuItem();
+        inject();
       } catch {
       }
-      schedule();
     });
     return {
       start() {
-        applyFlag();
-        sync();
+        apply();
         observer.observe(doc.body, { childList: true, subtree: true });
         store.subscribe(() => {
           ids = projectSessionIds(store.snapshot());
-          schedule();
+          apply();
         });
-        report?.("filter-installed", { on, projects: ids.size });
+        report?.("filter-installed", { type, sessions: ids.size });
       },
-      toggle,
-      isOn: () => on,
+      choose(value) {
+        type = value === FILTER_PROJECTS ? FILTER_PROJECTS : FILTER_ALL;
+        writeProjectFilter(storage, type);
+        apply();
+        paintTicks();
+      },
+      getType: () => type,
       stop() {
         observer.disconnect();
         style.remove();
@@ -700,7 +720,9 @@ html[${FLAG}="on"] [data-no996-empty]{display:none!important}
       const PANEL = "no996-openfilm";
       const en = {
         panel: "Video studio",
-        projectsOnly: "Projects only",
+        filterTypeSection: "Workspace type",
+        filterTypeAll: "All types",
+        filterTypeProjects: "Video projects only",
         studioLoading: "Starting OpenFilm Studio\u2026",
         studioFailed: "Unable to start OpenFilm Studio.",
         studioRetry: "Try again",
@@ -720,7 +742,9 @@ html[${FLAG}="on"] [data-no996-empty]{display:none!important}
       };
       const zh = {
         panel: "\u89C6\u9891\u521B\u4F5C",
-        projectsOnly: "\u53EA\u770B\u89C6\u9891\u521B\u4F5C\u9879\u76EE",
+        filterTypeSection: "\u5DE5\u4F5C\u533A\u7C7B\u578B",
+        filterTypeAll: "\u5168\u90E8\u7C7B\u578B",
+        filterTypeProjects: "\u4EC5\u89C6\u9891\u521B\u4F5C\u9879\u76EE",
         studioLoading: "\u6B63\u5728\u542F\u52A8 OpenFilm \u5DE5\u4F5C\u53F0\u2026",
         studioFailed: "\u65E0\u6CD5\u542F\u52A8 OpenFilm \u5DE5\u4F5C\u53F0\u3002",
         studioRetry: "\u91CD\u8BD5",
@@ -853,7 +877,11 @@ html[${FLAG}="on"] [data-no996-empty]{display:none!important}
           const projectFilter = createProjectFilter({
             store: areaStore,
             storage: typeof window === "undefined" ? void 0 : window.localStorage,
-            label: t("projectsOnly"),
+            labels: {
+              section: t("filterTypeSection"),
+              all: t("filterTypeAll"),
+              projects: t("filterTypeProjects")
+            },
             report
           });
           projectFilter.start();
