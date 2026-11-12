@@ -67,6 +67,9 @@ export function createTranscribeService({
   let chain = Promise.resolve();
   let install = null;
   let recognizer = null;
+  // What the last install attempt is doing, for the wizard: "connecting" is a
+  // different user experience from "downloading", and a failure names its source.
+  let installState = { phase: 'idle', source: '', file: '', seen: 0, total: 0, speed: 0, error: '', startedAt: 0 };
 
   const note = (event, detail) => {
     try { logger?.info?.(event, detail); } catch { /* logging must never fail a transcript */ }
@@ -97,9 +100,40 @@ export function createTranscribeService({
   /** Start (or join) the one download in flight. Never awaited by the caller. */
   function startInstall() {
     if (!install) {
-      install = ensureModels({ env, fetchImpl })
-        .then(state => { note('asr-install-done', { ready: state.ready }); return state; })
-        .catch(error => { note('asr-install-failed', { code: error?.code ?? 'UNKNOWN' }); throw error; })
+      const startedAt = now();
+      installState = { phase: 'connecting', source: '', file: '', seen: 0, total: 0, speed: 0, error: '', startedAt };
+      let lastAt = startedAt;
+      let lastSeen = 0;
+      install = ensureModels({
+        env,
+        fetchImpl,
+        onEvent: event => {
+          if (!event) return;
+          if (event.phase === 'downloading') {
+            const at = now();
+            const seconds = (at - lastAt) / 1000;
+            if (seconds >= 0.4) {
+              installState.speed = Math.max(0, (event.seen - lastSeen) / seconds);
+              lastAt = at;
+              lastSeen = event.seen;
+            }
+          }
+          installState = {
+            ...installState,
+            phase: event.phase ?? installState.phase,
+            source: event.source ?? installState.source,
+            file: event.file ?? installState.file,
+            seen: event.seen ?? installState.seen,
+            total: event.total ?? installState.total,
+          };
+        },
+      })
+        .then(state => { note('asr-install-done', { ready: state.ready }); installState = { ...installState, phase: 'done' }; return state; })
+        .catch(error => {
+          note('asr-install-failed', { code: error?.code ?? 'UNKNOWN' });
+          installState = { ...installState, phase: 'failed', error: String(error?.message || error).slice(0, 300) };
+          throw error;
+        })
         .finally(() => { install = null; });
       // Nobody is awaiting this promise at the moment it is created: swallow the
       // rejection here so a failed download cannot surface as an unhandled one.
@@ -130,6 +164,10 @@ export function createTranscribeService({
       installing: install !== null,
       bytesOnDisk: bytes,
       progress: SENSE_VOICE.bytes > 0 ? Math.min(1, Math.round((bytes / SENSE_VOICE.bytes) * 1000) / 1000) : null,
+      phase: installState.phase,
+      source: installState.source,
+      speed: installState.speed,
+      error: installState.error,
     };
   }
 

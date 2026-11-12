@@ -940,11 +940,27 @@
       ref.mark.style.background=info.state==='ok'?'#1f8a4c':info.state==='bad'?'#a33a2a':'#d9cfbc';
       ref.mark.style.color=info.state==='ok'||info.state==='bad'?'#fff':'#6d6a62';
     }
+    function fmtBytes(n){
+      n=Number(n)||0;
+      if(n>=1048576)return (n/1048576).toFixed(n>=10485760?0:1)+' MB';
+      if(n>=1024)return Math.round(n/1024)+' KB';
+      return n+' B';
+    }
+    function fmtSpeed(n){
+      n=Number(n)||0;
+      if(n<=0)return '连接中';
+      if(n>=1048576)return (n/1048576).toFixed(1)+' MB/s';
+      return Math.max(1,Math.round(n/1024))+' KB/s';
+    }
     function toolDetail(tool){
       var system=env||{}, tools=system.tools||{}, installed=(system.installer&&system.installer.tools)||{};
       var info=installed[tool]||{}, probe=tools[tool]||{status:'timeout'};
-      if(probe.status==='ok')return {text:'已就绪',state:'ok'};
-      if(info.installing)return {text:info.total?'正在下载 '+Math.round(info.received/info.total*100)+'%':'正在下载 '+Math.round((info.received||0)/1048576)+' MB',state:'busy'};
+      if(probe.status==='ok')return {text:info.source==='system'?'已就绪（系统安装）':'已就绪',state:'ok'};
+      if(info.installing){
+        if(info.phase==='connecting')return {text:'正在连接下载源（'+(info.sourceId||'npmmirror')+'）…',state:'busy'};
+        if(info.phase==='verifying')return {text:'正在校验下载…',state:'busy'};
+        return {text:'正在下载 '+fmtBytes(info.received)+' / '+fmtBytes(info.total)+' · '+fmtSpeed(info.speed)+'（源：'+(info.sourceId||'?')+'）',state:'busy'};
+      }
       if(info.error)return {text:'下载失败：'+info.error,state:'bad'};
       return {text:probe.status==='missing'?'没有找到 '+tool:'已安装但无法运行',state:'bad'};
     }
@@ -952,8 +968,12 @@
       var asr=(env&&env.asr)||{};
       if(asr.ready===true)return {text:'已就绪',state:'ok'};
       if(asr.unknown)return {text:'插件重载后确认',state:'busy'};
-      if(asr.installing)return {text:'正在下载 '+(asr.progress?Math.round(asr.progress*100)+'%':Math.round((asr.bytesOnDisk||0)/1048576)+' MB'),state:'busy'};
-      if(asr.bytesOnDisk)return {text:Math.round(asr.bytesOnDisk/1048576)+' MB / '+Math.round((asr.bytesTotal||0)/1048576)+' MB',state:'busy'};
+      if(asr.installing){
+        if(asr.phase==='connecting')return {text:'正在连接下载源（'+(asr.source||'hf-mirror')+'）…',state:'busy'};
+        return {text:'正在下载 '+Math.round((asr.progress||0)*100)+'% · '+fmtSpeed(asr.speed)+'（源：'+(asr.source||'?')+'）',state:'busy'};
+      }
+      if(asr.error)return {text:'下载失败：'+asr.error,state:'bad'};
+      if(asr.bytesOnDisk)return {text:fmtBytes(asr.bytesOnDisk)+' / '+fmtBytes(asr.bytesTotal),state:'busy'};
       return {text:'未下载（约 228 MB）',state:'bad'};
     }
     // 只建一次 DOM，轮询改文字：否则每 1.5 秒重建按钮，点击会被从指下抽走。
@@ -982,7 +1002,7 @@
       body.appendChild(envRefs.ff.line);
       body.appendChild(envRefs.fp.line);
       body.appendChild(envRefs.asr.line);
-      envRefs.hint=el('p','margin:10px 0 0;font:400 12px/1.7 system-ui,sans-serif;color:#6d6a62','缺的组件会直接下：ffmpeg/ffprobe 约 115 MB，转写模型约 228 MB。装不动就点「重试」，也可以看安装方法。');
+      envRefs.hint=el('p','margin:10px 0 0;font:400 12px/1.7 system-ui,sans-serif;color:#6d6a62','缺的组件会直接下：ffmpeg/ffprobe 约 115 MB，转写模型约 228 MB。默认走国内镜像（npmmirror / hf-mirror），失败会自动换源；全程显示速度与来源，装不动就点「重试」。');
       body.appendChild(envRefs.hint);
       envRefs.next=button('等装完再继续','dark');
       envRefs.next.addEventListener('click',async function(){
@@ -1007,7 +1027,7 @@
     function installButton(){
       var b=button('重试安装','ghost');
       b.addEventListener('click',async function(){
-        b.disabled=true;b.textContent='正在开始…';
+        b.disabled=true;b.textContent='正在连接…';
         try{
           await rpc('system:install',{tool:'all'});
           var asr=env&&env.asr;
@@ -1018,6 +1038,9 @@
         }
         env=await probeSystem();
         if(overlay)renderEnv();
+        // The button is hidden once everything is ready; otherwise it must come
+        // back usable, or a slow download leaves it stuck on "正在开始…".
+        b.disabled=false;b.textContent='重试安装';
       });
       return b;
     }
@@ -1136,6 +1159,88 @@
       try{ templates=await rpc('template:list',{}); }catch(e){ templates={templates:[]}; }
     }
     setTimeout(boot,1200);
+  })();
+
+  // ---- 设置 → 服务 → 本地服务：补一行 SenseVoice -------------------------
+  // 上游弹窗只列它自己的模型（Whisper / BiRefNet）。这里在弹窗出现时追加一行
+  // SenseVoice，状态与安装走同一个 asr 通道，所以它和对话里的转写工具是同一个
+  // 模型、同一份权重。B2 注入，登记在 docs/UI-PLAYBOOK.md。
+  (function senseVoiceInLocalServices(){
+    var MARK='data-no996-sensevoice';
+    var card=null, detail=null, action=null, busy=false;
+    function bytes(n){
+      n=Number(n)||0;
+      return n>=1048576?(n/1048576).toFixed(0)+' MB':Math.max(0,Math.round(n/1024))+' KB';
+    }
+    function findDialog(){
+      var nodes=document.querySelectorAll('div'),best=null;
+      for(var i=0;i<nodes.length;i++){
+        var n=nodes[i];
+        if(n.hasAttribute(MARK))continue;
+        var t=n.textContent||'';
+        if(t.indexOf('本地服务')<0||t.indexOf('Whisper')<0)continue;
+        if(!best||best.contains(n))best=n;   // 取最内层：整张弹窗
+      }
+      return best;
+    }
+    function paint(state){
+      if(!detail||!action)return;
+      state=state||{};
+      if(state.ready===true){
+        detail.textContent='已就绪 · 在对话里说「转写这段口播」即可';
+        action.style.display='none';
+        return;
+      }
+      action.style.display='';
+      if(state.installing){
+        action.disabled=true;action.textContent='下载中…';
+        detail.textContent=state.phase==='connecting'
+          ?'正在连接下载源（'+(state.source||'hf-mirror')+'）…'
+          :'正在下载 '+Math.round((state.progress||0)*100)+'% · 源：'+(state.source||'?');
+        return;
+      }
+      action.disabled=false;
+      if(state.error){
+        action.textContent='重试';
+        detail.textContent='上次失败：'+state.error;
+        return;
+      }
+      action.textContent='安装';
+      detail.textContent='未下载（约 228 MB）· 装好后对话里可直接调用';
+    }
+    async function tick(){
+      try{ paint(await rpc('asr:status',{})); }
+      catch(e){ if(detail)detail.textContent='无法读取本地服务状态'; }
+    }
+    async function start(){
+      if(busy)return;
+      busy=true;action.disabled=true;action.textContent='正在连接…';
+      try{ await rpc('asr:install',{}); }catch(e){}
+      busy=false;action.disabled=false;
+      tick();
+    }
+    function ensure(){
+      var dialog=findDialog();
+      if(!dialog)return;
+      if(!dialog.querySelector('['+MARK+']')){
+        card=document.createElement('div');
+        card.setAttribute(MARK,'');
+        card.style.cssText='margin-top:10px;padding:12px 14px;border:1px solid rgba(255,255,255,.14);border-radius:6px;background:rgba(255,255,255,.04);display:flex;align-items:center;gap:12px';
+        var box=document.createElement('div');box.style.cssText='flex:1 1 auto;min-width:0';
+        var name=document.createElement('div');name.style.cssText='font:600 14px/1.4 system-ui,sans-serif;color:#e8e4da';
+        name.textContent='SenseVoice · 本地转写（不加班剪辑）';
+        detail=document.createElement('div');detail.style.cssText='margin-top:2px;font:400 12px/1.6 system-ui,sans-serif;color:#9a958a;word-break:break-word';
+        box.appendChild(name);box.appendChild(detail);
+        action=document.createElement('button');action.type='button';
+        action.style.cssText='flex:none;border:0;border-radius:4px;padding:8px 14px;font:600 12px/1 system-ui,sans-serif;background:#ff6400;color:#fff;cursor:pointer';
+        action.textContent='安装';
+        action.addEventListener('click',function(){ start(); });
+        card.appendChild(box);card.appendChild(action);
+        dialog.appendChild(card);
+      }
+      tick();
+    }
+    setInterval(ensure,1500);
   })();
 })()
 

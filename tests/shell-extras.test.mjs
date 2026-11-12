@@ -82,6 +82,7 @@ test('the overlays only talk over the fixed bridge channels', () => {
   const channels = [...body.matchAll(/rpc\('([^']+)'/g)].map(match => match[1]);
   assert.deepEqual([...new Set(channels)].sort(), [
     'asr:install',
+    'asr:status',
     'auth:action',
     'auth:remember-clear',
     'auth:remember-get',

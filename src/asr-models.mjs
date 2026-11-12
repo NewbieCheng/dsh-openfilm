@@ -7,6 +7,9 @@
  * upstream publishes one) sha256, and written through a .part file so an
  * interrupted download can never be mistaken for a usable model.
  *
+ * Two sources are tried in order: hf-mirror (reachable from mainland China) and
+ * huggingface.co itself. NO996_OPENFILM_ASR_BASE_URL still overrides both.
+ *
  * SenseVoice-small int8 for recognising, and nothing else: its own ITN head
  * restores Chinese punctuation, so there is no second punctuation model to ship.
  */
@@ -17,12 +20,11 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-
-const REPO = 'https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/';
+import { MODEL_REPO, modelBases } from './download-sources.mjs';
 
 export const SENSE_VOICE = Object.freeze({
   id: 'sensevoice-small-int8',
-  dir: 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17',
+  dir: MODEL_REPO.split('/')[1],
   label: 'SenseVoice-small (int8)',
   bytes: 239233841 + 315894,
   files: [
@@ -56,7 +58,7 @@ export async function modelState({ env, home } = {}) {
     let size = -1;
     try { size = (await stat(path)).size; } catch { /* absent */ }
     if (size === file.bytes) present.push(file.name);
-    else missing.push({ ...file, url: baseUrl(env) + file.name, got: size > 0 ? size : 0 });
+    else missing.push({ ...file, url: modelBases(env)[0].base + file.name, got: size > 0 ? size : 0 });
   }
   return {
     id: SENSE_VOICE.id,
@@ -71,15 +73,10 @@ export async function modelState({ env, home } = {}) {
   };
 }
 
-function baseUrl(env) {
-  const override = env?.NO996_OPENFILM_ASR_BASE_URL;
-  return typeof override === 'string' && override.length > 0 ? override : REPO;
-}
-
-async function downloadOne(file, dir, { env, fetchImpl = globalThis.fetch, onProgress, signal }) {
+async function downloadOne(file, dir, { base, source, fetchImpl = globalThis.fetch, onEvent, signal }) {
   const target = join(dir, file.name);
   const part = target + '.part';
-  const url = baseUrl(env) + file.name;
+  const url = base + file.name;
   const response = await fetchImpl(url, { redirect: 'follow', signal });
   if (!response || !response.ok) {
     throw Object.assign(new Error('下载模型失败（HTTP ' + (response?.status ?? '?') + '）：' + url), { code: 'MODEL_DOWNLOAD_FAILED' });
@@ -90,7 +87,7 @@ async function downloadOne(file, dir, { env, fetchImpl = globalThis.fetch, onPro
   body.on('data', chunk => {
     seen += chunk.length;
     hash.update(chunk);
-    if (typeof onProgress === 'function') onProgress({ file: file.name, seen, total: file.bytes, url });
+    if (typeof onEvent === 'function') onEvent({ phase: 'downloading', source, file: file.name, seen, total: file.bytes });
   });
   await pipeline(body, createWriteStream(part));
   if (file.bytes > 0 && seen !== file.bytes) {
@@ -103,20 +100,38 @@ async function downloadOne(file, dir, { env, fetchImpl = globalThis.fetch, onPro
     throw Object.assign(new Error('模型校验失败：' + file.name + ' 的 sha256 是 ' + digest.slice(0, 12) + '…，应为 ' + file.sha256.slice(0, 12) + '…'), { code: 'MODEL_CHECKSUM' });
   }
   await rename(part, target);
-  return { name: file.name, bytes: seen, sha256: digest };
+  return { name: file.name, bytes: seen, sha256: digest, source };
 }
 
 /** Download whatever is missing. Resolves with the state; throws only on a real failure. */
-export async function ensureModels({ env, home, fetchImpl, onProgress, signal } = {}) {
+export async function ensureModels({ env, home, fetchImpl, onEvent, signal } = {}) {
   const before = await modelState({ env, home });
   if (before.ready) return { ...before, downloaded: [] };
   const dir = before.dir;
   await mkdir(dir, { recursive: true });
+  const bases = modelBases(env);
   const downloaded = [];
   for (const file of before.missing) {
     if (signal?.aborted) throw Object.assign(new Error('已取消', { cause: 'ABORTED' }), { code: 'ABORTED' });
     const spec = SENSE_VOICE.files.find(candidate => candidate.name === file.name);
-    downloaded.push(await downloadOne(spec, dir, { env, fetchImpl, onProgress, signal }));
+    const failures = [];
+    let done = null;
+    for (const source of bases) {
+      if (signal?.aborted) throw Object.assign(new Error('已取消', { cause: 'ABORTED' }), { code: 'ABORTED' });
+      if (typeof onEvent === 'function') onEvent({ phase: 'connecting', source: source.id, file: file.name });
+      try {
+        done = await downloadOne(spec, dir, { base: source.base, source: source.id, fetchImpl, onEvent, signal });
+        break;
+      } catch (error) {
+        if (error?.code === 'ABORTED') throw error;
+        failures.push(source.id + ': ' + String(error?.message || error).slice(0, 120));
+      }
+    }
+    if (!done) {
+      throw Object.assign(new Error('所有下载源都失败（' + failures.join('；') + '）'), { code: 'MODEL_DOWNLOAD_FAILED' });
+    }
+    if (typeof onEvent === 'function') onEvent({ phase: 'done', source: done.source, file: file.name });
+    downloaded.push(done);
   }
   const after = await modelState({ env, home });
   return { ...after, downloaded };

@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.12.0 —— 本地服务：镜像、进度、SenseVoice
+
+- 已安装检测：`resolveAny` 依次看打包依赖 → 我们下载的 `tools/` → Homebrew / WinGet / scoop / chocolatey 目录；Host 启动时把 `/opt/homebrew/bin`、`/usr/local/bin`、WinGet Links 前置进本进程 PATH。Mac 从 Finder 启动不再"已装却没检测到"。
+- 下载镜像：ffmpeg/ffprobe 先走 npmmirror、失败回退 GitHub/npm；SenseVoice 先走 hf-mirror、失败回退 huggingface.co；`NO996_OPENFILM_ASR_BASE_URL` 仍可整体覆盖。连接 20 秒超时即换源。
+- 进度可见：`system:check` / `asr:status` 新增 `phase / source / speed / attempt / error`；首启向导显示"正在连接下载源 → 下载 12.3/75 MB · 1.2 MB/s（源：npmmirror）→ 校验中"，失败原因可读，"重试安装"不再卡在"正在开始…"。
+- 本地服务面板：设置 → 服务 → 本地服务里追加一行 **SenseVoice · 本地转写**，安装/进度/就绪都走 `asr:*` 通道，与对话里的转写工具是同一个模型（B2 注入，已登记 UI-PLAYBOOK）。
+- 说明：ModelScope 没有 sherpa-onnx 布局的 SenseVoice 仓库（实测 404），暂不列为源；hf-mirror 对 `resolve` 是 308 到 HF CDN，仍作为首选并在失败时回退。
+- 新增 `tests/download-sources.test.mjs`；`tool-installer` 增加换源、`resolveAny`、下载后检测的测试。
+
 ## 0.11.3 —— 项目对话真正坐进项目工作区
 
 - 根因：DSH 0.11 的 `workspace/create` 返回 `{ workspace: { workspaceId, sessionIds }, created }`，插件按旧的扁平 `id` 读，永远拿不到 id（日志里每次打开项目都是 `WORKSPACE_CREATE_NO_ID`），于是退回 `cwd` 建会话；而 DSH 把一个会话算进工作区只认 `workspace.sessionIds`（`SessionSummary` 上没有 `workspaceId`），所以每个项目的对话都落在「未分组」。

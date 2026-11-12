@@ -10,6 +10,7 @@ import {
   productMeta,
 } from './preferences.mjs';
 import { createToolInstaller } from './tool-installer.mjs';
+import { augmentPath } from './download-sources.mjs';
 import { readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -103,8 +104,11 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   let debugBridge;
   // The installer's resolved path wins over PATH so a downloaded or packaged
   // binary is what actually gets probed and, later, invoked.
+  // A GUI launched from Finder or the Start menu does not inherit the shell's
+  // PATH; without this a brew/WinGet ffmpeg is "already installed but missing".
+  augmentPath();
   const toolInstaller = createToolInstaller({ home: process.env.DSH_HOME || join(homedir(), '.dsh') });
-  const detectHostComponents = createHostComponentDetector({ resolve: name => toolInstaller.resolve(name) });
+  const detectHostComponents = createHostComponentDetector({ resolve: name => toolInstaller.resolveAny(name)?.path ?? null });
   let componentCheck;
   // Write the preset activation result once per Host start so it can be checked
   // without a browser session (see preset-report.mjs).
@@ -759,6 +763,10 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       progress: Number(asrState.progress) || 0,
       installing: asrState.installing === true,
       engine: typeof asrState.engine === 'string' ? asrState.engine : '',
+      phase: typeof asrState.phase === 'string' ? asrState.phase : '',
+      source: typeof asrState.source === 'string' ? asrState.source : '',
+      speed: Number(asrState.speed) || 0,
+      error: typeof asrState.error === 'string' ? asrState.error : '',
     };
     return {
       platform: components.platform,

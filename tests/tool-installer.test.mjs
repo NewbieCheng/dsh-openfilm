@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
@@ -74,18 +74,54 @@ test('a failed download is reported and a retry can still succeed', async (t) =>
     home, platform: 'linux', arch: 'x64', resolvePackaged: noPackages,
     fetchImpl: async () => {
       calls += 1;
-      if (calls === 1) throw new Error('network down');
+      // Both sources fail on the first attempt; the retry reaches the second.
+      if (calls <= 2) throw new Error('network down');
       return { ok: true, headers: new Map(), arrayBuffer: async () => ok };
     },
   });
   await installer.install('ffmpeg');
   let snap = await installer.snapshot();
   assert.equal(snap.tools.ffmpeg.ready, false);
+  assert.match(snap.tools.ffmpeg.error, /所有下载源都失败/);
   assert.match(snap.tools.ffmpeg.error, /network down/);
   await installer.install('ffmpeg');
   snap = await installer.snapshot();
   assert.equal(snap.tools.ffmpeg.ready, true);
   assert.equal(snap.tools.ffmpeg.error, '');
+});
+
+test('the next source is used when the first one fails', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'openfilm-tools-'));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const gz = gzipSync(Buffer.from('FFMPEG'));
+  const urls = [];
+  const installer = createToolInstaller({
+    home, platform: 'win32', arch: 'x64', resolvePackaged: noPackages,
+    fetchImpl: async (url) => {
+      urls.push(url);
+      if (url.includes('npmmirror')) throw new Error('mirror down');
+      return { ok: true, headers: new Map(), arrayBuffer: async () => gz };
+    },
+  });
+  await installer.install('ffmpeg');
+  const snap = await installer.snapshot();
+  assert.equal(snap.tools.ffmpeg.ready, true);
+  assert.equal(snap.tools.ffmpeg.sourceId, 'github');
+  assert.equal(snap.tools.ffmpeg.phase, 'done');
+  assert.equal(urls.length, 2);
+  assert.match(urls[0], /npmmirror/);
+});
+
+test('a downloaded binary is found without PATH', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'openfilm-tools-'));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const dir = join(home, 'no996-openfilm', 'tools');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'ffmpeg.exe'), 'BINARY');
+  const installer = createToolInstaller({ home, platform: 'win32', resolvePackaged: noPackages });
+  const found = installer.resolveAny('ffmpeg');
+  assert.equal(found?.source, 'downloaded');
+  assert.equal(found?.path, join(dir, 'ffmpeg.exe'));
 });
 
 test('a packaged binary needs no network and is reported as packaged', async (t) => {

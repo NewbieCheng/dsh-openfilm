@@ -20,5 +20,5 @@ test('Host exposes system/check and system/install, and both mirror the installe
 });
 
 test('the detector prefers the installer-resolved binary', () => {
-  assert.match(ctrl, /createHostComponentDetector\(\{ resolve: name => toolInstaller\.resolve\(name\) \}\)/);
+  assert.match(ctrl, /createHostComponentDetector\(\{ resolve: name => toolInstaller\.resolveAny\(name\)\?\.path \?\? null \}\)/);
 });
