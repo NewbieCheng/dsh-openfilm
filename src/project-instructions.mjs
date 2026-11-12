@@ -20,7 +20,7 @@ export const INSTRUCTIONS = `# OpenFilm 项目工作说明
 
 这个目录是一支 OpenFilm 影片的项目文件夹。\`film.html\` 就是影片本身；项目素材在同级目录里。
 
-影片工具在会话里的名字以 `mcp__no996-openfilm__` 开头（例如 `mcp__no996-openfilm__openfilm_clip`）；下文为简短起见只写后半段。
+影片工具在会话里的名字以 \`mcp__no996-openfilm__\` 开头（例如 \`mcp__no996-openfilm__openfilm_clip\`）；下文为简短起见只写后半段。
 
 ## 怎么做事
 
