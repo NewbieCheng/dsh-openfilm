@@ -150,3 +150,22 @@
 | 面板真机验收 | 待做 | 刷新页面后：面板发一句 → 侧栏同一会话；模型/思考菜单可切；权限行仍在；SenseVoice 不受影响 |
 
 里程碑口径修正：M1/M2 已在代码层完成，M4（工作区命名）在 ACP 下不需要——会话的 cwd 就是项目目录，侧栏按目录自然分组，没有注入。工具已通过 MCP 端点补齐，剩下的就是 M5 真机验收：**刷新页面后由人发一句**，然后看 `plugin.log` 里的 `acp-session` / `acp-prompt-failed`。
+
+## 10. M5 收尾清单（真机验收后执行，未执行）
+
+验收通过后，把旧的手写 RPC 回合路径整段删掉，只留 ACP：
+
+| 删除 | 位置 | 判断依据 |
+|---|---|---|
+| 进程内回合服务 | `src/official-agent-service.mjs` + `tests/official-agent-service.test.mjs` | 只有它自己与 `studio-controller` 引用 |
+| 事件翻译层 | `src/official-agent-events.mjs` + `tests/official-agent-events.test.mjs` | 只被旧服务引用 |
+| 旧兜底分支 | `studio-controller` 里 `createOfficialAgentService` 的 import、`acpEnabled()`、`agentService = acp… ?? create…`、`openProjectSessions` | ACP 成为唯一路径 |
+| 旧会话绑定 | `project-conversation.mjs` + 3 个测试；`projectConversations`/`conversations`/`boundSession`/`rebind` | ACP 下会话在子进程，Host 侧不再建绑定 |
+| 旧系统提示注入 | `ctx.systemPrompt.context({ name: 'no996-openfilm-project' })` | 只对 Host 侧绑定会话生效，ACP 子进程读不到 |
+| 旧审批桥 | `attachApprovalBridge` | ACP 权限走 `session/request_permission` |
+| 提示词分支里的旧动作 | `agent:prompt` 里的 `boundSession`/`store.resume` | ACP 权限由 `DSH_PERMISSION_MODE` 决定 |
+| 诊断里的旧分组 | `grouping: conversations.grouping(...)` | 改成常量 `acp` |
+
+**保留**：`official-chat-rpc`、`official-chat-store`、`official-event-*`、`official-approvals`、`official-permission`（权限行与 `decide`）、`official-attachment`（上传仍在，作为大图兜底）、项目文件路由、模板、转写（SenseVoice）与所有影片工具。
+
+删除后必须重跑：`node --test tests/*.test.mjs`、`npm run build`、`npm run docs:check`、`npm run patches:check`，并在真机里再发一句、切一次模型、拖一张图、看一次侧栏同一会话。任何一步不通过，就从 git 恢复（删掉的模块都在历史里）。
