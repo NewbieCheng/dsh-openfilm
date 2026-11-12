@@ -3,6 +3,7 @@ import { createActivationStore } from './panel-keepalive.mjs';
 import { areaBus } from './area-bus.mjs';
 import { createAreaStore } from './area-store.mjs';
 import { createSessionActions } from './session-actions.mjs';
+import { createProjectFilter } from './project-filter.mjs';
 
 window.__ModuleLoader__.load({
   id: 'dsh-openfilm',
@@ -15,6 +16,7 @@ window.__ModuleLoader__.load({
       panel: 'Video studio',
       openInEditing: 'Open in the editing area',
       openInEditingHint: 'Show this project in the video studio',
+      projectsOnly: 'Projects only',
       studioLoading: 'Starting OpenFilm Studio…',
       studioFailed: 'Unable to start OpenFilm Studio.',
       studioRetry: 'Try again', studioStopped: 'Video workspace stopped', studioStoppedHint: 'The editing service is not running. Restart it to continue; projects and media are untouched.', studioRestart: 'Restart workspace',
@@ -27,6 +29,7 @@ window.__ModuleLoader__.load({
       panel: '视频创作',
       openInEditing: '在剪辑素材区打开',
       openInEditingHint: '在视频创作面板里打开这个项目',
+      projectsOnly: '只看视频创作项目',
       studioLoading: '正在启动 OpenFilm 工作台…',
       studioFailed: '无法启动 OpenFilm 工作台。',
       studioRetry: '重试', studioStopped: '工作台已停止运行', studioStoppedHint: '视频编辑服务已断开。重新启动即可继续，项目和素材不受影响。', studioRestart: '重新启动工作台',
@@ -150,6 +153,13 @@ window.__ModuleLoader__.load({
           onLoad: info => report('store-loaded', info),
         });
         areaStore.start();
+        const projectFilter = createProjectFilter({
+          store: areaStore,
+          storage: typeof window === 'undefined' ? undefined : window.localStorage,
+          label: t('projectsOnly'),
+          report,
+        });
+        projectFilter.start();
         const { RowAction, MenuItem } = createSessionActions(React, {
           t,
           store: areaStore,

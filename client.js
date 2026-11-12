@@ -642,6 +642,147 @@
     return { RowAction, MenuItem };
   }
 
+  // src/project-filter.mjs
+  var STORAGE_KEY = "no996.openfilm.filter.projects";
+  var STYLE_TAG2 = "no996-openfilm-project-filter";
+  var FLAG = "data-no996-projects";
+  var MARK = "data-no996-project";
+  var CSS2 = `
+html[${FLAG}="on"] [data-row-key^="session:"]:not([${MARK}]){display:none!important}
+html[${FLAG}="on"] [data-row-key^="workspace:"][data-no996-empty]{display:none!important}
+`;
+  function readProjectFilter(storage) {
+    try {
+      return storage?.getItem(STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+  function writeProjectFilter(storage, on) {
+    try {
+      storage?.setItem(STORAGE_KEY, on ? "1" : "0");
+    } catch {
+    }
+  }
+  function projectSessionIds(payload) {
+    const ids = /* @__PURE__ */ new Set();
+    for (const project of payload?.projects ?? []) {
+      if (typeof project?.sessionId === "string" && project.sessionId) ids.add(project.sessionId);
+    }
+    return ids;
+  }
+  var sessionKey = (element) => element?.getAttribute?.("data-row-key") ?? "";
+  function createProjectFilter({ store, storage, doc = typeof document === "undefined" ? void 0 : document, report, label = "Projects only" }) {
+    if (!doc) return { start() {
+    }, toggle() {
+    }, isOn: () => false };
+    let on = readProjectFilter(storage);
+    let scheduled = false;
+    let ids = projectSessionIds(store.snapshot());
+    const style = doc.createElement("style");
+    style.dataset.no996 = STYLE_TAG2;
+    style.textContent = CSS2;
+    doc.head.appendChild(style);
+    const applyFlag = () => {
+      doc.documentElement.setAttribute(FLAG, on ? "on" : "off");
+    };
+    const markRows = () => {
+      const rows = doc.querySelectorAll('[data-row-key^="session:"]');
+      for (const row of rows) {
+        const id = sessionKey(row).slice("session:".length);
+        const project = ids.has(id);
+        if (project) row.setAttribute(MARK, "1");
+        else row.removeAttribute(MARK);
+      }
+      for (const header of doc.querySelectorAll('[data-row-key^="workspace:"]')) {
+        const section = header.parentElement;
+        const sessions = section ? [...section.querySelectorAll('[data-row-key^="session:"]')] : [];
+        const anyProject = sessions.some((row) => ids.has(sessionKey(row).slice("session:".length)));
+        if (on && sessions.length > 0 && !anyProject) header.setAttribute("data-no996-empty", "1");
+        else header.removeAttribute("data-no996-empty");
+      }
+    };
+    const sync = () => {
+      scheduled = false;
+      applyFlag();
+      try {
+        markRows();
+      } catch {
+      }
+    };
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = true;
+      (doc.defaultView?.requestAnimationFrame ?? ((fn) => setTimeout(fn, 16)))(sync);
+    };
+    const menuItem = () => {
+      const list = doc.querySelector('[class*="viewOptionsMenu"]');
+      if (!list || list.querySelector("[data-no996-filter-item]")) return;
+      const items = [...list.querySelectorAll('[role="menuitem"], button')].filter((node) => node.textContent?.trim());
+      const counts = items.map((node) => node.querySelectorAll("svg").length);
+      const richest = Math.max(0, ...counts);
+      const selected = richest >= 2 ? items[counts.indexOf(richest)] : void 0;
+      const template = selected ?? items[items.length - 1];
+      if (!template) return;
+      const clone = template.cloneNode(true);
+      clone.setAttribute("data-no996-filter-item", "1");
+      const labelNode = [...clone.querySelectorAll("span")].find((span) => span.textContent?.trim());
+      if (labelNode) labelNode.textContent = label;
+      else clone.textContent = label;
+      const svgs = clone.querySelectorAll("svg");
+      const check = svgs[svgs.length - 1];
+      if (check) check.style.opacity = on ? "1" : "0";
+      clone.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        toggle();
+        if (check) check.style.opacity = on ? "1" : "0";
+      }, true);
+      list.appendChild(clone);
+      report?.("filter-menu", { injected: true, on });
+    };
+    const toggle = () => {
+      on = !on;
+      writeProjectFilter(storage, on);
+      report?.("filter-toggle", { on });
+      sync();
+      const item = doc.querySelector("[data-no996-filter-item]");
+      const check = item?.querySelectorAll("svg");
+      if (check && check.length > 0) check[check.length - 1].style.opacity = on ? "1" : "0";
+    };
+    const observer = new (doc.defaultView?.MutationObserver ?? class {
+      observe() {
+      }
+      disconnect() {
+      }
+    })(() => {
+      try {
+        menuItem();
+      } catch {
+      }
+      schedule();
+    });
+    return {
+      start() {
+        applyFlag();
+        sync();
+        observer.observe(doc.body, { childList: true, subtree: true });
+        store.subscribe(() => {
+          ids = projectSessionIds(store.snapshot());
+          schedule();
+        });
+        report?.("filter-installed", { on, projects: ids.size });
+      },
+      toggle,
+      isOn: () => on,
+      stop() {
+        observer.disconnect();
+        style.remove();
+        doc.documentElement.removeAttribute(FLAG);
+      }
+    };
+  }
+
   // src/studio-entry.js
   window.__ModuleLoader__.load({
     id: "dsh-openfilm",
@@ -654,6 +795,7 @@
         panel: "Video studio",
         openInEditing: "Open in the editing area",
         openInEditingHint: "Show this project in the video studio",
+        projectsOnly: "Projects only",
         studioLoading: "Starting OpenFilm Studio\u2026",
         studioFailed: "Unable to start OpenFilm Studio.",
         studioRetry: "Try again",
@@ -675,6 +817,7 @@
         panel: "\u89C6\u9891\u521B\u4F5C",
         openInEditing: "\u5728\u526A\u8F91\u7D20\u6750\u533A\u6253\u5F00",
         openInEditingHint: "\u5728\u89C6\u9891\u521B\u4F5C\u9762\u677F\u91CC\u6253\u5F00\u8FD9\u4E2A\u9879\u76EE",
+        projectsOnly: "\u53EA\u770B\u89C6\u9891\u521B\u4F5C\u9879\u76EE",
         studioLoading: "\u6B63\u5728\u542F\u52A8 OpenFilm \u5DE5\u4F5C\u53F0\u2026",
         studioFailed: "\u65E0\u6CD5\u542F\u52A8 OpenFilm \u5DE5\u4F5C\u53F0\u3002",
         studioRetry: "\u91CD\u8BD5",
@@ -811,6 +954,13 @@
             onLoad: (info) => report("store-loaded", info)
           });
           areaStore.start();
+          const projectFilter = createProjectFilter({
+            store: areaStore,
+            storage: typeof window === "undefined" ? void 0 : window.localStorage,
+            label: t("projectsOnly"),
+            report
+          });
+          projectFilter.start();
           const { RowAction, MenuItem } = createSessionActions(React, {
             t,
             store: areaStore,

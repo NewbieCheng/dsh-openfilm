@@ -9,6 +9,7 @@
 - 会话 → 项目 的对应关系来自只读路由 `GET /api/no996-openfilm/area`（Studio 项目列表 + 绑定表 + 会话目录），客户端 `createAreaStore` 缓存并每 20 秒 / 窗口聚焦刷新；拿不到（桌面页、路由未挂）时一律不显示按钮，宁可少一个入口也不猜。
 - 按钮样式优先借用官方行内 `iconButton` 类（从官方 `Rows.module.css` 里读回哈希前缀），读不到才用随包的 `nof-session-action` 兜底，保证和原生悬停按钮同一观感。
 - 面板侧保留：iframe 未就绪时导航排队、就绪后补发；壳不响应 `pushState + popstate` 时退化整页跳转。`project-conversation` 的只读 `bindings()` 供路由使用。
+- 视图菜单（分组/排序/筛选那个齿轮）里追加一项「只看视频创作项目」（B2，已登记 UI-PLAYBOOK）：条目是克隆的原生菜单项，勾选后只保留项目对话行、隐藏没有项目的工作区组；状态存 `no996.openfilm.filter.projects`，关掉后列表原样恢复。
 - 移除上一版的侧栏接管实现（`src/area-browser.mjs`、`area-hider.mjs`、项目页），避免再走"整块重画"的老路。
 - 测试：`tests/session-actions.test.mjs`（普通会话不渲染、项目会话渲染一个按钮、点击不冒泡、菜单项关闭菜单）、`tests/client-area-wiring.test.mjs`（两个扩展点注册、没有 `sidebar.workspaces` 占位、路由只读）、`area-client` / `area-view` / `area-route` 保持。
 
