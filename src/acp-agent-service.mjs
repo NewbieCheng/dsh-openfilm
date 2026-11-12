@@ -203,7 +203,8 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
           const resumed = await entry.client.resumeSession({ sessionId: known.sessionId, cwd: project.path, ...wiring });
           entry.sessionId = known.sessionId;
           entry.configOptions = resumed?.configOptions ?? [];
-          await adoptDefaultSelection(entry);
+          // No default on resume: ACP keeps the model the person chose for this
+          // Session, and re-applying the DSH default would silently undo it.
           return entry;
         } catch (error) {
           void log?.('acp-resume-failed', { projectId, reason: String(error?.code ?? error).slice(0, 80) });
@@ -245,17 +246,31 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
     const catalog = catalogFromConfigOptions(entry.configOptions);
     if (!catalog.groups.some(group => group.id === selection.provider && group.models.some(item => item.id === selection.model))) return;
     const option = entry.configOptions.find(item => item && (item.category === 'model' || item.id === 'model'));
-    if (!option || option.currentValue === valueForChoice(entry.configOptions, selection)) return;
+    if (option && option.currentValue !== valueForChoice(entry.configOptions, selection)) {
+      try {
+        const updated = await entry.client.setConfigOption({
+          sessionId: entry.sessionId,
+          configId: option.id ?? 'model',
+          value: valueForChoice(entry.configOptions, selection),
+        });
+        if (Array.isArray(updated?.configOptions) && updated.configOptions.length > 0) entry.configOptions = updated.configOptions;
+        void log?.('acp-default-model', { projectId: entry.projectId, provider: selection.provider, model: selection.model });
+      } catch (error) {
+        void log?.('acp-default-model-failed', { projectId: entry.projectId, reason: String(error?.code ?? error).slice(0, 80) });
+      }
+    }
+    // Match the DSH-side thinking intensity too, so the first turn of the panel
+    // runs at the level the person already uses in the sidebar.
+    const effort = selection.reasoningEffort ?? selection.effort;
+    const thinkingOptionId = entry.configOptions.find(item => item && (item.category === 'thought_level' || item.id === 'reasoning_effort'));
+    if (!text(effort) || !thinkingOptionId || thinkingOptionId.currentValue === effort) return;
+    if (!Array.isArray(thinkingOptionId.options) || !thinkingOptionId.options.some(item => item?.value === effort)) return;
     try {
-      const updated = await entry.client.setConfigOption({
-        sessionId: entry.sessionId,
-        configId: option.id ?? 'model',
-        value: valueForChoice(entry.configOptions, selection),
-      });
+      const updated = await entry.client.setConfigOption({ sessionId: entry.sessionId, configId: thinkingOptionId.id ?? 'reasoning_effort', value: effort });
       if (Array.isArray(updated?.configOptions) && updated.configOptions.length > 0) entry.configOptions = updated.configOptions;
-      void log?.('acp-default-model', { projectId: entry.projectId, provider: selection.provider, model: selection.model });
+      void log?.('acp-default-effort', { projectId: entry.projectId, value: effort });
     } catch (error) {
-      void log?.('acp-default-model-failed', { projectId: entry.projectId, reason: String(error?.code ?? error).slice(0, 80) });
+      void log?.('acp-default-effort-failed', { projectId: entry.projectId, reason: String(error?.code ?? error).slice(0, 80) });
     }
   }
 

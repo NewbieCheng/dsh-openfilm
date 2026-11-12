@@ -20,7 +20,7 @@ const send = message => process.stdout.write(JSON.stringify(message) + '\n');
 const result = (id, value) => send({ jsonrpc: '2.0', id, result: value });
 
 let permissionWait = null;
-let modelValue = '["p","m1"]';
+let modelValue = process.env.FAKE_ACP_START_MODEL || '["p","m1"]';
 let effortValue = 'high';
 let sendResume = false;
 let pendingPrompt = null;

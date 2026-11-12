@@ -16,7 +16,7 @@ function memoryStore(seed = {}) {
   return { get: id => table.get(id), set: (id, value) => table.set(id, value), all: () => [...table] };
 }
 
-function harness({ mode, image = false, emptyList = false, store = memoryStore(), approvals, defaultSelection, permissionMode, onOptions, mcpServers, onClosed, prepareProject } = {}) {
+function harness({ mode, image = false, emptyList = false, store = memoryStore(), approvals, defaultSelection, permissionMode, onOptions, mcpServers, onClosed, prepareProject, startModel } = {}) {
   const events = [];
   const service = createAcpAgentService({
     verifier: async projectId => ({ projectId, path: 'C:\\fake' }),
@@ -32,7 +32,7 @@ function harness({ mode, image = false, emptyList = false, store = memoryStore()
       onOptions?.(options);
       return createAcpClient({
         resolve: () => ({ command: process.execPath, args: [fixture] }),
-        env: { ...process.env, ...(mode ? { FAKE_ACP_MODE: mode } : {}), ...(image ? { FAKE_ACP_IMAGE: '1' } : {}), ...(emptyList ? { FAKE_ACP_EMPTY_LIST: '1' } : {}), ...(mcpServers ? { FAKE_ACP_MCP: '1' } : {}), ...(options?.env ?? {}) },
+        env: { ...process.env, ...(mode ? { FAKE_ACP_MODE: mode } : {}), ...(image ? { FAKE_ACP_IMAGE: '1' } : {}), ...(emptyList ? { FAKE_ACP_EMPTY_LIST: '1' } : {}), ...(mcpServers ? { FAKE_ACP_MCP: '1' } : {}), ...(startModel ? { FAKE_ACP_START_MODEL: startModel } : {}), ...(options?.env ?? {}) },
         requestTimeoutMs: 5000,
         spawnChild: (command, args, spawnOptions) => spawn(command, args, spawnOptions),
       });
@@ -153,6 +153,30 @@ test('the first turn creates a Session; the id is remembered for resume', async 
   const catalog = await second.service.modelCatalog(PROJECT);
   assert.equal(second.service.sessionOf(PROJECT), sessionId, 'the stored id is resumed, not recreated');
   assert.ok(catalog.groups.length > 0);
+  await second.service.close();
+});
+
+test('a new session also adopts the DSH-side thinking level', async () => {
+  const { service } = harness({ defaultSelection: () => ({ provider: 'p', model: 'm1', reasoningEffort: 'off' }) });
+  await service.modelCatalog(PROJECT);
+  const thinking = await service.thinkingOption(PROJECT);
+  assert.equal(thinking.currentValue, 'off');
+  await service.close();
+});
+
+test('a resumed session keeps the model the person chose, not the DSH default', async () => {
+  const store = memoryStore();
+  const first = harness({ store, emptyList: true, defaultSelection: () => ({ provider: 'q', model: 'q1' }) });
+  await first.service.modelCatalog(PROJECT);
+  await first.service.selectModel(PROJECT, { provider: 'p', model: 'm2' });
+  await first.service.close();
+
+  const second = harness({
+    store, emptyList: true, startModel: '["p","m2"]',
+    defaultSelection: () => ({ provider: 'q', model: 'q1' }),
+  });
+  const catalog = await second.service.modelCatalog(PROJECT);
+  assert.deepEqual(catalog.default, { provider: 'p', model: 'm2' }, 'the session selection survives the resume');
   await second.service.close();
 });
 

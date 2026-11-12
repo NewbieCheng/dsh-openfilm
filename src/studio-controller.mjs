@@ -308,6 +308,13 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         // A running ACP child keeps the mode it booted with; forget it so the next
         // turn starts under the preset just chosen.
         await acpAgentService?.reset?.(projectId);
+        if (acpAgentService) {
+          // Under ACP the Session lives in the child, not here: record the decision
+          // (it is what the next spawn reads) instead of applying it to a Host-side
+          // Session that does not exist.
+          await store.decide(projectId, preset);
+          return { ok: true, preset, applied: false };
+        }
         if (!sessionId) return { ok: true, preset, applied: false };
         const applied = await store.apply(projectId, sessionId, preset);
         return { ok: true, preset: applied.preset, applied: true };
@@ -581,6 +588,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // keeps Windows from moving it to the Recycle Bin. Stop that conversation
   // first. Best effort: a missing registry must not block the delete itself.
   const beforeProjectDelete = async projectId => {
+    // The ACP child is standing in this folder; close it before the folder goes.
+    try { await acpAgentService?.reset?.(projectId); } catch { /* the delete still has to run */ }
     try {
       const current = await archiveState(projectId);
       if (current.sessionId && !current.archived) await archive.archive(current.sessionId, { stopActivity: true });
