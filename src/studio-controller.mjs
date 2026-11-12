@@ -1103,7 +1103,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         // agent output and dropped events look identical.
         turns: agentService ? agentService.diagnose(diagnoseProject) : null,
         // Whether the conversation is really grouped under the project's folder.
-        grouping: conversations && diagnoseProject ? conversations.grouping(diagnoseProject) : 'unknown',
+        grouping: acpAgentService ? 'acp' : conversations && diagnoseProject ? conversations.grouping(diagnoseProject) : 'unknown',
         // The last few events, so a support message can carry the history that
         // explains the symptom without asking for a file path.
         log: { file: log.file, tail: log.tail(12) },
