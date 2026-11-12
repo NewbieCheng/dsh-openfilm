@@ -1,6 +1,5 @@
 import { createStudioPanel } from './studio-panel.mjs';
 import { createActivationStore } from './panel-keepalive.mjs';
-import { createAreaBrowser, discoverPrefixes, ensureFallbackStyles } from './area-browser.mjs';
 import { areaBus } from './area-bus.mjs';
 
 window.__ModuleLoader__.load({
@@ -12,14 +11,8 @@ window.__ModuleLoader__.load({
     const PANEL = 'no996-openfilm';
     const en = {
       panel: 'Video studio',
-      areaEditTitle: 'Editing area', areaWorkTitle: 'Workspaces',
-      areaSwitchEdit: 'Switch to the editing area', areaSwitchWork: 'Switch to Workspaces',
-      areaSearch: 'Search projects', areaSearchPlaceholder: 'Search projects or conversations',
-      areaClear: 'Clear search', areaNew: 'New project', areaMore: 'More', areaSessions: 'conversations',
-      areaLoading: 'Reading…', areaEmptyProjects: 'No projects yet. Open the video studio to create one.',
-      areaEmptyWorkspaces: 'No workspace to show.', areaNotStarted: 'Not started', areaSessionUntitled: 'New conversation',
-      areaBlankSession: 'New conversation', areaOpenPanel: 'Open video studio', areaOpenSession: 'Open as conversation',
-      areaRefresh: 'Refresh list', areaUngrouped: 'Ungrouped', areaWorkspaceFallback: 'Workspace',
+      openInEditing: 'Open in the editing area',
+      openInEditingHint: 'Show this project in the video studio',
       studioLoading: 'Starting OpenFilm Studio…',
       studioFailed: 'Unable to start OpenFilm Studio.',
       studioRetry: 'Try again', studioStopped: 'Video workspace stopped', studioStoppedHint: 'The editing service is not running. Restart it to continue; projects and media are untouched.', studioRestart: 'Restart workspace',
@@ -30,14 +23,8 @@ window.__ModuleLoader__.load({
     };
     const zh = {
       panel: '视频创作',
-      areaEditTitle: '剪辑素材区', areaWorkTitle: '工作区',
-      areaSwitchEdit: '切换到剪辑素材区', areaSwitchWork: '切换到工作区',
-      areaSearch: '搜索项目', areaSearchPlaceholder: '搜索项目或对话',
-      areaClear: '清空搜索', areaNew: '新建项目', areaMore: '更多', areaSessions: '个对话',
-      areaLoading: '正在读取…', areaEmptyProjects: '还没有项目。打开视频创作面板新建一个。',
-      areaEmptyWorkspaces: '没有可显示的工作区。', areaNotStarted: '未开始', areaSessionUntitled: '新会话',
-      areaBlankSession: '新会话', areaOpenPanel: '打开视频创作面板', areaOpenSession: '在对话中打开',
-      areaRefresh: '刷新列表', areaUngrouped: '未分组', areaWorkspaceFallback: '工作区',
+      openInEditing: '在剪辑素材区打开',
+      openInEditingHint: '在视频创作面板里打开这个项目',
       studioLoading: '正在启动 OpenFilm 工作台…',
       studioFailed: '无法启动 OpenFilm 工作台。',
       studioRetry: '重试', studioStopped: '工作台已停止运行', studioStoppedHint: '视频编辑服务已断开。重新启动即可继续，项目和素材不受影响。', studioRestart: '重新启动工作台',
@@ -130,54 +117,20 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'openfilm: dictionaries');
         const t = ctx.locale.bind(NS);
-        ensureFallbackStyles();
-        // Reuse the shipped rows' look: the official CSS module is already in the
-        // document, so its hashed class names are read back and borrowed.
-        const borrowed = discoverPrefixes().rows !== null;
-        const primitives = (() => {
-          try { return require('@deepseek-ai/dsh-client-ui-primitives'); } catch { return {}; }
-        })();
-        if (!borrowed) console.warn('[no996] ui-workspace classes not found; using the bundled stylesheet');
-        const fetchArea = async () => {
-          // The desktop page (dsh-app://app) cannot reach /api/... at all; there
-          // the project page stays empty rather than showing a broken list.
-          if (DESKTOP_PROTOCOL) return { projects: [], hiddenSessionIds: [] };
-          const response = await fetch('/api/no996-openfilm/area', { credentials: 'same-origin', cache: 'no-store' });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          return response.json();
-        };
         const selectPanel = () => {
           const layout = ctx.get?.('layout');
           if (!layout || typeof layout.selectPanel !== 'function') return false;
           try { layout.selectPanel(PANEL); return true; } catch { return false; }
         };
-        const AreaBrowser = createAreaBrowser(React, {
-          t,
-          primitives,
-          fetchArea,
-          panelSnapshot: () => {
-            try { return ctx.get?.('layout')?.panelInfo?.getSnapshot?.()?.activePanelId ?? null; } catch { return null; }
-          },
-          openProject: projectId => {
-            areaBus.navigate(projectId);
-            selectPanel();
-          },
-          openPanel: selectPanel,
-          openSession: sessionId => {
-            const navigation = ctx.get?.('uiWorkspace');
-            if (!navigation || typeof navigation.openSession !== 'function') return false;
-            try { navigation.openSession(sessionId); return true; } catch { return false; }
-          },
-        });
         ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL, locale: NS }, PanelSeat));
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PANEL, order: 21, locale: NS, label: () => t('panel') }, PanelIcon));
         // `shell.overlay` is rendered for the whole frame lifetime, so the panel
         // it hosts survives page switches instead of reloading Studio each time.
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'no996-openfilm-panel', order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
-        // The Workspace block switches between the editing area and the normal
-        // list by the active page tag. It has to be the slot occupant: a single
-        // slot renders one entry, so any in-place switching lives in the occupant.
-        ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({ name: 'sidebar.workspaces', priority: -100, locale: NS }, AreaBrowser));
+        ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL, locale: NS }, PanelSeat));
+        // `shell.overlay` is rendered for the whole frame lifetime, so the panel
+        // it hosts survives page switches instead of reloading Studio each time.
+        ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'no996-openfilm-panel', order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
       },
     };
   },

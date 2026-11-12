@@ -136,21 +136,20 @@ src/theme.mjs             ← 读取 + 注入（按 surface 注册表）
 
 登记内容只需要三件事：**为什么不能改源码、现在怎么工作、什么条件下撤掉。**
 
-### 工作区块接管（单槽 occupant）
+### 侧栏工作区：只许追加，不许替换
 
-「工作区」这一块是 `sidebar.workspaces` 的唯一 occupant（`priority: -100`）：单槽只渲染最小优先级的活条目，想在同一个位置按页签换内容，只能由 occupant 做，官方 `WorkspaceBrowser` 不可复用（未导出）。
+`sidebar.workspaces` 是 **single** 槽：一个优先级一个注册，最小者独占渲染，且官方浏览器不可复用（未导出）。所以占用它等于重写整块界面，置顶、归档、运行中、右键菜单、拖拽都会丢掉——2026-11 真机试过，已撤回。
 
-不做"另起一套样式"，做**借用**：
+要在这块区域里加东西，只能用官方已经开出的行级扩展点：
 
-| 借的东西 | 来源 | 失败时 |
+| 扩展点 | 能加什么 | 用途 |
 |---|---|---|
-| 类名 | 官方 CSS module 已把样式注进文档，运行时用 `style[data-plugin-css*="ui-workspace"]` 读出哈希前缀，直接用 `\${prefix}_projectRow` 等 | 读不到前缀 → 随包 `nof-` 样式表 + 控制台警告 |
-| 图标 | `@deepseek-ai/dsh-client-ui-primitives`（Module Loader 隐式基线依赖，不用写进 `dsh.client.inject`） | 取不到组件 → 该图标为空，不崩 |
-| 页签信号 | 侧栏 props 的 `usePanelInfo(info => info.activePanelId)` | 缺 hook → 保持工作区视图 |
+| `sidebar.workspaces.session.row.action` | 行悬停时的一个图标按钮 | 「在剪辑素材区打开」 |
+| `sidebar.workspaces.session.menu.item` | 右键 / ⋯ 菜单项（带 `sessionId`、`displayTitle`、`useMenuOpenState`） | 同一动作的菜单入口 |
+| `sidebar.session.row.trailing` / `hover` / `leading` | 行尾非交互图标 / 悬停扩展 / 行首 | 标记项目对话 |
+| `sidebar.workspaces.directoryFlow` | 目录选择交互（已被组合包占用） | 不用 |
 
-退出条件：DSH 允许在原生浏览器里追加区块（或多槽），就删掉 occupant，回到官方组件 + 追加。
-
-真机排错顺序：`plugin.log` 有 `area-route mounted` → 页面刷新过（客户端 bundle 变了）→ 视频创作打开时块标题变「剪辑素材区」→ 其它页面变回「工作区」且项目对话不在列表里 → 图标栏不再有重复入口。
+这些都按 `ctx.slots.inject(名字, () => ctx.slots.register(...))` 注册；不要为了一个按钮去占 `sidebar.workspaces`。
 
 ---
 
