@@ -8,7 +8,7 @@
 
 ## 0. 一句话
 
-把官方 **OpenFilm 0.3.2** 工作台封装成可分发的 **DSH 插件**：Host 拉起官方 Studio 并反向代理，浏览器用 `shell.overlay` 常驻 iframe，官方对话由 Host 交给 `dsh --profile acp` 子进程（会话、模型、审批、思考、续聊都是 DSH 的）。当前 `0.13.0`（上一个发布包是 `0.12.1`）。仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。
+把官方 **OpenFilm 0.3.2** 工作台封装成可分发的 **DSH 插件**：Host 拉起官方 Studio 并反向代理，浏览器用 `shell.overlay` 常驻 iframe，官方对话由 Host 交给 `dsh --profile acp` 子进程（会话、模型、审批、思考、续聊都是 DSH 的）。当前 `0.13.0`（发布包 `0.12.1`）。仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。
 
 ---
 
@@ -39,7 +39,7 @@
 | **B1** | 样式注入（`assets/theme/*.css`） | L2 编辑器；L1 快速试色 |
 | **B2** | DOM/行为注入（`assets/shell-ui.js`） | A1 做不到、又必须动 DOM，且已登记 |
 
-**默认顺序：token → A2/B1 → A1 → B2。** 判断流程、注入登记表、反模式见 [`docs/UI-PLAYBOOK.md`](docs/UI-PLAYBOOK.md)。收到 `dsh-element-source` 的「[元素定位]」时：先读所给源码、展示代码并用一句话说明渲染内容，然后**停下等修改需求**——定位不是修改授权。
+**默认顺序：token → A2/B1 → A1 → B2。** 判断流程、注入登记表、反模式见 [`docs/UI-PLAYBOOK.md`](docs/UI-PLAYBOOK.md)。收到 `dsh-element-source` 的「[元素定位]」时：先读源码、展示代码、一句话说明渲染内容，然后**停下等修改需求**。
 
 ---
 
@@ -49,7 +49,7 @@
 |---|---|
 | Host | `index.js`、`cordis.patch.yml`、`src/studio-controller.mjs` |
 | 运行时/代理 | `src/studio-runtime.mjs`、`src/studio-proxy.mjs`、`src/official-shell.mjs` |
-| 对话桥 | `src/acp-client.mjs`、`acp-agent-service.mjs`、`acp-session-store.mjs`、`mcp-server.mjs`、`project-instructions.mjs`（ACP）；`official-chat-*`、`official-event-*`、`official-facade.mjs`、`official-permission.mjs`（外层） |
+| 对话桥 | `src/acp-*.mjs`、`mcp-server.mjs`、`project-instructions.mjs`（ACP）+ `official-chat-*`、`official-event-*`、`official-facade.mjs`、`official-permission.mjs` |
 | 影片工具 | `src/film-*`、`draft-*`、`timeline-*`、`*-tool.mjs` |
 | 模板/动效 | `vendor/templates/**`、`vendor/motion/**` |
 | 界面注入 | `src/shell-extras.mjs` + `assets/shell-ui.js` / `shell-login.js` / `login-city.js` |
@@ -92,7 +92,7 @@ node --test tests/*.test.mjs       # 全库（数量以输出为准，不抄）
 
 **重载前先 `touch index.js src/*.mjs`**：加载器只重新求值 mtime 变了的模块，未 touch 的引入方会继续用旧 import——症状是"改了没生效"。`npm run dev` 会替你 touch。
 
-**本插件不是热加载的。** DSH 客户端 HMR 只在用 `pnpm run dev:web` 从同一 checkout 起服务时成立；本插件是已安装的第三方包，不在这条链路上。管理器返回 `restart-required` 时如实报告并按 `nextStep` 完整重启；新 `host-start` 只证明 Host 重建。
+**本插件不是热加载的。** 管理器返回 `restart-required` 时如实报告并按 `nextStep` 重启；新 `host-start` 只证明 Host 重建。
 
 ---
 
@@ -122,7 +122,7 @@ node --test tests/*.test.mjs       # 全库（数量以输出为准，不抄）
 
 `POST /api/no996-openfilm/diagnose {projectId}`（面板静默 20 秒后自动贴出）；`%TEMP%\dsh-openfilm\plugin.log`（JSON Lines，自动脱敏）；`%TEMP%\dsh-openfilm-frames.jsonl`（每轮覆盖）；`%TEMP%\dsh-openfilm-preset.json`；`%TEMP%\dsh-openfilm-host.json`（重载后 `startedAt` 必须更新）。
 
-**不要靠猜形状**：ACP 的 `session/update` / `session/request_permission` 字段必须用真机日志或 `fake-acp-agent.mjs` 校准；旧路径的 `official-agent-events.mjs` 已不是主线。
+**不要靠猜形状**：ACP 的字段以 `fake-acp-agent.mjs` 或真机日志为准；旧路径已不是主线。
 
 ---
 
@@ -138,7 +138,7 @@ node --test tests/*.test.mjs       # 全库（数量以输出为准，不抄）
 
 ## 9. 当前未完成（别写进"已完成"）
 
-账号余额与引流卡收口；官方壳 O1/O2 真机验收、素材入库确认、O3 注入收口；ACP 面板真机验收（`docs/TEST-CHECKLIST.md` 第 11 步：发一句、切模型、拖图、侧栏同一会话）与验收后的旧路径删除（`docs/ARCHITECTURE.md §10`）；官方输入框部分场景只读；模板字体子集化；技能卡；口播转写的 Mac 验收与一键安装。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
+账号余额与引流卡收口；官方壳 O1/O2、素材入库、O3；ACP 面板真机验收（`docs/TEST-CHECKLIST.md` 第 11 步）与之后删旧路径（`docs/ARCHITECTURE.md §10`）；官方输入框部分场景只读；字体子集化；技能卡；口播转写 Mac 验收。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
 
 ---
 
