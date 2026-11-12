@@ -36,8 +36,16 @@ export function resolveAcpCommand({ env = process.env, platform = process.platfo
   // The Host may not inherit the CLI on PATH (the desktop app starts it from its
   // own runtime). Prefer the shim that ships beside the running executable.
   if (platform === 'win32') {
-    const shipped = join(dirname(execPath), '..', 'runtime', 'cli', 'bin', 'dsh.cmd');
-    if (exists(shipped)) return { command: shipped, args: ['--profile', 'acp'], shell: true };
+    const home = dirname(execPath);
+    // The desktop app ships the CLI under resources/ and a shim beside the exe;
+    // a dev checkout puts it one level up. Try all three, cheapest first.
+    for (const shipped of [
+      join(home, 'resources', 'runtime', 'cli', 'bin', 'dsh.cmd'),
+      join(home, 'dsh.cmd'),
+      join(home, '..', 'runtime', 'cli', 'bin', 'dsh.cmd'),
+    ]) {
+      if (exists(shipped)) return { command: shipped, args: ['--profile', 'acp'], shell: true };
+    }
   }
   return { command: 'dsh', args: ['--profile', 'acp'], shell: platform === 'win32' };
 }

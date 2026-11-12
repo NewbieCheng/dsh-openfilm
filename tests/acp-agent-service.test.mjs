@@ -16,7 +16,7 @@ function memoryStore(seed = {}) {
   return { get: id => table.get(id), set: (id, value) => table.set(id, value), all: () => [...table] };
 }
 
-function harness({ mode, image = false, emptyList = false, store = memoryStore(), approvals, defaultSelection } = {}) {
+function harness({ mode, image = false, emptyList = false, store = memoryStore(), approvals, defaultSelection, permissionMode, onOptions } = {}) {
   const events = [];
   const service = createAcpAgentService({
     verifier: async projectId => ({ projectId, path: 'C:\\fake' }),
@@ -24,12 +24,16 @@ function harness({ mode, image = false, emptyList = false, store = memoryStore()
     emit: (projectId, event) => { events.push({ projectId, ...event }); return true; },
     approvals,
     defaultSelection: defaultSelection ?? (() => undefined),
-    createClient: () => createAcpClient({
-      resolve: () => ({ command: process.execPath, args: [fixture] }),
-      env: { ...process.env, ...(mode ? { FAKE_ACP_MODE: mode } : {}), ...(image ? { FAKE_ACP_IMAGE: '1' } : {}), ...(emptyList ? { FAKE_ACP_EMPTY_LIST: '1' } : {}) },
-      requestTimeoutMs: 5000,
-      spawnChild: (command, args, options) => spawn(command, args, options),
-    }),
+    permissionMode: permissionMode ?? (() => undefined),
+    createClient: options => {
+      onOptions?.(options);
+      return createAcpClient({
+        resolve: () => ({ command: process.execPath, args: [fixture] }),
+        env: { ...process.env, ...(mode ? { FAKE_ACP_MODE: mode } : {}), ...(image ? { FAKE_ACP_IMAGE: '1' } : {}), ...(emptyList ? { FAKE_ACP_EMPTY_LIST: '1' } : {}), ...(options?.env ?? {}) },
+        requestTimeoutMs: 5000,
+        spawnChild: (command, args, spawnOptions) => spawn(command, args, spawnOptions),
+      });
+    },
   });
   return { service, events };
 }
@@ -56,6 +60,29 @@ test('the panel session adopts the DSH-side model selection', async () => {
   const { service } = harness({ defaultSelection: () => ({ provider: 'q', model: 'q1' }) });
   const catalog = await service.modelCatalog(PROJECT);
   assert.deepEqual(catalog.default, { provider: 'q', model: 'q1' });
+  await service.close();
+});
+
+test('the remembered permission preset becomes the child sandbox mode', async () => {
+  const seen = [];
+  const { service } = harness({
+    permissionMode: () => 'danger-full-access',
+    onOptions: options => seen.push(options),
+  });
+  await service.modelCatalog(PROJECT);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].env.DSH_PERMISSION_MODE, 'danger-full-access');
+  await service.close();
+});
+
+test('reset forgets the child so a preset change takes effect on the next turn', async () => {
+  let calls = 0;
+  const { service } = harness({ onOptions: () => { calls += 1; } });
+  await service.modelCatalog(PROJECT);
+  assert.equal(calls, 1);
+  await service.reset(PROJECT);
+  await service.modelCatalog(PROJECT);
+  assert.equal(calls, 2);
   await service.close();
 });
 

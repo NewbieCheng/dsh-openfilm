@@ -126,7 +126,7 @@ function thinkingFromConfigOptions(configOptions = []) {
  * @param {Function} [deps.createClient] - injectable for tests
  * @param {string} [deps.imageDir] - where unsupported inline images are materialised
  */
-export function createAcpAgentService({ verifier, store, emit, approvals, log, createClient = createAcpClient, imageDir = join(tmpdir(), 'no996-openfilm-chat-images'), defaultSelection = () => undefined }) {
+export function createAcpAgentService({ verifier, store, emit, approvals, log, createClient = options => createAcpClient(options), imageDir = join(tmpdir(), 'no996-openfilm-chat-images'), defaultSelection = () => undefined, permissionMode = () => undefined }) {
   if (typeof verifier !== 'function' || typeof emit !== 'function' || !store || typeof store.get !== 'function' || typeof store.set !== 'function') {
     throw new TypeError('verifier, store and emit are required');
   }
@@ -139,7 +139,7 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
     if (entry) return entry;
     entry = {
       projectId,
-      client: createClient(),
+      client: undefined,
       sessionId: undefined,
       configOptions: [],
       key: undefined,
@@ -148,19 +148,31 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       ready: undefined,
       lastUsed: Date.now(),
     };
-    entry.client.onUpdate(params => {
+    projects.set(projectId, entry);
+    return entry;
+  };
+
+  function attach(entry) {
+    const { client, projectId } = entry;
+    client.onUpdate(params => {
       const update = params?.update;
       if (entry.sessionId && params?.sessionId !== entry.sessionId) return;
       if (update && update.sessionUpdate === 'config_option_update' && Array.isArray(update.configOptions)) entry.configOptions = update.configOptions;
       void Promise.resolve(emit(projectId, { key: entry.key ?? 'acp', kind: 'update', update })).catch(() => {});
     });
-    entry.client.on('exit', ({ code }) => {
+    client.on('exit', ({ code }) => {
       void log?.('acp-exited', { projectId, code });
       if (projects.get(projectId) === entry) projects.delete(projectId);
     });
-    projects.set(projectId, entry);
-    return entry;
-  };
+  }
+
+  /** The approved preset for this project; DSH spells it as a mode name. */
+  async function modeOf(projectId) {
+    try {
+      const mode = await permissionMode(projectId);
+      return mode === 'read-only' || mode === 'workspace-write' || mode === 'danger-full-access' ? mode : undefined;
+    } catch { return undefined; }
+  }
 
   async function ensure(projectId) {
     if (closed) throw failure('OFFICIAL_AGENT_CLOSED');
@@ -169,6 +181,11 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
     entry.ready = (async () => {
       const project = await verifier(projectId);
       if (!project || !text(project.path)) throw failure('OFFICIAL_AGENT_UNAVAILABLE', 'project has no folder');
+      // The approval preset is the child's sandbox + approval policy too, so it is
+      // chosen at spawn: DSH itself reads DSH_PERMISSION_MODE.
+      const mode = await modeOf(projectId);
+      entry.client = createClient({ env: { ...process.env, ...(mode ? { DSH_PERMISSION_MODE: mode } : {}) } });
+      attach(entry);
       const capabilities = await entry.client.start();
       entry.imageEnabled = capabilities?.agentCapabilities?.promptCapabilities?.image === true;
       entry.client.setPermissionHandler(params => askPermission(entry, params));
@@ -375,6 +392,19 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       return { ok: accepted === true };
     },
 
+    /**
+     * Forget a project's child so the next turn spawns one under the new preset.
+     * Called when the person changes the permission row, the only setting that
+     * cannot be changed inside a running child.
+     */
+    async reset(projectId) {
+      const entry = projects.get(projectId);
+      if (!entry) return { ok: true };
+      projects.delete(projectId);
+      try { await entry.client?.close?.(); } catch { /* already gone */ }
+      return { ok: true };
+    },
+
     activeKey(projectId) {
       return projects.get(projectId)?.key ?? null;
     },
@@ -394,7 +424,7 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       closed = true;
       const entries = [...projects.values()];
       projects.clear();
-      await Promise.allSettled(entries.map(entry => entry.client.close()));
+      await Promise.allSettled(entries.map(entry => entry.client?.close?.()));
       approvals?.close?.();
     },
 

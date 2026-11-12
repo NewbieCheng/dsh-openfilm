@@ -303,6 +303,9 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       try {
         // Before the first message there is no Session to change, so the answer is
         // remembered and applied by `resume` on the next prompt.
+        // A running ACP child keeps the mode it booted with; forget it so the next
+        // turn starts under the preset just chosen.
+        await acpAgentService?.reset?.(projectId);
         if (!sessionId) return { ok: true, preset, applied: false };
         const applied = await store.apply(projectId, sessionId, preset);
         return { ok: true, preset: applied.preset, applied: true };
@@ -640,6 +643,12 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       // The panel starts on the model the person already chose for DSH, not on the
       // acp profile's own default.
       defaultSelection: () => { try { return ctx.agentDefaultModel?.currentSelection?.(); } catch { return undefined; } },
+      // The panel's permission row is the child's sandbox too: DSH reads the mode
+      // from the environment at boot, so the child is spawned with the preset the
+      // person chose here.
+      permissionMode: async projectId => {
+        try { const store = await permissions(); return store?.remembered?.(projectId); } catch { return undefined; }
+      },
       log: (event, fields) => void log.info(event, fields),
     })
     : null;
