@@ -246,6 +246,13 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       if (!agentService) throw new Error('Agent bridge unavailable');
       return agentService.send(payload?.projectId, { key: payload?.key, turnId: payload?.turnId, text: payload?.text, images: payload?.images });
     }
+    if (channel === 'agent:session') {
+      // Read-only: never opens a Session just to answer a question about one.
+      const projectId = typeof payload?.projectId === 'string' ? payload.projectId : '';
+      if (!/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw Object.assign(new Error('unknown project'), { code: 'PERMISSION_INPUT' });
+      const state = agentService?.sessionState?.(projectId);
+      return state ? { ok: true, ...state } : { ok: true, sessionId: null, resumed: false };
+    }
     if (channel === 'agent:permission') {
       // What the panel needs to decide whether to ask: the decision remembered
       // for this project and the preset DSH itself reports as in force.

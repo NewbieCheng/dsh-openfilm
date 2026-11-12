@@ -359,3 +359,69 @@ test('a model overlay the agent cannot serve is dropped instead of failing the p
   assert.equal(service.sessionOf(PROJECT), 'session-fake-1');
   await service.close();
 });
+
+test('a stored Session is resumed after restart even when the overlay model is unavailable', async () => {
+  const logs = [];
+  const closed = [];
+  const store = memoryStore({ [PROJECT]: { sessionId: 'session-fake-1', cwd: 'C:\\fake' } });
+  const service = createAcpAgentService({
+    verifier: async projectId => ({ projectId, path: 'C:\\fake' }),
+    store,
+    emit: () => true,
+    log: (event, fields) => logs.push({ event, fields }),
+    onClosed: projectId => closed.push(projectId),
+    spawnArgs: async () => ['--patch', 'C:\\temp\\model.yml'],
+    createClient: options => createAcpClient({
+      resolve: () => ({ command: process.execPath, args: [fixture] }),
+      ...(options?.args ? { args: options.args } : {}),
+      env: { ...process.env, FAKE_ACP_REFUSE_PATCH: '1', ...(options?.env ?? {}) },
+      requestTimeoutMs: 5000,
+      spawnChild: (command, args, spawnOptions) => spawn(command, args, spawnOptions),
+    }),
+  });
+  const catalog = await service.modelCatalog(PROJECT);
+  assert.ok(catalog.groups.length > 0);
+  assert.ok(logs.some(entry => entry.event === 'acp-resume-failed'));
+  assert.ok(logs.some(entry => entry.event === 'acp-model-fallback'));
+  assert.ok(!logs.some(entry => entry.event === 'acp-session'), 'a resume must not be reported as a new Session');
+  assert.equal(service.sessionOf(PROJECT), 'session-fake-1');
+  assert.deepEqual(closed, []);
+  await service.close();
+});
+
+test('sessionState says whether the conversation was reopened or started fresh', async () => {
+  // Fresh: a new Session.
+  const fresh = createAcpAgentService({
+    verifier: async projectId => ({ projectId, path: 'C:\\fake' }),
+    store: memoryStore(),
+    emit: () => true,
+    createClient: options => createAcpClient({
+      resolve: () => ({ command: process.execPath, args: [fixture] }),
+      ...(options?.args ? { args: options.args } : {}),
+      env: { ...process.env, ...(options?.env ?? {}) },
+      requestTimeoutMs: 5000,
+      spawnChild: (command, args, spawnOptions) => spawn(command, args, spawnOptions),
+    }),
+  });
+  assert.equal(fresh.sessionState(PROJECT), undefined);
+  await fresh.modelCatalog(PROJECT);
+  assert.deepEqual(fresh.sessionState(PROJECT), { sessionId: 'session-fake-1', resumed: false });
+  await fresh.close();
+
+  // Stored: the same Session is reopened.
+  const resumed = createAcpAgentService({
+    verifier: async projectId => ({ projectId, path: 'C:\\fake' }),
+    store: memoryStore({ [PROJECT]: { sessionId: 'session-fake-1', cwd: 'C:\\fake' } }),
+    emit: () => true,
+    createClient: options => createAcpClient({
+      resolve: () => ({ command: process.execPath, args: [fixture] }),
+      ...(options?.args ? { args: options.args } : {}),
+      env: { ...process.env, ...(options?.env ?? {}) },
+      requestTimeoutMs: 5000,
+      spawnChild: (command, args, spawnOptions) => spawn(command, args, spawnOptions),
+    }),
+  });
+  await resumed.modelCatalog(PROJECT);
+  assert.deepEqual(resumed.sessionState(PROJECT), { sessionId: 'session-fake-1', resumed: true });
+  await resumed.close();
+});

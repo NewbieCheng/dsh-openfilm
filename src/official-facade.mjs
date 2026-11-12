@@ -59,7 +59,7 @@ function officialFacadeFactory(bridge) {
       currentValue: current,
       options,
     };
-  };  const rpcAllow = new Set(['chat:load', 'chat:log', 'chat:save-sessions', 'chat:save-turn', 'chat:archive', 'chat:unarchive', 'chat:archive-state', 'editor:link', 'client:log', 'agent:prompt', 'agent:cancel', 'agent:models', 'agent:select-model', 'agent:thinking', 'agent:select-thinking', 'agent:answer-permission', 'agent:permission', 'agent:permission-set', 'agent:trace', 'prefs:get', 'prefs:set', 'template:list', 'template:create', 'project:create-blank', 'account:balance', 'auth:status', 'auth:logout', 'auth:action', 'auth:remember-get', 'auth:remember-set', 'auth:remember-clear']);
+  };  const rpcAllow = new Set(['chat:load', 'chat:log', 'chat:save-sessions', 'chat:save-turn', 'chat:archive', 'chat:unarchive', 'chat:archive-state', 'editor:link', 'client:log', 'agent:prompt', 'agent:cancel', 'agent:models', 'agent:select-model', 'agent:thinking', 'agent:select-thinking', 'agent:answer-permission', 'agent:permission', 'agent:permission-set', 'agent:session', 'agent:trace', 'prefs:get', 'prefs:set', 'template:list', 'template:create', 'project:create-blank', 'account:balance', 'auth:status', 'auth:logout', 'auth:action', 'auth:remember-get', 'auth:remember-set', 'auth:remember-clear']);
   const eventAllow = new Set(['desktop:full-screen', 'desktop:toggle-chat', 'desktop:open-settings']);
   const rpc = async (channel, payload) => {
     if (!rpcAllow.has(channel) || typeof bridge.invoke !== 'function') throw unavailable(channel);
@@ -269,7 +269,19 @@ function officialFacadeFactory(bridge) {
         const permission = permissionOption(await rpc('agent:permission', { projectId: id }));
         if (permission) configOptions = [...configOptions, permission];
       } catch { /* the menu keeps its other rows */ }
-      return { ok: true, key, info: { sessionId: key, resumed: false, agentInfo: { name: 'DeepSeek Harness' }, authMethods: [], mcp: false, models: null, modes: null, configOptions } };
+      // The Host knows whether the stored ACP Session was reopened; only then may
+      // the shell skip its "could not open the previous session" hand-over.
+      let resumed = false;
+      try {
+        const state = await rpc('agent:session', { projectId: id });
+        resumed = state && state.resumed === true;
+      } catch { /* an older Host: leave it unknown rather than claiming a resume */ }
+      // The shell calls start(agent, cwd, resume) and compares the answer with the
+      // conversation it asked to resume: reporting our page-local key there made
+      // every reload look like a failed resume. The conversation keeps its id; only
+      // a fresh conversation (no resume argument) gets a new one.
+      const conversationId = typeof resume === 'string' && resume ? resume : key;
+      return { ok: true, key, info: { sessionId: conversationId, resumed, agentInfo: { name: 'DeepSeek Harness' }, authMethods: [], mcp: false, models: null, modes: null, configOptions } };
     },
     cancel: async (key) => {
       const id = agentKeys.get(key);

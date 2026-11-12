@@ -210,40 +210,47 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
         entry.imageEnabled = capabilities?.agentCapabilities?.promptCapabilities?.image === true;
         entry.client.setPermissionHandler(params => askPermission(entry, params));
       };
-      await startChild(extraArgs);
-      const known = store.get(projectId);
-      if (known?.sessionId && RESUMABLE.test(known.sessionId)) {
-        try {
-          const resumed = await entry.client.resumeSession({ sessionId: known.sessionId, cwd: project.path, ...wiring });
-          entry.sessionId = known.sessionId;
-          entry.configOptions = resumed?.configOptions ?? [];
-          // No default on resume: ACP keeps the model the person chose for this
-          // Session, and re-applying the DSH default would silently undo it.
-          return entry;
-        } catch (error) {
-          void log?.('acp-resume-failed', { projectId, reason: String(error?.code ?? error).slice(0, 80) });
+      // Opening a Session can fail on the model alone: the DSH selection may belong
+      // to a provider the acp profile has no adapter for, and then both resume and
+      // new are refused before a Session exists. One retry without that overlay
+      // (the profile's own default model, which the menu can change later) is the
+      // difference between a conversation and a dead panel.
+      const openWith = async args => {
+        await startChild(args);
+        const known = store.get(projectId);
+        if (known?.sessionId && RESUMABLE.test(known.sessionId)) {
+          try {
+            const resumed = await entry.client.resumeSession({ sessionId: known.sessionId, cwd: project.path, ...wiring });
+            return { sessionId: known.sessionId, resumed };
+          } catch (error) {
+            void log?.('acp-resume-failed', { projectId, reason: String(error?.code ?? error).slice(0, 80) });
+          }
         }
-      }
-      const openSession = async () => {
-        try {
-          return await entry.client.newSession({ cwd: project.path, ...wiring });
-        } catch (error) {
-          // The DSH model chosen in the sidebar can belong to a provider the acp
-          // profile has no adapter for (the child's adapters are its own), and then
-          // even a new Session is refused. A conversation on the profile's default
-          // model, which the panel's menu can change afterwards, beats none at all.
-          if (extraArgs.length === 0) throw error;
-          void log?.('acp-model-fallback', { projectId, reason: String(error?.code ?? error).slice(0, 60) });
-          const previous = entry.client;
-          retired.add(previous);
-          try { await previous.close(); } catch { /* already gone */ }
-          await startChild([]);
-          return entry.client.newSession({ cwd: project.path, ...wiring });
-        }
+        return { created: await entry.client.newSession({ cwd: project.path, ...wiring }) };
       };
-      const created = await openSession();
+      let opened;
+      try {
+        opened = await openWith(extraArgs);
+      } catch (error) {
+        if (extraArgs.length === 0) throw error;
+        void log?.('acp-model-fallback', { projectId, reason: String(error?.code ?? error).slice(0, 60) });
+        const previous = entry.client;
+        retired.add(previous);
+        try { await previous.close(); } catch { /* already gone */ }
+        opened = await openWith([]);
+      }
+      if (opened.resumed) {
+        entry.sessionId = opened.sessionId;
+        entry.reopened = true;
+        entry.configOptions = opened.resumed?.configOptions ?? [];
+        // No default on resume: ACP keeps the model the person chose for this
+        // Session, and re-applying the DSH default would silently undo it.
+        return entry;
+      }
+      const created = opened.created;
       if (!created || !text(created.sessionId)) throw failure('OFFICIAL_AGENT_UNAVAILABLE', 'agent returned no session');
       entry.sessionId = created.sessionId;
+      entry.reopened = false;
       entry.configOptions = created.configOptions ?? [];
       store.set(projectId, { sessionId: created.sessionId, cwd: project.path });
       void log?.('acp-session', { projectId, created: true });
@@ -507,6 +514,16 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       approvals?.close?.();
     },
 
+    /**
+     * What the page needs to tell "this conversation continues where it left off"
+     * from "a brand-new Session was opened": the shell shows a hand-over notice
+     * when it believes the previous Session could not be reopened.
+     */
+    sessionState(projectId) {
+      const entry = projects.get(projectId);
+      if (!entry) return undefined;
+      return { sessionId: entry.sessionId ?? null, resumed: entry.reopened === true };
+    },
     /** Test seam: the ACP session id chosen for a project, once ensured. */
     sessionOf(projectId) { return projects.get(projectId)?.sessionId; },
     randomId: () => randomUUID(),

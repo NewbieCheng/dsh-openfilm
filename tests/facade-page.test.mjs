@@ -27,6 +27,7 @@ function createPage() {
     if (channel === 'agent:thinking') {
       return { id: 'thinking', name: 'Thinking', currentValue: 'high', options: [{ value: 'off', name: 'Off' }, { value: 'high', name: 'High' }] };
     }
+    if (channel === 'agent:session') return { ok: true, sessionId: 'session-1', resumed: true };
     if (channel === 'agent:permission') {
       return { available: true, decided: true, remembered: 'danger-full-access', current: 'danger-full-access', names: [], fullAccess: 'danger-full-access', workspace: 'workspace-write' };
     }
@@ -92,6 +93,15 @@ test('the injected page code builds the three menu rows from the RPC layer', asy
   assert.equal(started.ok, true);
   assert.ok(started.key.startsWith('dsh-'));
   assert.deepEqual(plain(started.info.configOptions.map(option => option.id)), ['model', 'thinking', 'permission']);
+  // The Host said this conversation continues: the shell must not show its
+  // "could not open the previous session" hand-over.
+  assert.equal(started.info.resumed, true);
+  assert.ok(String(started.info.sessionId).startsWith('dsh-'), 'a fresh conversation gets a new id');
+
+  // A reload asks to resume the conversation it already knows; the answer must
+  // carry that same id, or the shell reports a failed resume every time.
+  const reopened = await page.native.localAgents.start('deepseek', 'C:\\fake', 'conversation-1', { projectId: PROJECT });
+  assert.equal(reopened.info.sessionId, 'conversation-1');
 });
 
 test('the page sends a turn, forwards the chosen options and finishes on the terminal event', async () => {
