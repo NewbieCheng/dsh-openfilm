@@ -55,6 +55,7 @@ import { createOfficialEventHub } from './official-event-hub.mjs';
 import { createOfficialApprovals } from './official-approvals.mjs';
 import { createAcpAgentService } from './acp-agent-service.mjs';
 import { createAcpSessionStore } from './acp-session-store.mjs';
+import { createEditingPrefs } from './editing-prefs.mjs';
 import { ensureProjectInstructions } from './project-instructions.mjs';
 import { createMcpEndpoint, createMcpTokens, mcpServerEntry } from './mcp-server.mjs';
 import { attachOfficialEventStream } from './official-event-stream.mjs';
@@ -528,6 +529,21 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     return permissionsPromise;
   };
   const acpSessions = createAcpSessionStore({ file: join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'no996-openfilm', 'acp-sessions.json') });
+  // Pin and display name of a project in the editing area; cosmetic and local to
+  // this list (never the project's real name or the DSH Session title).
+  const editingPrefs = createEditingPrefs({ file: join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'no996-openfilm', 'editing-prefs.json') });
+  /** Read a small JSON request body; returns {} on anything malformed. */
+  const readJsonBody = async (req, limit = 8192) => {
+    try {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+        if (Buffer.concat(chunks).byteLength > limit) return {};
+      }
+      const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch { return {}; }
+  };
   // Archive state of a project's bound conversation. Always resolved in the
   // Host: the page supplies a project ID and never a Session ID. This never
   // creates a Session — reading chat history must not have that side effect.
@@ -903,6 +919,9 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   let unregisterClientLog;
   let unregisterBootstrap;
   let unregisterEditingSessions;
+  let unregisterEditingPrefs;
+  let unregisterEditingArchive;
+  let unregisterEditingDelete;
   let unregisterStandalone;
   let unregisterTemplatesPage;
   let unregisterDebugUrl;
@@ -1141,6 +1160,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
           ? await proxy.listProjects().catch(() => [])
           : [];
         const bound = new Map(acpSessions.all().map(record => [record.projectId, record]));
+        const prefs = editingPrefs.all();
         const items = [];
         for (const project of projects) {
           if (!project || typeof project.id !== 'string') continue;
@@ -1152,20 +1172,108 @@ export function createStudioController(ctx, createProxy, { officialShell = false
           const archived = archive && typeof archive.isArchived === 'function'
             ? archive.isArchived(record.sessionId) === true
             : false;
+          const pref = prefs[project.id];
           items.push({
             projectId: project.id,
             sessionId: record.sessionId,
             archived,
+            pinned: pref?.pinned === true,
+            ...(typeof pref?.title === 'string' && pref.title ? { title: pref.title } : {}),
             name: typeof project.name === 'string' && project.name
               ? project.name
               : (typeof project.title === 'string' && project.title ? project.title : basename(String(project.path ?? '')) || project.id),
             path: typeof project.path === 'string' ? project.path : '',
           });
         }
+        // Pinned rows lead; the rest keep Studio's own order.
+        items.sort((left, right) => (right.pinned ? 1 : 0) - (left.pinned ? 1 : 0));
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ projects: items }));
       } catch {
         res.writeHead(503).end('EDITING_SESSIONS_UNAVAILABLE');
       }
+    },
+  }));
+  // Pin / display name of one editing row. Cosmetic only: the project, its film
+  // and the DSH Session title are untouched.
+  unregisterEditingPrefs = trackRoute(registerRoute({
+    kind: 'exact', path: '/api/no996-openfilm/editing-prefs',
+    async handler(req, res) {
+      res.setHeader('cache-control', 'no-store');
+      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end(); return; }
+      const admission = ctx.connection.admit({ headers: req.headers });
+      if ('rejection' in admission) { res.writeHead(admission.rejection).end(admission.rejection === 403 ? 'DSH_ORIGIN_REJECTED' : 'DSH_SESSION_REQUIRED'); return; }
+      if (admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('DSH_BROWSER_REQUIRED'); return; }
+      const body = await readJsonBody(req);
+      const projectId = typeof body.projectId === 'string' ? body.projectId : '';
+      if (!/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) { res.writeHead(400).end('BAD_PROJECT'); return; }
+      try { await verifyOfficialProject(projectId); } catch { res.writeHead(404).end('UNKNOWN_PROJECT'); return; }
+      const patch = {};
+      if (body.pinned !== undefined) patch.pinned = body.pinned === true;
+      if (body.title !== undefined) patch.title = typeof body.title === 'string' ? body.title : '';
+      editingPrefs.set(projectId, patch);
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ ok: true, pref: editingPrefs.get(projectId) ?? { pinned: false } }));
+    },
+  }));
+  // Archive / restore the project's bound conversation from the editing list.
+  unregisterEditingArchive = trackRoute(registerRoute({
+    kind: 'exact', path: '/api/no996-openfilm/editing-archive',
+    async handler(req, res) {
+      res.setHeader('cache-control', 'no-store');
+      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end(); return; }
+      const admission = ctx.connection.admit({ headers: req.headers });
+      if ('rejection' in admission) { res.writeHead(admission.rejection).end(admission.rejection === 403 ? 'DSH_ORIGIN_REJECTED' : 'DSH_SESSION_REQUIRED'); return; }
+      if (admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('DSH_BROWSER_REQUIRED'); return; }
+      const body = await readJsonBody(req);
+      const projectId = typeof body.projectId === 'string' ? body.projectId : '';
+      if (!/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) { res.writeHead(400).end('BAD_PROJECT'); return; }
+      const archived = body.archived === true;
+      try { await verifyOfficialProject(projectId); } catch { res.writeHead(404).end('UNKNOWN_PROJECT'); return; }
+      const record = acpSessions.get(projectId);
+      if (!record || typeof record.sessionId !== 'string') { res.writeHead(409).end('NO_BINDING'); return; }
+      if (!archive.available) { res.writeHead(503).end('ARCHIVE_UNAVAILABLE'); return; }
+      try {
+        if (archived) await archive.archive(record.sessionId, { stopActivity: true });
+        else await archive.unarchive(record.sessionId);
+      } catch { res.writeHead(503).end('ARCHIVE_FAILED'); return; }
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ ok: true, archived }));
+    },
+  }));
+  // Delete the conversation (binding + Studio chat history + archive the DSH
+  // Session). The project folder and its film are never touched — deleting a
+  // project is a separate Studio action that says so.
+  unregisterEditingDelete = trackRoute(registerRoute({
+    kind: 'exact', path: '/api/no996-openfilm/editing-delete',
+    async handler(req, res) {
+      res.setHeader('cache-control', 'no-store');
+      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end(); return; }
+      const admission = ctx.connection.admit({ headers: req.headers });
+      if ('rejection' in admission) { res.writeHead(admission.rejection).end(admission.rejection === 403 ? 'DSH_ORIGIN_REJECTED' : 'DSH_SESSION_REQUIRED'); return; }
+      if (admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('DSH_BROWSER_REQUIRED'); return; }
+      const body = await readJsonBody(req);
+      const projectId = typeof body.projectId === 'string' ? body.projectId : '';
+      if (!/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) { res.writeHead(400).end('BAD_PROJECT'); return; }
+      try { await verifyOfficialProject(projectId); } catch { res.writeHead(404).end('UNKNOWN_PROJECT'); return; }
+      const record = acpSessions.get(projectId);
+      try { await acpAgentService?.reset?.(projectId); } catch { /* the binding still goes */ }
+      acpSessions.remove(projectId);
+      editingPrefs.set(projectId, { pinned: false, title: '' });
+      if (record && typeof record.sessionId === 'string') {
+        // Drop the turns and the session row from the Studio chat store so the
+        // panel's history no longer shows the deleted conversation.
+        try {
+          const store = await officialStore();
+          const data = await store.load(projectId);
+          const sessions = Array.isArray(data?.sessions) ? data.sessions.filter(item => item?.id !== record.sessionId) : [];
+          const last = data?.last === record.sessionId ? (sessions[0]?.id ?? null) : (data?.last ?? null);
+          if (Number.isSafeInteger(data?.revision)) await store.saveSessions(projectId, { sessions, last, expectedRevision: data.revision });
+        } catch { /* the binding is already gone; a stale transcript is cosmetic */ }
+        // Archive the DSH Session rather than deleting its files: DSH keeps its
+        // own index, and an archived Session is recoverable.
+        try {
+          if (archive.available && archive.isArchived(record.sessionId) !== true) await archive.archive(record.sessionId, { stopActivity: true });
+        } catch { /* best effort */ }
+      }
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ ok: true }));
     },
   }));
   unregisterStandalone = trackRoute(registerRoute({

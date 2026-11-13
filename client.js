@@ -496,7 +496,12 @@
   var SWITCH = "data-no996-workspace-switch";
   var POPOVER = "data-no996-workspace-popover";
   var LIST = "data-no996-editing-list";
+  var VIEW_MENU = "data-no996-view-menu";
+  var ROW_MENU = "data-no996-row-menu";
+  var MODAL = "data-no996-modal";
+  var STYLE = "data-no996-editing-style";
   var MODE_KEY = "no996.openfilm.sidebarMode";
+  var VIEW_KEY = "no996.openfilm.editingView";
   var LABELS = /* @__PURE__ */ new Set(["\u5DE5\u4F5C\u533A", "\u4F1A\u8BDD"]);
   var PANEL_LABELS = /* @__PURE__ */ new Set(["\u89C6\u9891\u521B\u4F5C", "Video studio"]);
   var text = (value) => typeof value === "string" ? value.trim() : "";
@@ -506,7 +511,8 @@
       const header = span.parentElement;
       if (!header || !header.querySelector("input")) continue;
       if (header.querySelectorAll("button").length < 2) continue;
-      return { span, header };
+      const actions = [...header.children].filter((element) => element.tagName === "DIV" && !element.querySelector("input")).pop() ?? null;
+      return { span, header, input: header.querySelector("input"), actions };
     }
     return null;
   }
@@ -516,6 +522,19 @@
     }
     return null;
   }
+  function readView(doc) {
+    try {
+      const value = JSON.parse(doc.defaultView?.localStorage?.getItem(VIEW_KEY) ?? "null");
+      if (!value || typeof value !== "object") return { sort: "recent", archived: true, path: true };
+      return {
+        sort: value.sort === "name" ? "name" : "recent",
+        archived: value.archived !== false,
+        path: value.path !== false
+      };
+    } catch {
+      return { sort: "recent", archived: true, path: true };
+    }
+  }
   function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     if (!doc || typeof doc.createElement !== "function") return () => {
     };
@@ -524,6 +543,9 @@
       mode = doc.defaultView?.localStorage?.getItem(MODE_KEY) === "editing" ? "editing" : "workspaces";
     } catch {
     }
+    let view = readView(doc);
+    let query = "";
+    let projects = [];
     let mounted = null;
     let trigger = null;
     let list = null;
@@ -531,6 +553,20 @@
     let loading = false;
     let observer = null;
     let hidden = [];
+    let folderButton = null;
+    let style = null;
+    let onDocumentClick = null;
+    let onSearch = null;
+    const postJson = async (path, body) => {
+      const response = await fetch(path, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json().catch(() => ({}));
+    };
     const restoreHidden = () => {
       for (const node of hidden) {
         try {
@@ -539,6 +575,12 @@
         }
       }
       hidden = [];
+      if (folderButton) {
+        try {
+          folderButton.style.display = "";
+        } catch {
+        }
+      }
     };
     const closePopover = () => {
       if (popover) {
@@ -546,14 +588,46 @@
         popover = null;
       }
     };
+    const closeMenus = () => {
+      for (const node of doc.querySelectorAll(`[${VIEW_MENU}], [${ROW_MENU}], [${MODAL}]`)) node.remove();
+    };
     const cleanup = () => {
       closePopover();
-      for (const node of doc.querySelectorAll(`[${SWITCH}], [${POPOVER}], [${LIST}]`)) node.remove();
+      closeMenus();
+      for (const node of doc.querySelectorAll(`[${SWITCH}], [${POPOVER}], [${LIST}], [${STYLE}]`)) node.remove();
       restoreHidden();
       if (mounted?.span) mounted.span.style.display = "";
+      if (mounted?.header) mounted.header.removeAttribute("data-no996-editing");
+      if (mounted?.header && onSearch) {
+        try {
+          mounted.header.removeEventListener("input", onSearch, true);
+        } catch {
+        }
+      }
+      if (onDocumentClick) {
+        try {
+          doc.removeEventListener("click", onDocumentClick, true);
+        } catch {
+        }
+      }
       trigger = null;
       list = null;
       mounted = null;
+      style = null;
+      folderButton = null;
+      onSearch = null;
+      onDocumentClick = null;
+    };
+    const ensureStyle = () => {
+      if (style?.isConnected) return;
+      style = doc.createElement("style");
+      style.setAttribute(STYLE, "");
+      style.textContent = [
+        '[data-no996-editing] [class*="_sectionLabelHidden"]{opacity:1!important;visibility:visible!important;max-width:45%!important;margin-right:0!important;transform:none!important}',
+        '[data-no996-editing] [class*="_headerActionsHidden"]{opacity:1!important;visibility:visible!important;max-width:60px!important;transform:none!important;pointer-events:auto!important}',
+        "[data-no996-editing] [data-no996-workspace-switch]{flex:none}"
+      ].join("");
+      (doc.head ?? doc.documentElement).append(style);
     };
     const listContainer = (header) => {
       if (list) return list;
@@ -563,26 +637,46 @@
       (header.parentElement ?? header).append(list);
       return list;
     };
-    const renderRows = (container, projects) => {
+    const filtered = () => {
+      const needle = query.trim().toLowerCase();
+      let rows = projects.filter((project) => {
+        if (!view.archived && project.archived) return false;
+        if (!needle) return true;
+        const title = project.title || project.name || project.projectId;
+        return [title, project.name, project.path, project.sessionId, project.projectId].some((value) => typeof value === "string" && value.toLowerCase().includes(needle));
+      });
+      if (view.sort === "name") {
+        rows = [...rows].sort((left, right) => (left.title || left.name || "").localeCompare(right.title || right.name || "", "zh-CN"));
+      }
+      return rows;
+    };
+    const renderRows = (container, next) => {
+      projects = Array.isArray(next) ? next : [];
       container.replaceChildren();
-      if (!projects.length) {
+      const rows = filtered();
+      if (!rows.length) {
         const empty = doc.createElement("div");
-        empty.textContent = "\u8FD8\u6CA1\u6709\u526A\u8F91\u4F1A\u8BDD\uFF1A\u5148\u5728\u89C6\u9891\u521B\u4F5C\u91CC\u6253\u5F00\u4E00\u4E2A\u9879\u76EE\u3002";
+        empty.textContent = query ? "\u6CA1\u6709\u5339\u914D\u7684\u4F1A\u8BDD\u3002" : "\u8FD8\u6CA1\u6709\u526A\u8F91\u4F1A\u8BDD\uFF1A\u5148\u5728\u89C6\u9891\u521B\u4F5C\u91CC\u6253\u5F00\u4E00\u4E2A\u9879\u76EE\u3002";
         empty.style.cssText = "padding:8px 10px;font-size:12px;opacity:.6;";
         container.append(empty);
         return;
       }
-      for (const project of projects) {
+      for (const project of rows) {
+        const wrapper = doc.createElement("div");
+        wrapper.style.cssText = "display:flex;align-items:stretch;gap:2px;border-radius:6px;";
         const row = doc.createElement("button");
         row.type = "button";
-        row.style.cssText = "display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;";
+        row.style.cssText = "display:flex;flex-direction:column;align-items:flex-start;gap:2px;flex:1 1 auto;min-width:0;padding:7px 8px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;";
         const name = doc.createElement("span");
-        name.textContent = (project.archived ? "\u5DF2\u5F52\u6863 \xB7 " : "") + (project.name || project.projectId);
+        name.textContent = (project.pinned ? "\u{1F4CC} " : "") + (project.archived ? "\u5DF2\u5F52\u6863 \xB7 " : "") + (project.title || project.name || project.projectId);
         name.style.cssText = "font-size:13px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;";
-        const path = doc.createElement("span");
-        path.textContent = project.path || "";
-        path.style.cssText = "font-size:11px;opacity:.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;";
-        row.append(name, path);
+        row.append(name);
+        if (view.path && project.path) {
+          const path = doc.createElement("span");
+          path.textContent = project.path;
+          path.style.cssText = "font-size:11px;opacity:.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;";
+          row.append(path);
+        }
         row.addEventListener("mouseenter", () => {
           row.style.background = "var(--bg-hover, rgba(127,127,127,.12))";
         });
@@ -599,8 +693,26 @@
           areaBus.navigate(project.projectId);
           findPanelEntry(doc)?.click();
           closePopover();
+          closeMenus();
         });
-        container.append(row);
+        const more = doc.createElement("button");
+        more.type = "button";
+        more.textContent = "\u22EF";
+        more.setAttribute("aria-label", "\u4F1A\u8BDD\u64CD\u4F5C");
+        more.style.cssText = "flex:none;width:24px;border:0;border-radius:6px;background:none;color:inherit;opacity:0;cursor:pointer;font:inherit;font-size:15px;line-height:1;";
+        wrapper.addEventListener("mouseenter", () => {
+          more.style.opacity = ".75";
+        });
+        wrapper.addEventListener("mouseleave", () => {
+          more.style.opacity = "0";
+        });
+        more.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openRowMenu(more, project);
+        });
+        wrapper.append(row, more);
+        container.append(wrapper);
       }
     };
     const load = async (container) => {
@@ -622,12 +734,177 @@
         loading = false;
       }
     };
+    const refresh = () => {
+      if (list) void load(list);
+    };
+    const menuButton = (parent, label, onClick, checked) => {
+      const button = doc.createElement("button");
+      button.type = "button";
+      button.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;";
+      button.textContent = label;
+      if (checked) {
+        const check = doc.createElement("span");
+        check.textContent = "\u2713";
+        check.style.cssText = "opacity:.8;";
+        button.append(check);
+      }
+      button.addEventListener("mouseenter", () => {
+        button.style.background = "var(--bg-hover, rgba(127,127,127,.14))";
+      });
+      button.addEventListener("mouseleave", () => {
+        button.style.background = "none";
+      });
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeMenus();
+        onClick();
+      });
+      parent.append(button);
+    };
+    const openMenuAt = (anchor, attribute) => {
+      const menu = doc.createElement("div");
+      menu.setAttribute(attribute, "");
+      menu.style.cssText = "position:fixed;z-index:2147483000;min-width:180px;padding:4px;border-radius:8px;background:var(--bg-elevated, #232325);border:1px solid var(--border-subtle, rgba(255,255,255,.12));box-shadow:0 10px 30px rgba(0,0,0,.45);font:13px system-ui,sans-serif;color:inherit;";
+      const rect = anchor.getBoundingClientRect();
+      menu.style.left = `${Math.max(8, Math.min(rect.left, (doc.defaultView?.innerWidth ?? 1200) - 200))}px`;
+      menu.style.top = `${Math.round(rect.bottom + 4)}px`;
+      doc.body.append(menu);
+      const dismiss = (event) => {
+        if (menu.isConnected && !menu.contains(event.target) && event.target !== anchor) {
+          menu.remove();
+          doc.removeEventListener("pointerdown", dismiss, true);
+        }
+      };
+      doc.addEventListener("pointerdown", dismiss, true);
+      return menu;
+    };
+    const openViewMenu = (anchor) => {
+      closeMenus();
+      const menu = openMenuAt(anchor, VIEW_MENU);
+      menuButton(menu, "\u6392\u5E8F\uFF1A\u6700\u8FD1\u66F4\u65B0", () => {
+        view = { ...view, sort: "recent" };
+        saveView();
+        refresh();
+      }, view.sort === "recent");
+      menuButton(menu, "\u6392\u5E8F\uFF1A\u540D\u79F0", () => {
+        view = { ...view, sort: "name" };
+        saveView();
+        refresh();
+      }, view.sort === "name");
+      menuButton(menu, "\u663E\u793A\u5DF2\u5F52\u6863", () => {
+        view = { ...view, archived: !view.archived };
+        saveView();
+        refresh();
+      }, view.archived);
+      menuButton(menu, "\u663E\u793A\u8DEF\u5F84", () => {
+        view = { ...view, path: !view.path };
+        saveView();
+        refresh();
+      }, view.path);
+    };
+    const saveView = () => {
+      try {
+        doc.defaultView?.localStorage?.setItem(VIEW_KEY, JSON.stringify(view));
+      } catch {
+      }
+    };
+    const openRowMenu = (anchor, project) => {
+      closeMenus();
+      const menu = openMenuAt(anchor, ROW_MENU);
+      menuButton(menu, project.pinned ? "\u53D6\u6D88\u7F6E\u9876" : "\u7F6E\u9876", async () => {
+        try {
+          await postJson("/api/no996-openfilm/editing-prefs", { projectId: project.projectId, pinned: !project.pinned });
+          refresh();
+        } catch {
+        }
+      });
+      menuButton(menu, "\u91CD\u547D\u540D\u2026", () => openRename(project));
+      menuButton(menu, project.archived ? "\u6062\u590D\u4F1A\u8BDD" : "\u5F52\u6863\u4F1A\u8BDD", async () => {
+        try {
+          await postJson("/api/no996-openfilm/editing-archive", { projectId: project.projectId, archived: !project.archived });
+          refresh();
+        } catch {
+        }
+      });
+      menuButton(menu, "\u5220\u9664\u4F1A\u8BDD\u2026", () => openConfirm(project));
+    };
+    const openModal = (title, body, actions) => {
+      const overlay = doc.createElement("div");
+      overlay.setAttribute(MODAL, "");
+      overlay.style.cssText = "position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);";
+      const card = doc.createElement("div");
+      card.style.cssText = "width:min(360px,calc(100vw - 32px));padding:16px;border-radius:10px;background:var(--bg-elevated, #232325);border:1px solid var(--border-subtle, rgba(255,255,255,.12));box-shadow:0 18px 50px rgba(0,0,0,.5);font:13px system-ui,sans-serif;color:inherit;";
+      const heading = doc.createElement("div");
+      heading.textContent = title;
+      heading.style.cssText = "font-weight:600;margin-bottom:8px;";
+      const content = doc.createElement("div");
+      content.style.cssText = "opacity:.8;line-height:1.6;margin-bottom:12px;";
+      content.append(body);
+      const footer = doc.createElement("div");
+      footer.style.cssText = "display:flex;justify-content:flex-end;gap:8px;";
+      for (const [label, onClick, primary] of actions) {
+        const button = doc.createElement("button");
+        button.type = "button";
+        button.textContent = label;
+        button.style.cssText = "padding:6px 14px;border-radius:7px;border:1px solid var(--border-subtle, rgba(255,255,255,.14));background:" + (primary ? "var(--dsw-alias-state-business-primary, #4b7bec)" : "none") + ";color:inherit;cursor:pointer;font:inherit;";
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onClick();
+        });
+        footer.append(button);
+      }
+      card.append(heading, content, footer);
+      overlay.append(card);
+      doc.body.append(overlay);
+      return { overlay, card };
+    };
+    const openRename = (project) => {
+      closeMenus();
+      const input = doc.createElement("input");
+      input.value = project.title || project.name || project.projectId;
+      input.style.cssText = "box-sizing:border-box;width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border-subtle, rgba(255,255,255,.16));background:transparent;color:inherit;font:inherit;";
+      const { overlay } = openModal("\u91CD\u547D\u540D\u4F1A\u8BDD", input, [
+        ["\u53D6\u6D88", () => overlay.remove(), false],
+        ["\u4FDD\u5B58", async () => {
+          const title = input.value.trim();
+          overlay.remove();
+          try {
+            await postJson("/api/no996-openfilm/editing-prefs", { projectId: project.projectId, title });
+            refresh();
+          } catch {
+          }
+        }, true]
+      ]);
+      input.focus();
+      input.select?.();
+    };
+    const openConfirm = (project) => {
+      closeMenus();
+      const body = doc.createElement("div");
+      body.textContent = "\u53EA\u5220\u9664\u8FD9\u6761\u4F1A\u8BDD\u548C\u804A\u5929\u8BB0\u5F55\uFF0C\u9879\u76EE\u6587\u4EF6\u5939\u548C film \u4F1A\u4FDD\u7559\u3002";
+      const { overlay } = openModal("\u5220\u9664\u4F1A\u8BDD", body, [
+        ["\u53D6\u6D88", () => overlay.remove(), false],
+        ["\u5220\u9664", async () => {
+          overlay.remove();
+          try {
+            await postJson("/api/no996-openfilm/editing-delete", { projectId: project.projectId });
+            refresh();
+          } catch {
+          }
+        }, true]
+      ]);
+    };
     const applyMode = () => {
       if (!mounted || !trigger) return;
-      const { span, header } = mounted;
+      const { span, header, actions } = mounted;
       trigger.textContent = mode === "editing" ? "\u7D20\u6750\u526A\u8F91\u533A \u25BE" : "\u5DE5\u4F5C\u533A \u25BE";
       trigger.setAttribute("aria-label", mode === "editing" ? "\u5207\u6362\u5230\u5DE5\u4F5C\u533A\u5217\u8868" : "\u5207\u6362\u5230 OpenFilm \u7D20\u6750\u526A\u8F91\u533A");
       span.style.display = "none";
+      if (mode === "editing") header.setAttribute("data-no996-editing", "");
+      else header.removeAttribute("data-no996-editing");
+      ensureStyle();
       const container = listContainer(header);
       restoreHidden();
       if (mode === "editing") {
@@ -636,6 +913,8 @@
           hidden.push(node);
           node.style.display = "none";
         }
+        folderButton = actions?.querySelectorAll("button")?.[1] ?? null;
+        if (folderButton) folderButton.style.display = "none";
         container.style.display = "block";
         void load(container);
       } else {
@@ -703,7 +982,7 @@
       }
       if (mounted && mounted.header === found.header && mounted.span === found.span && trigger?.isConnected && list?.isConnected) return;
       cleanup();
-      const { span, header } = found;
+      const { span, header, actions } = found;
       trigger = doc.createElement("button");
       trigger.type = "button";
       trigger.setAttribute(SWITCH, "");
@@ -716,8 +995,30 @@
       });
       span.parentElement?.insertBefore(trigger, span);
       span.style.display = "none";
-      mounted = { span, header };
+      mounted = { span, header, actions };
       listContainer(header);
+      onSearch = (event) => {
+        if (mode !== "editing") return;
+        const value = event.target?.value;
+        if (typeof value !== "string") return;
+        query = value;
+        if (list) renderRows(list, projects);
+      };
+      header.addEventListener("input", onSearch, true);
+      const viewButton = actions?.querySelector("button") ?? null;
+      if (viewButton) {
+        viewButton.addEventListener("click", (event) => {
+          if (mode !== "editing") return;
+          event.preventDefault();
+          event.stopPropagation();
+          openViewMenu(viewButton);
+        }, true);
+      }
+      onDocumentClick = (event) => {
+        const target = event.target?.closest?.('button, [role="button"], a');
+        if (target && PANEL_LABELS.has(text(target.textContent)) && mode !== "editing") setMode("editing");
+      };
+      doc.addEventListener("click", onDocumentClick, true);
       applyMode();
     };
     let scheduled = false;
