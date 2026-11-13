@@ -133,18 +133,35 @@ window.__ModuleLoader__.load({
         // It is installed outside React on purpose: the sidebar belongs to DSH,
         // and this is a narrow, reversible append that only hides one label.
         if (typeof document !== 'undefined' && typeof window !== 'undefined') {
-          try {
-            installWorkspaceSwitch({
-              document,
-              fetchSessions: async () => {
-                const response = await fetch('/api/no996-openfilm/editing-sessions', {
-                  method: 'GET', credentials: 'same-origin', headers: { accept: 'application/json' },
-                });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                return response.json();
-              },
-            });
-          } catch { /* the switch is a convenience; a missing header must not break the panel */ }
+          const install = () => {
+            try {
+              return installWorkspaceSwitch({
+                document,
+                fetchSessions: async () => {
+                  // A refresh can land while the Host is still starting; without
+                  // a deadline the row stayed on "正在读取" forever.
+                  const controller = new AbortController();
+                  const timer = setTimeout(() => controller.abort(), 8000);
+                  try {
+                    const response = await fetch('/api/no996-openfilm/editing-sessions', {
+                      method: 'GET', credentials: 'same-origin', headers: { accept: 'application/json' }, signal: controller.signal,
+                    });
+                    if (response.status === 404) {
+                      const error = new Error('ROUTE_MISSING');
+                      error.code = 'ROUTE_MISSING';
+                      throw error;
+                    }
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.json();
+                  } finally { clearTimeout(timer); }
+                },
+              });
+            } catch { return undefined; }
+          };
+          // Disposing the plugin must take the injected header back out; a bare
+          // call would leave the switch behind until the page reloads.
+          if (typeof ctx.effect === 'function') ctx.effect(install, 'openfilm: sidebar switch');
+          else install();
         }
       },
     };

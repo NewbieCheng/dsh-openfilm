@@ -132,7 +132,8 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     style.textContent = [
       '[data-no996-editing] [class*="_sectionLabelHidden"]{opacity:1!important;visibility:visible!important;max-width:45%!important;margin-right:0!important;transform:none!important}',
       '[data-no996-editing] [class*="_headerActionsHidden"]{opacity:1!important;visibility:visible!important;max-width:60px!important;transform:none!important;pointer-events:auto!important}',
-      '[data-no996-editing] [data-no996-workspace-switch]{flex:none}',
+      '[data-no996-editing] [data-no996-workspace-switch]{flex:none!important;min-width:max-content!important}',
+      '[data-no996-editing] [class*="_searchSlot"]{min-width:0!important}',
     ].join('');
     (doc.head ?? doc.documentElement).append(style);
   };
@@ -230,10 +231,21 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     try {
       const data = await fetchSessions?.();
       renderRows(container, Array.isArray(data?.projects) ? data.projects : []);
-    } catch {
+    } catch (error) {
+      // The Host route disappearing means the plugin is no longer serving this
+      // page (stopped/disabled): put the shipped sidebar back instead of
+      // leaving a dead switch behind.
+      if (error?.code === 'ROUTE_MISSING') { cleanup(); return; }
       const failed = doc.createElement('div');
-      failed.textContent = '读取失败，稍后再试。';
-      failed.style.cssText = 'padding:8px 10px;font-size:12px;color:#e07b5a;';
+      failed.style.cssText = 'padding:8px 10px;font-size:12px;color:#e07b5a;display:flex;align-items:center;gap:8px;';
+      const message = doc.createElement('span');
+      message.textContent = '读取失败，稍后再试。';
+      const retry = doc.createElement('button');
+      retry.type = 'button';
+      retry.textContent = '重试';
+      retry.style.cssText = 'border:1px solid var(--border-subtle, rgba(255,255,255,.2));border-radius:5px;background:none;color:inherit;font:inherit;padding:2px 8px;cursor:pointer;';
+      retry.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); void load(container); });
+      failed.append(message, retry);
       container.replaceChildren(failed);
     } finally {
       loading = false;
@@ -386,10 +398,8 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
         hidden.push(node);
         node.style.display = 'none';
       }
-      // The add-folder button groups shipped sessions; the editing area has no
-      // folder concept, so it stays out of the way while we are showing it.
-      folderButton = actions?.querySelectorAll('button')?.[1] ?? null;
-      if (folderButton) folderButton.style.display = 'none';
+      // The add-folder button groups shipped sessions; the editing area keeps it
+      // visible so the same workspace actions stay reachable.
       container.style.display = 'block';
       void load(container);
     } else {
@@ -457,7 +467,7 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     trigger = doc.createElement('button');
     trigger.type = 'button';
     trigger.setAttribute(SWITCH, '');
-    trigger.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:0 2px;margin:0;border:0;background:none;color:inherit;font:inherit;font-size:inherit;line-height:inherit;cursor:pointer;white-space:nowrap;';
+    trigger.style.cssText = 'display:inline-flex;align-items:center;gap:4px;flex:none;min-width:max-content;padding:0 2px;margin:0;border:0;background:none;color:inherit;font:inherit;font-size:inherit;line-height:inherit;cursor:pointer;white-space:nowrap;';
     trigger.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();

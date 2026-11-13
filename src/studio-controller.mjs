@@ -1154,13 +1154,29 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       }
       if (admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('DSH_BROWSER_REQUIRED'); return; }
       try {
+        // The proxy is created during Host startup; a sidebar refresh can arrive
+        // before it resolves. Waiting forever left the list stuck on "正在读取"
+        // (and a restart "fixed" it). Bound the wait, then fall back to the
+        // projects this Host already has a bound Session for.
         let proxy;
-        try { proxy = await lastProxy; } catch { proxy = undefined; }
-        const projects = proxy && typeof proxy.listProjects === 'function'
-          ? await proxy.listProjects().catch(() => [])
-          : [];
+        try {
+          proxy = await Promise.race([
+            Promise.resolve(lastProxy).catch(() => undefined),
+            new Promise(resolve => setTimeout(() => resolve(undefined), 2500)),
+          ]);
+        } catch { proxy = undefined; }
         const bound = new Map(acpSessions.all().map(record => [record.projectId, record]));
         const prefs = editingPrefs.all();
+        const studioProjects = proxy && typeof proxy.listProjects === 'function'
+          ? await proxy.listProjects().catch(() => [])
+          : [];
+        const projects = studioProjects.length
+          ? studioProjects
+          : [...bound.values()].map(record => ({
+            id: record.projectId,
+            name: basename(String(record.cwd ?? '')) || record.projectId,
+            path: typeof record.cwd === 'string' ? record.cwd : '',
+          }));
         const items = [];
         for (const project of projects) {
           if (!project || typeof project.id !== 'string') continue;

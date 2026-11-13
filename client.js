@@ -625,7 +625,8 @@
       style.textContent = [
         '[data-no996-editing] [class*="_sectionLabelHidden"]{opacity:1!important;visibility:visible!important;max-width:45%!important;margin-right:0!important;transform:none!important}',
         '[data-no996-editing] [class*="_headerActionsHidden"]{opacity:1!important;visibility:visible!important;max-width:60px!important;transform:none!important;pointer-events:auto!important}',
-        "[data-no996-editing] [data-no996-workspace-switch]{flex:none}"
+        "[data-no996-editing] [data-no996-workspace-switch]{flex:none!important;min-width:max-content!important}",
+        '[data-no996-editing] [class*="_searchSlot"]{min-width:0!important}'
       ].join("");
       (doc.head ?? doc.documentElement).append(style);
     };
@@ -725,10 +726,25 @@
       try {
         const data = await fetchSessions?.();
         renderRows(container, Array.isArray(data?.projects) ? data.projects : []);
-      } catch {
+      } catch (error) {
+        if (error?.code === "ROUTE_MISSING") {
+          cleanup();
+          return;
+        }
         const failed = doc.createElement("div");
-        failed.textContent = "\u8BFB\u53D6\u5931\u8D25\uFF0C\u7A0D\u540E\u518D\u8BD5\u3002";
-        failed.style.cssText = "padding:8px 10px;font-size:12px;color:#e07b5a;";
+        failed.style.cssText = "padding:8px 10px;font-size:12px;color:#e07b5a;display:flex;align-items:center;gap:8px;";
+        const message = doc.createElement("span");
+        message.textContent = "\u8BFB\u53D6\u5931\u8D25\uFF0C\u7A0D\u540E\u518D\u8BD5\u3002";
+        const retry = doc.createElement("button");
+        retry.type = "button";
+        retry.textContent = "\u91CD\u8BD5";
+        retry.style.cssText = "border:1px solid var(--border-subtle, rgba(255,255,255,.2));border-radius:5px;background:none;color:inherit;font:inherit;padding:2px 8px;cursor:pointer;";
+        retry.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void load(container);
+        });
+        failed.append(message, retry);
         container.replaceChildren(failed);
       } finally {
         loading = false;
@@ -913,8 +929,6 @@
           hidden.push(node);
           node.style.display = "none";
         }
-        folderButton = actions?.querySelectorAll("button")?.[1] ?? null;
-        if (folderButton) folderButton.style.display = "none";
         container.style.display = "block";
         void load(container);
       } else {
@@ -986,7 +1000,7 @@
       trigger = doc.createElement("button");
       trigger.type = "button";
       trigger.setAttribute(SWITCH, "");
-      trigger.style.cssText = "display:inline-flex;align-items:center;gap:4px;padding:0 2px;margin:0;border:0;background:none;color:inherit;font:inherit;font-size:inherit;line-height:inherit;cursor:pointer;white-space:nowrap;";
+      trigger.style.cssText = "display:inline-flex;align-items:center;gap:4px;flex:none;min-width:max-content;padding:0 2px;margin:0;border:0;background:none;color:inherit;font:inherit;font-size:inherit;line-height:inherit;cursor:pointer;white-space:nowrap;";
       trigger.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -1189,21 +1203,38 @@
           ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: PANEL, order: 21, locale: NS, label: () => t("panel") }, PanelIcon));
           ctx.slots.inject("shell.overlay", () => ctx.slots.register({ name: "shell.overlay", id: "no996-openfilm-panel", order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
           if (typeof document !== "undefined" && typeof window !== "undefined") {
-            try {
-              installWorkspaceSwitch({
-                document,
-                fetchSessions: async () => {
-                  const response = await fetch("/api/no996-openfilm/editing-sessions", {
-                    method: "GET",
-                    credentials: "same-origin",
-                    headers: { accept: "application/json" }
-                  });
-                  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                  return response.json();
-                }
-              });
-            } catch {
-            }
+            const install = () => {
+              try {
+                return installWorkspaceSwitch({
+                  document,
+                  fetchSessions: async () => {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), 8e3);
+                    try {
+                      const response = await fetch("/api/no996-openfilm/editing-sessions", {
+                        method: "GET",
+                        credentials: "same-origin",
+                        headers: { accept: "application/json" },
+                        signal: controller.signal
+                      });
+                      if (response.status === 404) {
+                        const error = new Error("ROUTE_MISSING");
+                        error.code = "ROUTE_MISSING";
+                        throw error;
+                      }
+                      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                      return response.json();
+                    } finally {
+                      clearTimeout(timer);
+                    }
+                  }
+                });
+              } catch {
+                return void 0;
+              }
+            };
+            if (typeof ctx.effect === "function") ctx.effect(install, "openfilm: sidebar switch");
+            else install();
           }
         }
       };
