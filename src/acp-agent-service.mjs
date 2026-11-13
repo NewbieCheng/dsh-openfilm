@@ -64,6 +64,7 @@ export function catalogFromConfigOptions(configOptions = []) {
     if (models.some(item => item.id === choice.model)) return;
     models.push({
       id: choice.model,
+      provider: choice.provider,
       name: entry.name,
       ...(text(entry.description) ? { description: entry.description } : {}),
     });
@@ -79,9 +80,19 @@ export function catalogFromConfigOptions(configOptions = []) {
     }
   }
   const current = parseChoice(option.currentValue);
+  // The old V4 is not offered any more: the panel should run the person's
+  // current model, and when that is unavailable, the official V4.1 Flash —
+  // never the model the child would otherwise pick by itself.
+  const hidden = process.env.NO996_OPENFILM_KEEP_V4_FLASH === '1' ? null : { provider: 'deepseek-official', model: 'deepseek-v4-flash' };
+  const groupsOut = [...groups.values()]
+    .map(group => ({ ...group, models: group.models.filter(model => !(hidden && model.provider === hidden.provider && model.id === hidden.model)) }))
+    .filter(group => group.models.length > 0);
+  const fallback = hidden && current && current.provider === hidden.provider && current.model === hidden.model
+    ? { provider: 'deepseek-official', model: 'deepseek-flash' }
+    : current;
   return {
-    groups: [...groups.values()].filter(group => group.models.length > 0),
-    ...(current ? { default: current } : {}),
+    groups: groupsOut,
+    ...(fallback ? { default: fallback } : {}),
   };
 }
 
@@ -294,25 +305,44 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
   async function adoptDefaultSelection(entry) {
     let selection;
     try { selection = defaultSelection(); } catch { selection = undefined; }
-    if (!selection || !text(selection.provider) || !text(selection.model)) return;
     const catalog = catalogFromConfigOptions(entry.configOptions);
-    if (!catalog.groups.some(group => group.id === selection.provider && group.models.some(item => item.id === selection.model))) return;
+    let target = selection && text(selection.provider) && text(selection.model)
+      && catalog.groups.some(group => group.id === selection.provider && group.models.some(item => item.id === selection.model))
+      ? selection
+      : undefined;
+    if (!target) {
+      // The child's own default is the retired V4. When the person's selection
+      // cannot be applied, move it to the official V4.1 Flash rather than leave
+      // the first turn on a model the menu no longer offers.
+      const option = entry.configOptions.find(item => item && (item.category === 'model' || item.id === 'model'));
+      let current;
+      try {
+        const parsed = JSON.parse(option?.currentValue ?? '');
+        if (Array.isArray(parsed) && parsed.length === 2) current = { provider: parsed[0], model: parsed[1] };
+      } catch { current = undefined; }
+      if (current?.provider === 'deepseek-official' && current.model === 'deepseek-v4-flash'
+        && catalog.groups.some(group => group.id === 'deepseek-official' && group.models.some(item => item.id === 'deepseek-flash'))) {
+        target = { provider: 'deepseek-official', model: 'deepseek-flash' };
+      }
+    }
+    if (!target) return;
     const option = entry.configOptions.find(item => item && (item.category === 'model' || item.id === 'model'));
-    if (option && option.currentValue !== valueForChoice(entry.configOptions, selection)) {
+    if (option && option.currentValue !== valueForChoice(entry.configOptions, target)) {
       try {
         const updated = await entry.client.setConfigOption({
           sessionId: entry.sessionId,
           configId: option.id ?? 'model',
-          value: valueForChoice(entry.configOptions, selection),
+          value: valueForChoice(entry.configOptions, target),
         });
         if (Array.isArray(updated?.configOptions) && updated.configOptions.length > 0) entry.configOptions = updated.configOptions;
-        void log?.('acp-default-model', { projectId: entry.projectId, provider: selection.provider, model: selection.model });
+        void log?.('acp-default-model', { projectId: entry.projectId, provider: target.provider, model: target.model });
       } catch (error) {
         void log?.('acp-default-model-failed', { projectId: entry.projectId, reason: String(error?.code ?? error).slice(0, 80) });
       }
     }
     // Match the DSH-side thinking intensity too, so the first turn of the panel
     // runs at the level the person already uses in the sidebar.
+    if (!selection) return;
     const effort = selection.reasoningEffort ?? selection.effort;
     const thinkingOptionId = entry.configOptions.find(item => item && (item.category === 'thought_level' || item.id === 'reasoning_effort'));
     if (!text(effort) || !thinkingOptionId || thinkingOptionId.currentValue === effort) return;

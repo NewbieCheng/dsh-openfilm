@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.13.1 —— 面板模型：同步桌面渠道，默认跟随当前选择
+
+- 面板聊天跑在 `dsh --profile acp` 这个独立 profile 里，之前只有 DSH 自带的两条 DeepSeek 渠道：你配的 `opencode-go` 根本不在里面，所以选中的 V4.1 Flash 被拒绝，面板退回自己的 `deepseek-v4-flash`（思考强度也跟着掉），看起来就是"没有思考、一下子全出来"。
+- 现在 Host 启动时把**桌面 profile** 的 `llm-pi-ai` 渠道（opencode-go 及其模型）幂等抄进 `acp` profile 的补丁里；只抄渠道名/地址/模型清单/密钥变量名，密钥仍只在 DSH 凭据里。网页 profile 不同步。
+- 默认模型跟随你在 DSH 里**当前选中的**模型（这波是 `opencode-go/deepseek-v4.1-flash`）；不可用时兜底官方的 `deepseek-flash`（V4.1）。
+- 旧的 `deepseek-v4-flash` 从面板菜单隐藏；`NO996_OPENFILM_KEEP_V4_FLASH=1` 可恢复。思考过程不用改代码，换成 V4.1 Flash 后自然出现。
+- 权限默认仍是"完全访问"（`danger-full-access`），新项目直接可写。
+- 真机探测：`dsh --profile acp` 的 `session/new` 已列出 `DeepSeek`、`DeepSeek Account`、`opencode-go` 三组；新增 `tests/acp-profile-models.test.mjs`、`tests/acp-catalog.test.mjs`。
+
 ## 0.13.0 —— 对话改走 ACP 边车（模型 / 思考 / 权限 / 续聊都跟着 DSH）
 
 - 面板对话不再由 Host 手工模拟一轮 turn：每个项目起一个 `dsh --profile acp` 子进程，会话由 ACP 代理创建并持久化（`session/new` → `session/resume`），思考、工具卡片、权限询问、模型菜单都走 `session/update` / `session/set_config_option`。新增 `src/acp-agent-service.mjs`（外向接口与旧桥一致：send / cancel / modelCatalog / selectModel / thinkingOption / selectThinking / answerPermission / activeKey）与 `src/acp-session-store.mjs`（项目 → 会话 id，落 `$DSH_HOME/no996-openfilm/acp-sessions.json`）。

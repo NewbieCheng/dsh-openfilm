@@ -89,7 +89,7 @@ test('flattening tolerates option rows that carry no group', () => {
   const catalog = catalogFromConfigOptions([
     { id: 'model', category: 'model', currentValue: '["x","y"]', options: [{ value: '["x","y"]', name: 'Y' }] },
   ]);
-  assert.deepEqual(catalog.groups, [{ id: 'x', name: 'x', models: [{ id: 'y', name: 'Y' }] }]);
+  assert.deepEqual(catalog.groups, [{ id: 'x', name: 'x', models: [{ id: 'y', provider: 'x', name: 'Y' }] }]);
 });
 
 test('the panel session adopts the DSH-side model selection', async () => {

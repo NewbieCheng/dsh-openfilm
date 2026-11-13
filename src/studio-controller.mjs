@@ -12,6 +12,7 @@ import {
 import { createToolInstaller } from './tool-installer.mjs';
 import { augmentPath } from './download-sources.mjs';
 import { applyStudioLibraryPatch } from './studio-library-patch.mjs';
+import { applyAcpModelProviders } from './acp-profile-models.mjs';
 import { readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -115,6 +116,11 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   })();
   const libraryPatch = applyStudioLibraryPatch({ packageRoot: studioPackageRoot, logger: log });
   if (libraryPatch.patched) log.info('studio-library-patch', libraryPatch);
+  // The panel's `dsh --profile acp` child only knows the built-in providers, so
+  // the person's own channels are copied there; without this the default model
+  // is refused and the panel falls back to its own v4-flash.
+  const providerSync = applyAcpModelProviders({ logger: log });
+  if (providerSync.patched) log.info('acp-model-providers', providerSync);
   const toolInstaller = createToolInstaller({ home: process.env.DSH_HOME || join(homedir(), '.dsh') });
   const detectHostComponents = createHostComponentDetector({ resolve: name => toolInstaller.resolveAny(name)?.path ?? null });
   let componentCheck;
