@@ -1146,12 +1146,16 @@ export function createStudioController(ctx, createProxy, { officialShell = false
           if (!project || typeof project.id !== 'string') continue;
           const record = bound.get(project.id);
           if (!record || typeof record.sessionId !== 'string') continue;
-          // An archived conversation stays out of the switch: opening it from
-          // here would land on a hidden history (and used to surface a 503).
-          if (archive && typeof archive.isArchived === 'function' && archive.isArchived(record.sessionId) === true) continue;
+          // An archived conversation stays listed: it is where the project's
+          // history lives, and the panel opens it read-only with a restore
+          // action (hiding it made the whole area look empty).
+          const archived = archive && typeof archive.isArchived === 'function'
+            ? archive.isArchived(record.sessionId) === true
+            : false;
           items.push({
             projectId: project.id,
             sessionId: record.sessionId,
+            archived,
             name: typeof project.name === 'string' && project.name
               ? project.name
               : (typeof project.title === 'string' && project.title ? project.title : basename(String(project.path ?? '')) || project.id),

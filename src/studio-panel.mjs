@@ -157,6 +157,12 @@ export function createStudioPanel(React) {
         }
         // Login/logout are handled inside the official shell overlay. Keep the
         // iframe up so logout only reopens the compact gate, never tears Studio down.
+        if (data && typeof data === 'object' && data.type === 'no996-openfilm:archive' && data.version === 1 && typeof data.projectId === 'string') {
+          // The Studio shell reports the archive state over the same channel it
+          // uses for the project, so this works on the desktop scheme too (where
+          // the relative Host /api route is unreachable).
+          setArchive({ available: data.available !== false, archived: data.archived === true });
+        }
         if (data && typeof data === 'object' && data.type === 'no996-openfilm:project' && data.version === 1 && typeof data.projectId === 'string') {
           // The project area draws the same projects and follows the one on screen.
           areaBus.reportProject(/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId) ? data.projectId : null);
@@ -307,6 +313,34 @@ export function createStudioPanel(React) {
     // shows its own "restart OpenFilm" overlay, which is true for the desktop app
     // and misleading here — so cover it and offer the one action that works.
     const stopped = state.status === 'ready' && !archived && health?.running === false;
+    // An archived conversation is read-only: cover the frame so the chat cannot
+    // send a turn the Host must refuse (the old 503 toast), and offer the one
+    // action that works.
+    const archiveOverlay = archived
+      ? h('div', {
+        role: 'alert',
+        style: {
+          position: 'absolute', inset: 0, zIndex: 38, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 24, background: 'color-mix(in srgb, var(--dsw-alias-bg-base, #111) 86%, transparent)',
+        },
+      }, h('div', {
+        style: {
+          maxWidth: 380, width: '100%', padding: '20px 22px', borderRadius: 12, textAlign: 'center',
+          background: 'var(--dsw-alias-bg-layer-2, #232326)', color: 'var(--dsw-alias-label-primary)',
+          border: '1px solid var(--dsw-alias-separator, #8886)',
+        },
+      },
+      h('strong', { style: { display: 'block', fontSize: 14, marginBottom: 6 } }, t('archiveBanner')),
+      h('button', {
+        type: 'button',
+        onClick: () => {
+          const frame = iframeRef.current;
+          if (!frame || !frame.contentWindow || typeof projectId !== 'string') return;
+          try { frame.contentWindow.postMessage({ type: 'no996-openfilm:unarchive', version: 1, projectId }, '*'); } catch { /* frame gone */ }
+        },
+        style: { marginTop: 12, padding: '7px 16px', borderRadius: 8, cursor: 'pointer' },
+      }, t('archiveRestore'))))
+      : null;
     const stoppedOverlay = stopped
       ? h('div', {
         role: 'alert',
@@ -330,6 +364,7 @@ export function createStudioPanel(React) {
       studio,
       silentOverlay,
       banner,
+      archiveOverlay,
       stoppedOverlay);
   };
 }

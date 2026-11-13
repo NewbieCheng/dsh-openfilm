@@ -503,7 +503,25 @@ if(!localStorage.getItem('openfilm.workspace.current.v2')){
     if(!force&&last===projectId)return;
     last=projectId;
     try{if(parent!==window)parent.postMessage({type:'no996-openfilm:project',version:1,projectId},targetOrigin)}catch{}
+    reportArchive(projectId);
   }
+  function reportArchive(projectId){
+    if(!projectId||parent===window)return;
+    fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'chat:archive-state',payload:{projectId:projectId}})})
+      .then(function(r){return r.ok?r.json():null})
+      .then(function(d){if(d&&typeof d==='object')parent.postMessage({type:'no996-openfilm:archive',version:1,projectId:projectId,archived:d.archived===true,available:d.available!==false},targetOrigin)})
+      .catch(function(){});
+  }
+  addEventListener('message',function(event){
+    if(event.source!==parent||parent===window||!(event.origin===parentOrigin||(${desktop}&&event.origin==='null')))return;
+    const data=event.data;
+    if(data&&typeof data==='object'&&data.type==='no996-openfilm:unarchive'&&data.version===1&&typeof data.projectId==='string'&&/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId)){
+      fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:'chat:unarchive',payload:{projectId:data.projectId}})})
+        .then(function(r){return r.ok?r.json():null})
+        .then(function(){report(true)})
+        .catch(function(){});
+    }
+  });
   for(const name of ['pushState','replaceState']){
     const original=history[name];
     history[name]=function(...args){const result=original.apply(this,args);report(false);return result};

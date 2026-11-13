@@ -175,6 +175,9 @@
             setHealth(null);
             setAttempt((value) => value + 1);
           }
+          if (data && typeof data === "object" && data.type === "no996-openfilm:archive" && data.version === 1 && typeof data.projectId === "string") {
+            setArchive({ available: data.available !== false, archived: data.archived === true });
+          }
           if (data && typeof data === "object" && data.type === "no996-openfilm:project" && data.version === 1 && typeof data.projectId === "string") {
             areaBus.reportProject(/^[A-Za-z0-9_-]{6,40}$/.test(data.projectId) ? data.projectId : null);
             try {
@@ -363,6 +366,46 @@
         h("button", { type: "button", disabled: archiveBusy, onClick: () => changeArchive("rebind") }, t("archiveRebind"))
       ) : null;
       const stopped = state.status === "ready" && !archived && health?.running === false;
+      const archiveOverlay = archived ? h("div", {
+        role: "alert",
+        style: {
+          position: "absolute",
+          inset: 0,
+          zIndex: 38,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+          background: "color-mix(in srgb, var(--dsw-alias-bg-base, #111) 86%, transparent)"
+        }
+      }, h(
+        "div",
+        {
+          style: {
+            maxWidth: 380,
+            width: "100%",
+            padding: "20px 22px",
+            borderRadius: 12,
+            textAlign: "center",
+            background: "var(--dsw-alias-bg-layer-2, #232326)",
+            color: "var(--dsw-alias-label-primary)",
+            border: "1px solid var(--dsw-alias-separator, #8886)"
+          }
+        },
+        h("strong", { style: { display: "block", fontSize: 14, marginBottom: 6 } }, t("archiveBanner")),
+        h("button", {
+          type: "button",
+          onClick: () => {
+            const frame = iframeRef.current;
+            if (!frame || !frame.contentWindow || typeof projectId !== "string") return;
+            try {
+              frame.contentWindow.postMessage({ type: "no996-openfilm:unarchive", version: 1, projectId }, "*");
+            } catch {
+            }
+          },
+          style: { marginTop: 12, padding: "7px 16px", borderRadius: 8, cursor: "pointer" }
+        }, t("archiveRestore"))
+      )) : null;
       const stoppedOverlay = stopped ? h(
         "div",
         {
@@ -404,6 +447,7 @@
         studio,
         silentOverlay,
         banner,
+        archiveOverlay,
         stoppedOverlay
       );
     };
@@ -533,7 +577,7 @@
         row.type = "button";
         row.style.cssText = "display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;";
         const name = doc.createElement("span");
-        name.textContent = project.name || project.projectId;
+        name.textContent = (project.archived ? "\u5DF2\u5F52\u6863 \xB7 " : "") + (project.name || project.projectId);
         name.style.cssText = "font-size:13px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;";
         const path = doc.createElement("span");
         path.textContent = project.path || "";
