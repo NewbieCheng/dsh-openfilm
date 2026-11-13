@@ -74,6 +74,8 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
   let view = readView(doc);
   let query = '';
   let projects = [];
+  const collapsed = new Set();
+  const expanded = new Set();
   let mounted = null;
   let trigger = null;
   let list = null;
@@ -155,13 +157,60 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
       if (!view.archived && project.archived) return false;
       if (!needle) return true;
       const title = project.title || project.name || project.projectId;
-      return [title, project.name, project.path, project.sessionId, project.projectId]
-        .some(value => typeof value === 'string' && value.toLowerCase().includes(needle));
+      const sessions = Array.isArray(project.sessions) ? project.sessions : [];
+      return [title, project.name, project.path, project.projectId]
+        .some(value => typeof value === 'string' && value.toLowerCase().includes(needle))
+        || sessions.some(session => typeof session?.title === 'string' && session.title.toLowerCase().includes(needle));
     });
     if (view.sort === 'name') {
       rows = [...rows].sort((left, right) => (left.title || left.name || '').localeCompare(right.title || right.name || '', 'zh-CN'));
     }
     return rows;
+  };
+
+  const relative = iso => {
+    const time = typeof iso === 'string' ? Date.parse(iso) : NaN;
+    if (!Number.isFinite(time)) return '';
+    const minutes = Math.max(0, Math.round((Date.now() - time) / 60000));
+    if (minutes < 1) return '刚刚';
+    if (minutes < 60) return `${minutes}分钟前`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours}小时前`;
+    const days = Math.round(hours / 24);
+    return `${days}天前`;
+  };
+
+  const folderGlyph = () => {
+    const span = doc.createElement('span');
+    span.style.cssText = 'display:inline-flex;flex:none;width:16px;height:16px;color:var(--dsw-alias-label-secondary, currentColor);';
+    span.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1.5 4.5A1 1 0 0 1 2.5 3.5h3l1.2 1.4h5.8a1 1 0 0 1 1 1v6.6a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1z"/></svg>';
+    return span;
+  };
+
+  const openProject = project => {
+    try { doc.defaultView?.localStorage?.setItem('no996.openfilm.lastProject', project.projectId); } catch { /* private mode */ }
+    // Ask the panel to show the project; a request made before the panel is
+    // mounted is queued by the bus and flushed when it becomes ready.
+    areaBus.navigate(project.projectId);
+    findPanelEntry(doc)?.click();
+    closePopover();
+    closeMenus();
+  };
+
+  const rowAction = (parent, label, onClick) => {
+    const button = doc.createElement('button');
+    button.type = 'button';
+    button.textContent = '⋯';
+    button.setAttribute('aria-label', '会话操作');
+    button.style.cssText = 'flex:none;width:24px;border:0;border-radius:6px;background:none;color:inherit;opacity:0;cursor:pointer;font:inherit;font-size:15px;line-height:1;';
+    parent.addEventListener('mouseenter', () => { button.style.opacity = '.75'; });
+    parent.addEventListener('mouseleave', () => { button.style.opacity = '0'; });
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      onClick(button);
+    });
+    return button;
   };
 
   const renderRows = (container, next) => {
@@ -176,48 +225,73 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
       return;
     }
     for (const project of rows) {
-      const wrapper = doc.createElement('div');
-      wrapper.style.cssText = 'display:flex;align-items:stretch;gap:2px;border-radius:6px;';
-      const row = doc.createElement('button');
-      row.type = 'button';
-      row.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:2px;flex:1 1 auto;min-width:0;padding:7px 8px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;';
+      const folder = doc.createElement('div');
+      folder.style.cssText = 'display:flex;align-items:center;gap:2px;border-radius:6px;';
+      const toggle = doc.createElement('button');
+      toggle.type = 'button';
+      toggle.style.cssText = 'display:flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0;padding:6px 8px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;font-size:13px;';
+      const chevron = doc.createElement('span');
+      chevron.textContent = collapsed.has(project.projectId) ? '▸' : '▾';
+      chevron.style.cssText = 'flex:none;width:10px;font-size:10px;opacity:.6;';
       const name = doc.createElement('span');
-      name.textContent = (project.pinned ? '📌 ' : '') + (project.archived ? '已归档 · ' : '') + (project.title || project.name || project.projectId);
-      name.style.cssText = 'font-size:13px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;';
-      row.append(name);
-      if (view.path && project.path) {
-        const path = doc.createElement('span');
-        path.textContent = project.path;
-        path.style.cssText = 'font-size:11px;opacity:.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;';
-        row.append(path);
+      name.textContent = (project.pinned ? '📌 ' : '') + (project.title || project.name || project.projectId);
+      name.style.cssText = 'flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;';
+      const count = doc.createElement('span');
+      count.textContent = String((project.sessions ?? []).length);
+      count.style.cssText = 'flex:none;font-size:11px;opacity:.45;';
+      toggle.append(chevron, folderGlyph(), name, count);
+      toggle.addEventListener('mouseenter', () => { toggle.style.background = 'var(--bg-hover, rgba(127,127,127,.12))'; });
+      toggle.addEventListener('mouseleave', () => { toggle.style.background = 'none'; });
+      toggle.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (collapsed.has(project.projectId)) collapsed.delete(project.projectId);
+        else collapsed.add(project.projectId);
+        renderRows(container, projects);
+      });
+      const more = rowAction(folder, '会话操作', anchor => openRowMenu(anchor, project, null));
+      folder.append(toggle, more);
+      container.append(folder);
+      if (collapsed.has(project.projectId)) continue;
+      const sessions = Array.isArray(project.sessions) ? project.sessions : [];
+      const shown = expanded.has(project.projectId) ? sessions : sessions.slice(0, 5);
+      for (const session of shown) {
+        const child = doc.createElement('div');
+        child.style.cssText = 'display:flex;align-items:center;gap:2px;border-radius:6px;margin-left:22px;';
+        const open = doc.createElement('button');
+        open.type = 'button';
+        open.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0;padding:5px 8px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;font-size:13px;';
+        const title = doc.createElement('span');
+        title.textContent = (session.pinned ? '📌 ' : '') + (session.archived ? '已归档 · ' : '') + (session.title || '新对话');
+        title.style.cssText = 'flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        const time = doc.createElement('span');
+        time.textContent = relative(session.updatedAt);
+        time.style.cssText = 'flex:none;font-size:11px;opacity:.45;';
+        open.append(title, time);
+        open.addEventListener('mouseenter', () => { open.style.background = 'var(--bg-hover, rgba(127,127,127,.12))'; });
+        open.addEventListener('mouseleave', () => { open.style.background = 'none'; });
+        open.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          openProject(project);
+        });
+        const childMore = rowAction(child, '对话操作', anchor => openRowMenu(anchor, project, session));
+        child.append(open, childMore);
+        container.append(child);
       }
-      row.addEventListener('mouseenter', () => { row.style.background = 'var(--bg-hover, rgba(127,127,127,.12))'; });
-      row.addEventListener('mouseleave', () => { row.style.background = 'none'; });
-      row.addEventListener('click', event => {
-        event.preventDefault();
-        event.stopPropagation();
-        try { doc.defaultView?.localStorage?.setItem('no996.openfilm.lastProject', project.projectId); } catch { /* private mode */ }
-        // Ask the panel to show the project; a request made before the panel is
-        // mounted is queued by the bus and flushed when it becomes ready.
-        areaBus.navigate(project.projectId);
-        findPanelEntry(doc)?.click();
-        closePopover();
-        closeMenus();
-      });
-      const more = doc.createElement('button');
-      more.type = 'button';
-      more.textContent = '⋯';
-      more.setAttribute('aria-label', '会话操作');
-      more.style.cssText = 'flex:none;width:24px;border:0;border-radius:6px;background:none;color:inherit;opacity:0;cursor:pointer;font:inherit;font-size:15px;line-height:1;';
-      wrapper.addEventListener('mouseenter', () => { more.style.opacity = '.75'; });
-      wrapper.addEventListener('mouseleave', () => { more.style.opacity = '0'; });
-      more.addEventListener('click', event => {
-        event.preventDefault();
-        event.stopPropagation();
-        openRowMenu(more, project);
-      });
-      wrapper.append(row, more);
-      container.append(wrapper);
+      if (!expanded.has(project.projectId) && sessions.length > 5) {
+        const moreButton = doc.createElement('button');
+        moreButton.type = 'button';
+        moreButton.textContent = `展开其余 ${sessions.length - 5} 个会话`;
+        moreButton.style.cssText = 'display:block;margin-left:22px;padding:4px 8px;border:0;background:none;color:var(--dsw-alias-label-tertiary, inherit);font:inherit;font-size:12px;cursor:pointer;';
+        moreButton.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          expanded.add(project.projectId);
+          renderRows(container, projects);
+        });
+        container.append(moreButton);
+      }
     }
   };
 
@@ -307,17 +381,20 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     try { doc.defaultView?.localStorage?.setItem(VIEW_KEY, JSON.stringify(view)); } catch { /* private mode */ }
   };
 
-  const openRowMenu = (anchor, project) => {
+  const openRowMenu = (anchor, project, session) => {
     closeMenus();
     const menu = openMenuAt(anchor, ROW_MENU);
-    menuButton(menu, project.pinned ? '取消置顶' : '置顶', async () => {
-      try { await postJson('/api/no996-openfilm/editing-prefs', { projectId: project.projectId, pinned: !project.pinned }); refresh(); } catch { /* leave the row */ }
+    const base = { projectId: project.projectId, ...(session ? { sessionId: session.sessionId } : {}) };
+    const pinned = session ? session.pinned === true : project.pinned === true;
+    const archived = session ? session.archived === true : project.archived === true;
+    menuButton(menu, pinned ? '取消置顶' : '置顶', async () => {
+      try { await postJson('/api/no996-openfilm/editing-prefs', { ...base, pinned: !pinned }); refresh(); } catch { /* leave the row */ }
     });
-    menuButton(menu, '重命名…', () => openRename(project));
-    menuButton(menu, project.archived ? '恢复会话' : '归档会话', async () => {
-      try { await postJson('/api/no996-openfilm/editing-archive', { projectId: project.projectId, archived: !project.archived }); refresh(); } catch { /* leave the row */ }
+    menuButton(menu, '重命名…', () => openRename(project, session));
+    menuButton(menu, archived ? '恢复会话' : '归档会话', async () => {
+      try { await postJson('/api/no996-openfilm/editing-archive', { ...base, archived: !archived }); refresh(); } catch { /* leave the row */ }
     });
-    menuButton(menu, '删除会话…', () => openConfirm(project));
+    menuButton(menu, session ? '删除会话…' : '删除全部会话…', () => openConfirm(project, session));
   };
 
   const openModal = (title, body, actions) => {
@@ -348,32 +425,44 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     return { overlay, card };
   };
 
-  const openRename = project => {
+  const openRename = (project, session) => {
     closeMenus();
     const input = doc.createElement('input');
-    input.value = project.title || project.name || project.projectId;
+    input.value = session ? (session.title || '新对话') : (project.title || project.name || project.projectId);
     input.style.cssText = 'box-sizing:border-box;width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border-subtle, rgba(255,255,255,.16));background:transparent;color:inherit;font:inherit;';
-    const { overlay } = openModal('重命名会话', input, [
+    const { overlay } = openModal(session ? '重命名对话' : '重命名项目', input, [
       ['取消', () => overlay.remove(), false],
       ['保存', async () => {
         const title = input.value.trim();
         overlay.remove();
-        try { await postJson('/api/no996-openfilm/editing-prefs', { projectId: project.projectId, title }); refresh(); } catch { /* leave the row */ }
+        try {
+          await postJson('/api/no996-openfilm/editing-prefs', {
+            projectId: project.projectId, ...(session ? { sessionId: session.sessionId } : {}), title,
+          });
+          refresh();
+        } catch { /* leave the row */ }
       }, true],
     ]);
     input.focus();
     input.select?.();
   };
 
-  const openConfirm = project => {
+  const openConfirm = (project, session) => {
     closeMenus();
     const body = doc.createElement('div');
-    body.textContent = '只删除这条会话和聊天记录，项目文件夹和 film 会保留。';
-    const { overlay } = openModal('删除会话', body, [
+    body.textContent = session
+      ? '只删除这条会话和聊天记录，项目文件夹和 film 会保留。'
+      : '删除这个项目下的全部会话和聊天记录；项目文件夹和 film 会保留。';
+    const { overlay } = openModal(session ? '删除会话' : '删除全部会话', body, [
       ['取消', () => overlay.remove(), false],
       ['删除', async () => {
         overlay.remove();
-        try { await postJson('/api/no996-openfilm/editing-delete', { projectId: project.projectId }); refresh(); } catch { /* leave the row */ }
+        try {
+          await postJson('/api/no996-openfilm/editing-delete', {
+            projectId: project.projectId, ...(session ? { sessionId: session.sessionId } : {}),
+          });
+          refresh();
+        } catch { /* leave the row */ }
       }, true],
     ]);
   };
@@ -383,11 +472,18 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     const { span, header, actions } = mounted;
     trigger.textContent = mode === 'editing' ? '素材剪辑区 ▾' : '工作区 ▾';
     trigger.setAttribute('aria-label', mode === 'editing' ? '切换到工作区列表' : '切换到 OpenFilm 素材剪辑区');
+    // A highlighted chip, not a bare label: the editing area is a mode, and the
+    // box makes the current side visible at a glance.
+    trigger.style.padding = '2px 6px';
+    trigger.style.borderRadius = '6px';
+    trigger.style.background = mode === 'editing' ? 'var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.16))' : 'none';
     // Our button carries the name in both modes; the shipped label stays hidden.
     span.style.display = 'none';
     if (mode === 'editing') header.setAttribute('data-no996-editing', '');
     else header.removeAttribute('data-no996-editing');
-    ensureStyle();
+    // The editing area is a list, not a workspace: only the search belongs in
+    // its header, so the view-options and add-folder buttons step aside.
+    if (actions) actions.style.display = mode === 'editing' ? 'none' : '';
     const container = listContainer(header);
     restoreHidden();
     if (mode === 'editing') {
@@ -398,8 +494,6 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
         hidden.push(node);
         node.style.display = 'none';
       }
-      // The add-folder button groups shipped sessions; the editing area keeps it
-      // visible so the same workspace actions stay reachable.
       container.style.display = 'block';
       void load(container);
     } else {

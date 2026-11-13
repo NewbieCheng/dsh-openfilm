@@ -33,6 +33,15 @@ test('an invalid project id is refused instead of stored', () => {
   assert.deepEqual(prefs.all(), {});
 });
 
+test('conversation pins and titles are stored per session', () => {
+  const prefs = createEditingPrefs();
+  prefs.setSession('proj_ABC123', 'sess_XYZ789', { pinned: true, title: '第一条' });
+  assert.deepEqual(prefs.getSession('proj_ABC123', 'sess_XYZ789'), { pinned: true, title: '第一条' });
+  assert.equal(prefs.get('proj_ABC123'), undefined);
+  prefs.setSession('proj_ABC123', 'sess_XYZ789', { pinned: false });
+  assert.deepEqual(prefs.getSession('proj_ABC123', 'sess_XYZ789'), { pinned: false, title: '第一条' });
+});
+
 test('the store persists to its file and survives a reload', () => {
   const dir = mkdtempSync(join(tmpdir(), 'editing-prefs-'));
   const file = join(dir, 'editing-prefs.json');

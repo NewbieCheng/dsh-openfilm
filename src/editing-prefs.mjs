@@ -10,6 +10,7 @@ import { dirname } from 'node:path';
 
 const VERSION = 1;
 const PROJECT_ID = /^[A-Za-z0-9_-]{6,40}$/;
+const SESSION_ID = /^[A-Za-z0-9_-]{6,60}$/;
 const MAX_TITLE = 120;
 
 function empty() { return { version: VERSION, projects: {} }; }
@@ -70,6 +71,35 @@ export function createEditingPrefs({ file, fs } = {}) {
         pinned: record?.pinned === true,
         ...(typeof record?.title === 'string' && record.title ? { title: record.title } : {}),
       }]));
+    },
+    getSession(projectId, sessionId) {
+      if (typeof projectId !== 'string' || !PROJECT_ID.test(projectId)) return undefined;
+      if (typeof sessionId !== 'string' || !SESSION_ID.test(sessionId)) return undefined;
+      const record = data.sessions?.[`${projectId}:${sessionId}`];
+      if (!record || typeof record !== 'object') return undefined;
+      return {
+        pinned: record.pinned === true,
+        ...(typeof record.title === 'string' && record.title ? { title: record.title } : {}),
+      };
+    },
+    setSession(projectId, sessionId, patch) {
+      if (typeof projectId !== 'string' || !PROJECT_ID.test(projectId)) return undefined;
+      if (typeof sessionId !== 'string' || !SESSION_ID.test(sessionId)) return undefined;
+      if (!patch || typeof patch !== 'object') return undefined;
+      data.sessions ??= {};
+      const key = `${projectId}:${sessionId}`;
+      const next = { ...(data.sessions[key] ?? {}) };
+      if (patch.pinned !== undefined) {
+        if (patch.pinned) next.pinned = true; else delete next.pinned;
+      }
+      if (patch.title !== undefined) {
+        const title = typeof patch.title === 'string' ? patch.title.trim().slice(0, MAX_TITLE) : '';
+        if (title) next.title = title; else delete next.title;
+      }
+      if (Object.keys(next).length === 0) delete data.sessions[key];
+      else data.sessions[key] = next;
+      flush();
+      return this.getSession(projectId, sessionId) ?? { pinned: false };
     },
   };
 }
