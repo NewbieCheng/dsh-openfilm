@@ -48,8 +48,10 @@ test('writing to an archived conversation is refused with an actionable code', a
   const { dispatch, fake } = rpc({ archived: true });
   await assert.rejects(dispatch('chat:save-turn', { projectId: 'project1', turn: { id: 't1' }, items: [], expectedRevision: 2 }),
     { code: 'OFFICIAL_CHAT_ARCHIVED' });
-  await assert.rejects(dispatch('chat:save-sessions', { projectId: 'project1', sessions: [], last: null, expectedRevision: 2 }),
-    { code: 'OFFICIAL_CHAT_ARCHIVED' });
+  // The panel's chat syncs its session list on open; accepting that sync without
+  // writing keeps the desktop panel from painting a 503, while messages stay out.
+  assert.deepEqual(await dispatch('chat:save-sessions', { projectId: 'project1', sessions: [], last: null, expectedRevision: 2 }),
+    { ok: true, revision: 2 });
   assert.equal(fake.writes.length, 0);
 });
 

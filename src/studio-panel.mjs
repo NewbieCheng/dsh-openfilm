@@ -260,6 +260,7 @@ export function createStudioPanel(React) {
     };
 
     let studio;
+    const archived = archive?.available !== false && archive?.archived === true;
     if (state.status === 'loading' || state.status === 'idle') {
       studio = h('div', { role: 'status', style: { padding: 24, color: 'var(--dsw-alias-label-secondary)' } },
         t('studioLoading'),
@@ -288,7 +289,6 @@ export function createStudioPanel(React) {
       JSON.stringify({ boot, preset, diag: diag ?? { note: '诊断不可用或尚未返回' } }, null, 1)),
     h('button', { type: 'button', onClick: retry }, t('studioRetry'))) : null;
 
-    const archived = archive?.available !== false && archive?.archived === true;
     const banner = archived
       ? h('div', {
         role: 'status',

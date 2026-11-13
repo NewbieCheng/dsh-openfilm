@@ -1146,6 +1146,9 @@ export function createStudioController(ctx, createProxy, { officialShell = false
           if (!project || typeof project.id !== 'string') continue;
           const record = bound.get(project.id);
           if (!record || typeof record.sessionId !== 'string') continue;
+          // An archived conversation stays out of the switch: opening it from
+          // here would land on a hidden history (and used to surface a 503).
+          if (archive && typeof archive.isArchived === 'function' && archive.isArchived(record.sessionId) === true) continue;
           items.push({
             projectId: project.id,
             sessionId: record.sessionId,

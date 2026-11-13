@@ -297,6 +297,7 @@
         }
       };
       let studio;
+      const archived = archive?.available !== false && archive?.archived === true;
       if (state.status === "loading" || state.status === "idle") {
         studio = h(
           "div",
@@ -336,7 +337,6 @@
         ),
         h("button", { type: "button", onClick: retry }, t("studioRetry"))
       ) : null;
-      const archived = archive?.available !== false && archive?.archived === true;
       const banner = archived ? h(
         "div",
         {

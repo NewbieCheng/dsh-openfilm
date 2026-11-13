@@ -108,7 +108,12 @@ export function createOfficialChatRpc(store, agent, options = {}) {
         return await agent.answerPermission(payload.projectId, { key: payload.key, requestId: payload.requestId, optionId: payload.optionId });
       }
       if (channel === 'chat:save-sessions' && exact(payload, ['projectId', 'sessions', 'last', 'expectedRevision'])) {
-        if ((await inspect(payload.projectId)).archived) throw archivedFailure();
+        // The Studio chat syncs its session list on every open; on the desktop
+        // scheme the panel cannot learn the archive state, so refusing here only
+        // paints a 503 over a conversation whose history is hidden anyway. Accept
+        // the sync without writing. `chat:save-turn` stays refused: archived
+        // messages never reach storage.
+        if ((await inspect(payload.projectId)).archived) return { ok: true, revision: payload.expectedRevision };
         const revision = await store.saveSessions(payload.projectId, { sessions: payload.sessions, last: payload.last, expectedRevision: payload.expectedRevision });
         return { ok: true, revision };
       }
