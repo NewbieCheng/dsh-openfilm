@@ -448,6 +448,237 @@
     });
   }
 
+  // src/sidebar-editing.mjs
+  var SWITCH = "data-no996-workspace-switch";
+  var POPOVER = "data-no996-workspace-popover";
+  var LIST = "data-no996-editing-list";
+  var MODE_KEY = "no996.openfilm.sidebarMode";
+  var LABELS = /* @__PURE__ */ new Set(["\u5DE5\u4F5C\u533A", "\u4F1A\u8BDD"]);
+  var PANEL_LABELS = /* @__PURE__ */ new Set(["\u89C6\u9891\u521B\u4F5C", "Video studio"]);
+  var text = (value) => typeof value === "string" ? value.trim() : "";
+  function findHeader(doc) {
+    for (const span of doc.querySelectorAll("span")) {
+      if (!LABELS.has(text(span.textContent))) continue;
+      const header = span.parentElement;
+      if (!header || !header.querySelector("input")) continue;
+      if (header.querySelectorAll("button").length < 2) continue;
+      return { span, header };
+    }
+    return null;
+  }
+  function findPanelEntry(doc) {
+    for (const element of doc.querySelectorAll('button, [role="button"], a')) {
+      if (PANEL_LABELS.has(text(element.textContent))) return element;
+    }
+    return null;
+  }
+  function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
+    if (!doc || typeof doc.createElement !== "function") return () => {
+    };
+    let mode = "workspaces";
+    try {
+      mode = doc.defaultView?.localStorage?.getItem(MODE_KEY) === "editing" ? "editing" : "workspaces";
+    } catch {
+    }
+    let mounted = null;
+    let trigger = null;
+    let list = null;
+    let popover = null;
+    let loading = false;
+    let observer = null;
+    const closePopover = () => {
+      if (popover) {
+        popover.remove();
+        popover = null;
+      }
+    };
+    const listContainer = (header) => {
+      if (list) return list;
+      list = doc.createElement("div");
+      list.setAttribute(LIST, "");
+      list.style.cssText = "display:none;padding:2px 4px 6px;overflow:auto;";
+      const area = header.nextElementSibling;
+      (area?.parentElement ?? header.parentElement)?.insertBefore(list, area?.nextSibling ?? null);
+      return list;
+    };
+    const renderRows = (container, projects) => {
+      container.replaceChildren();
+      if (!projects.length) {
+        const empty = doc.createElement("div");
+        empty.textContent = "\u8FD8\u6CA1\u6709\u526A\u8F91\u4F1A\u8BDD\uFF1A\u5148\u5728\u89C6\u9891\u521B\u4F5C\u91CC\u6253\u5F00\u4E00\u4E2A\u9879\u76EE\u3002";
+        empty.style.cssText = "padding:8px 10px;font-size:12px;opacity:.6;";
+        container.append(empty);
+        return;
+      }
+      for (const project of projects) {
+        const row = doc.createElement("button");
+        row.type = "button";
+        row.style.cssText = "display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;";
+        const name = doc.createElement("span");
+        name.textContent = project.name || project.projectId;
+        name.style.cssText = "font-size:13px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;";
+        const path = doc.createElement("span");
+        path.textContent = project.path || "";
+        path.style.cssText = "font-size:11px;opacity:.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;";
+        row.append(name, path);
+        row.addEventListener("mouseenter", () => {
+          row.style.background = "var(--bg-hover, rgba(127,127,127,.12))";
+        });
+        row.addEventListener("mouseleave", () => {
+          row.style.background = "none";
+        });
+        row.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          try {
+            doc.defaultView?.localStorage?.setItem("no996.openfilm.lastProject", project.projectId);
+          } catch {
+          }
+          areaBus.navigate(project.projectId);
+          findPanelEntry(doc)?.click();
+          closePopover();
+        });
+        container.append(row);
+      }
+    };
+    const load = async (container) => {
+      if (loading) return;
+      loading = true;
+      const waiting = doc.createElement("div");
+      waiting.textContent = "\u6B63\u5728\u8BFB\u53D6\u526A\u8F91\u4F1A\u8BDD\u2026";
+      waiting.style.cssText = "padding:8px 10px;font-size:12px;opacity:.6;";
+      container.replaceChildren(waiting);
+      try {
+        const data = await fetchSessions?.();
+        renderRows(container, Array.isArray(data?.projects) ? data.projects : []);
+      } catch {
+        const failed = doc.createElement("div");
+        failed.textContent = "\u8BFB\u53D6\u5931\u8D25\uFF0C\u7A0D\u540E\u518D\u8BD5\u3002";
+        failed.style.cssText = "padding:8px 10px;font-size:12px;color:#e07b5a;";
+        container.replaceChildren(failed);
+      } finally {
+        loading = false;
+      }
+    };
+    const applyMode = () => {
+      if (!mounted || !trigger) return;
+      const { span, header } = mounted;
+      trigger.textContent = mode === "editing" ? "\u7D20\u6750\u526A\u8F91\u533A \u25BE" : "\u5DE5\u4F5C\u533A \u25BE";
+      trigger.setAttribute("aria-label", mode === "editing" ? "\u5207\u6362\u5230\u5DE5\u4F5C\u533A\u5217\u8868" : "\u5207\u6362\u5230 OpenFilm \u7D20\u6750\u526A\u8F91\u533A");
+      span.style.display = mode === "editing" ? "none" : "";
+      span.style.display = "none";
+      const area = header.nextElementSibling;
+      if (area) area.style.display = mode === "editing" ? "none" : "";
+      const container = listContainer(header);
+      container.style.display = mode === "editing" ? "block" : "none";
+      if (mode === "editing") void load(container);
+    };
+    const setMode = (next) => {
+      mode = next === "editing" ? "editing" : "workspaces";
+      try {
+        doc.defaultView?.localStorage?.setItem(MODE_KEY, mode);
+      } catch {
+      }
+      applyMode();
+    };
+    const openPopover = () => {
+      closePopover();
+      if (!trigger) return;
+      popover = doc.createElement("div");
+      popover.setAttribute(POPOVER, "");
+      popover.style.cssText = "position:fixed;z-index:2147483000;min-width:210px;padding:4px;border-radius:8px;background:var(--bg-elevated, #232325);border:1px solid var(--border-subtle, rgba(255,255,255,.12));box-shadow:0 10px 30px rgba(0,0,0,.45);font:13px system-ui,sans-serif;color:inherit;";
+      const item = (label, value) => {
+        const button = doc.createElement("button");
+        button.type = "button";
+        button.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;";
+        button.textContent = label;
+        if (mode === value) {
+          const check = doc.createElement("span");
+          check.textContent = "\u2713";
+          check.style.cssText = "opacity:.8;";
+          button.append(check);
+        }
+        button.addEventListener("mouseenter", () => {
+          button.style.background = "var(--bg-hover, rgba(127,127,127,.14))";
+        });
+        button.addEventListener("mouseleave", () => {
+          button.style.background = "none";
+        });
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setMode(value);
+          closePopover();
+        });
+        popover.append(button);
+      };
+      item("\u5DE5\u4F5C\u533A", "workspaces");
+      item("OpenFilm \u7D20\u6750\u526A\u8F91\u533A", "editing");
+      const rect = trigger.getBoundingClientRect();
+      popover.style.left = `${Math.max(8, Math.min(rect.left, (doc.defaultView?.innerWidth ?? 1200) - 230))}px`;
+      popover.style.top = `${Math.round(rect.bottom + 4)}px`;
+      doc.body.append(popover);
+      const dismiss = (event) => {
+        if (popover && !popover.contains(event.target) && event.target !== trigger) {
+          closePopover();
+          doc.removeEventListener("pointerdown", dismiss, true);
+        }
+      };
+      doc.addEventListener("pointerdown", dismiss, true);
+    };
+    const unmount = () => {
+      closePopover();
+      trigger?.remove();
+      trigger = null;
+      list?.remove();
+      list = null;
+      if (mounted?.span) mounted.span.style.display = "";
+      mounted = null;
+    };
+    const mount = () => {
+      const found = findHeader(doc);
+      if (!found) {
+        unmount();
+        return;
+      }
+      if (mounted && mounted.header === found.header && mounted.span === found.span && trigger?.isConnected) return;
+      unmount();
+      const { span, header } = found;
+      trigger = doc.createElement("button");
+      trigger.type = "button";
+      trigger.setAttribute(SWITCH, "");
+      trigger.style.cssText = "display:inline-flex;align-items:center;gap:4px;padding:0 2px;margin:0;border:0;background:none;color:inherit;font:inherit;font-size:inherit;line-height:inherit;cursor:pointer;white-space:nowrap;";
+      trigger.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (popover) closePopover();
+        else openPopover();
+      });
+      span.parentElement?.insertBefore(trigger, span);
+      span.style.display = "none";
+      mounted = { span, header };
+      applyMode();
+    };
+    let scheduled = false;
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = true;
+      const run = () => {
+        scheduled = false;
+        mount();
+      };
+      if (typeof doc.defaultView?.requestAnimationFrame === "function") doc.defaultView.requestAnimationFrame(run);
+      else setTimeout(run, 50);
+    };
+    observer = new (doc.defaultView?.MutationObserver ?? MutationObserver)(schedule);
+    observer.observe(doc.body ?? doc.documentElement, { childList: true, subtree: true });
+    mount();
+    return () => {
+      observer?.disconnect();
+      unmount();
+    };
+  }
+
   // src/studio-entry.js
   window.__ModuleLoader__.load({
     id: "dsh-openfilm",
@@ -595,6 +826,23 @@
           ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: PANEL, locale: NS }, PanelSeat));
           ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: PANEL, order: 21, locale: NS, label: () => t("panel") }, PanelIcon));
           ctx.slots.inject("shell.overlay", () => ctx.slots.register({ name: "shell.overlay", id: "no996-openfilm-panel", order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
+          if (typeof document !== "undefined" && typeof window !== "undefined") {
+            try {
+              installWorkspaceSwitch({
+                document,
+                fetchSessions: async () => {
+                  const response = await fetch("/api/no996-openfilm/editing-sessions", {
+                    method: "GET",
+                    credentials: "same-origin",
+                    headers: { accept: "application/json" }
+                  });
+                  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                  return response.json();
+                }
+              });
+            } catch {
+            }
+          }
         }
       };
     }

@@ -44,3 +44,14 @@ test('the video panel is still the only thing the plugin adds to the UI', () => 
   assert.equal((entry.match(/name: 'sidebar\.panellist'/g) ?? []).length, 1);
   assert.match(entry, /name: 'shell\.overlay'/);
 });
+
+test('the Workspace header switch is the one narrow sidebar addition', () => {
+  const source = read('src/sidebar-editing.mjs');
+  assert.match(source, /export function installWorkspaceSwitch/);
+  assert.match(source, /areaBus\.navigate/);
+  // It must stay a header-only append: no single slot, no row actions, no menus.
+  assert.equal(source.includes('sidebar.workspaces'), false);
+  assert.equal(source.includes('session.row.action'), false);
+  assert.equal(source.includes('session.menu.item'), false);
+  assert.match(read('src/studio-entry.js'), /installWorkspaceSwitch\(\{/);
+});

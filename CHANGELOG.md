@@ -1,5 +1,15 @@
 # 更新记录
 
+## 0.13.2 —— 侧栏“工作区”变下拉：工作区 / OpenFilm 素材剪辑区
+
+- 侧栏“工作区”标题换成“工作区 ▾”下拉，两项：`工作区`（DSH 原列表）/ `OpenFilm 素材剪辑区`（本项目绑定的剪辑会话）。只隐藏标题文字并在原位放按钮，搜索、筛选、新建、列表行、右键菜单全部不动；选“剪辑区”时只隐藏标题下面那块列表容器，选回来恢复。
+- 锚点不写死类名：按“文本是工作区/会话 + 父节点含搜索框和两个以上按钮”找到标题，React 重渲染后由 MutationObserver 重新挂上。
+- 新增只读接口 `GET /api/no996-openfilm/editing-sessions`：返回有 ACP 会话的项目（项目名 / 路径 / 会话 id），数据来自 Studio 项目列表 + `acp-sessions.json`，不建会话、不调模型。
+- 点一条剪辑会话：打开视频创作面板并导航到该项目，面板恢复 Host 已绑定的 ACP 会话（`areaBus.navigate` 会排队，面板没挂载也不会丢请求）。
+- 文档：新增 [`docs/UI-MAP.md`](docs/UI-MAP.md)（侧栏/面板/模型/权限/会话存储的精确位置 + 从 source map 取 DSH 客户端源码的方法）；`docs/UI-PLAYBOOK.md` 注入登记表加这一处，并写明退出条件。
+- 权限说明：面板里的编辑权限是项目级预设（默认完全访问），与模型无关；DSH 主聊天里“权限”行随第三方模型消失是 DSH 核心行为，插件不改 DSH 本体。
+- 测试：`tests/sidebar-untouched.test.mjs` 改为“只许这一处窄注入”，并断言它不碰 `sidebar.workspaces` / 行级菜单。
+
 ## 0.13.1 —— 面板模型：同步桌面渠道，默认跟随当前选择
 
 - 面板聊天跑在 `dsh --profile acp` 这个独立 profile 里，之前只有 DSH 自带的两条 DeepSeek 渠道：你配的 `opencode-go` 根本不在里面，所以选中的 V4.1 Flash 被拒绝，面板退回自己的 `deepseek-v4-flash`（思考强度也跟着掉），看起来就是"没有思考、一下子全出来"。

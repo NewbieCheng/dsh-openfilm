@@ -16,7 +16,7 @@ import { applyAcpModelProviders } from './acp-profile-models.mjs';
 import { readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 
@@ -902,6 +902,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   let unregisterAttachment;
   let unregisterClientLog;
   let unregisterBootstrap;
+  let unregisterEditingSessions;
   let unregisterStandalone;
   let unregisterTemplatesPage;
   let unregisterDebugUrl;
@@ -1115,6 +1116,48 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         // The panel shows this body beside the status: naming the code is the
         // difference between "broken" and "the shell and the kernel disagree".
         if (!res.writableEnded) res.end(`Studio is unavailable (${code})`);
+      }
+    },
+  }));
+  // The sidebar's "OpenFilm 素材剪辑区" dropdown: which projects have an editing
+  // conversation, and which DSH Session it is bound to. Read-only and cheap: the
+  // project list comes from Studio, the binding from the ACP session store. No
+  // Session is created and no model is called.
+  unregisterEditingSessions = trackRoute(registerRoute({
+    kind: 'exact', path: '/api/no996-openfilm/editing-sessions',
+    async handler(req, res) {
+      res.setHeader('cache-control', 'no-store');
+      if (req.method !== 'GET') { res.writeHead(405, { allow: 'GET' }).end(); return; }
+      const admission = ctx.connection.admit({ headers: req.headers });
+      if ('rejection' in admission) {
+        res.writeHead(admission.rejection).end(admission.rejection === 403 ? 'DSH_ORIGIN_REJECTED' : 'DSH_SESSION_REQUIRED');
+        return;
+      }
+      if (admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('DSH_BROWSER_REQUIRED'); return; }
+      try {
+        let proxy;
+        try { proxy = await lastProxy; } catch { proxy = undefined; }
+        const projects = proxy && typeof proxy.listProjects === 'function'
+          ? await proxy.listProjects().catch(() => [])
+          : [];
+        const bound = new Map(acpSessions.all().map(record => [record.projectId, record]));
+        const items = [];
+        for (const project of projects) {
+          if (!project || typeof project.id !== 'string') continue;
+          const record = bound.get(project.id);
+          if (!record || typeof record.sessionId !== 'string') continue;
+          items.push({
+            projectId: project.id,
+            sessionId: record.sessionId,
+            name: typeof project.name === 'string' && project.name
+              ? project.name
+              : (typeof project.title === 'string' && project.title ? project.title : basename(String(project.path ?? '')) || project.id),
+            path: typeof project.path === 'string' ? project.path : '',
+          });
+        }
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ projects: items }));
+      } catch {
+        res.writeHead(503).end('EDITING_SESSIONS_UNAVAILABLE');
       }
     },
   }));

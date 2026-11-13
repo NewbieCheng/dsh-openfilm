@@ -1,5 +1,6 @@
 import { createStudioPanel } from './studio-panel.mjs';
 import { createActivationStore } from './panel-keepalive.mjs';
+import { installWorkspaceSwitch } from './sidebar-editing.mjs';
 
 window.__ModuleLoader__.load({
   id: 'dsh-openfilm',
@@ -128,6 +129,23 @@ window.__ModuleLoader__.load({
         // `shell.overlay` is rendered for the whole frame lifetime, so the panel
         // it hosts survives page switches instead of reloading Studio each time.
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'no996-openfilm-panel', order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
+        // The Workspace header becomes a two-way switch (工作区 / 素材剪辑区).
+        // It is installed outside React on purpose: the sidebar belongs to DSH,
+        // and this is a narrow, reversible append that only hides one label.
+        if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+          try {
+            installWorkspaceSwitch({
+              document,
+              fetchSessions: async () => {
+                const response = await fetch('/api/no996-openfilm/editing-sessions', {
+                  method: 'GET', credentials: 'same-origin', headers: { accept: 'application/json' },
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return response.json();
+              },
+            });
+          } catch { /* the switch is a convenience; a missing header must not break the panel */ }
+        }
       },
     };
   },

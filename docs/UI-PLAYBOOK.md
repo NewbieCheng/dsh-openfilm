@@ -133,6 +133,7 @@ src/theme.mjs             ← 读取 + 注入（按 surface 注册表）
 | 全屏登录首页 | `assets/shell-login.js` | 上游登录页不适用 | 同上 |
 | 故障卡片 / 恢复卡 | `assets/shell-ui.js` | 上游没有错误 UI | 上游有错误边界后删除 |
 | 主题 token + 覆盖 | `assets/theme/*.css` | L2 无源码；L1 走 A2 同一份文件 | L2 拿到源码后转 A1/A2 |
+| 工作区下拉开关 | `src/sidebar-editing.mjs` | 侧栏标题行没有官方插槽；`sidebar.workspaces` 是 single 槽，占用会丢搜索/筛选/新建/菜单 | DSH 开出标题行插槽后删除 |
 
 登记内容只需要三件事：**为什么不能改源码、现在怎么工作、什么条件下撤掉。**
 
@@ -142,13 +143,15 @@ src/theme.mjs             ← 读取 + 注入（按 surface 注册表）
 
 官方开出的行级扩展点（`sidebar.workspaces.session.row.action` 悬停按钮、`sidebar.workspaces.session.menu.item` 菜单项、`sidebar.session.row.trailing` 行尾图标）可以用，但**会话菜单已有固定习惯**，往里加业务项会冲突；0.13.0 试过"在剪辑素材区打开"，已按用户要求删除。需要"找到项目"时用筛选，不要往会话菜单塞入口。
 
-### 侧栏工作区：不做任何注入
+### 侧栏工作区：只此一处窄注入
 
-0.13.0 起，`dsh-openfilm` 对侧栏**零注入**：不占 single 槽、不加行级按钮、不往会话菜单或视图菜单加条目、不加样式、不隐藏行。原因不是"没时间做"，而是这块界面每加一点都要跟着上游的 DOM/类名/状态走，任何一处对不上就是"功能丢了/列表空了/两个勾"——真实故障已经发生过两次，代价高于收益。
+`sidebar.workspaces` 是 **single** 槽：一个优先级一个注册，最小者独占渲染，且官方浏览器不可复用（未导出）。占用它等于重写整块界面，置顶、归档、运行中、右键菜单、拖拽都会丢——2026-11 真机试过，已撤回。
 
-需要"找到某个项目"时，用视频创作面板自己（`sidebar.panellist` 的入口 + 面板内的项目列表），不要动侧栏。
+0.13.2 起，`dsh-openfilm` 只做**一处**侧栏注入：`src/sidebar-editing.mjs` 把“工作区”标题换成“工作区 ▾”下拉（工作区 / OpenFilm 素材剪辑区）。做法是文本+结构锚点：找文本为“工作区/会话”、父节点含搜索框和两个以上按钮的 `span`，只隐藏它并插入按钮；选“素材剪辑区”时只隐藏标题的下一个兄弟（列表容器），显示我们的会话列表。**不占 single 槽、不加行级按钮、不往会话菜单/视图菜单加条目、不加全局样式**。
 
-回归保护：`tests/sidebar-untouched.test.mjs` 会在源码里出现 `viewOptionsMenu` / `data-row-key` / `contextMenus` / `sidebar.workspaces` 等字样时失败。
+官方开出的行级扩展点（`sidebar.workspaces.session.row.action` 悬停按钮、`sidebar.workspaces.session.menu.item` 菜单项、`sidebar.session.row.trailing` 行尾图标）仍不使用：会话菜单已有固定习惯，往里加业务项会冲突。
+
+回归保护：`tests/sidebar-untouched.test.mjs` 会在源码里出现 `viewOptionsMenu` / `data-row-key` / `contextMenus` / `sidebar.workspaces` 等字样时失败，并单独断言这处开关只碰标题、不碰列表行。
 
 ---
 
