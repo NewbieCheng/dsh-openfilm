@@ -486,19 +486,37 @@
     let popover = null;
     let loading = false;
     let observer = null;
+    let hidden = [];
+    const restoreHidden = () => {
+      for (const node of hidden) {
+        try {
+          node.style.display = "";
+        } catch {
+        }
+      }
+      hidden = [];
+    };
     const closePopover = () => {
       if (popover) {
         popover.remove();
         popover = null;
       }
     };
+    const cleanup = () => {
+      closePopover();
+      for (const node of doc.querySelectorAll(`[${SWITCH}], [${POPOVER}], [${LIST}]`)) node.remove();
+      restoreHidden();
+      if (mounted?.span) mounted.span.style.display = "";
+      trigger = null;
+      list = null;
+      mounted = null;
+    };
     const listContainer = (header) => {
       if (list) return list;
       list = doc.createElement("div");
       list.setAttribute(LIST, "");
       list.style.cssText = "display:none;padding:2px 4px 6px;overflow:auto;";
-      const area = header.nextElementSibling;
-      (area?.parentElement ?? header.parentElement)?.insertBefore(list, area?.nextSibling ?? null);
+      (header.parentElement ?? header).append(list);
       return list;
     };
     const renderRows = (container, projects) => {
@@ -565,13 +583,20 @@
       const { span, header } = mounted;
       trigger.textContent = mode === "editing" ? "\u7D20\u6750\u526A\u8F91\u533A \u25BE" : "\u5DE5\u4F5C\u533A \u25BE";
       trigger.setAttribute("aria-label", mode === "editing" ? "\u5207\u6362\u5230\u5DE5\u4F5C\u533A\u5217\u8868" : "\u5207\u6362\u5230 OpenFilm \u7D20\u6750\u526A\u8F91\u533A");
-      span.style.display = mode === "editing" ? "none" : "";
       span.style.display = "none";
-      const area = header.nextElementSibling;
-      if (area) area.style.display = mode === "editing" ? "none" : "";
       const container = listContainer(header);
-      container.style.display = mode === "editing" ? "block" : "none";
-      if (mode === "editing") void load(container);
+      restoreHidden();
+      if (mode === "editing") {
+        for (let node = header.nextElementSibling; node; node = node.nextElementSibling) {
+          if (node === container) continue;
+          hidden.push(node);
+          node.style.display = "none";
+        }
+        container.style.display = "block";
+        void load(container);
+      } else {
+        container.style.display = "none";
+      }
     };
     const setMode = (next) => {
       mode = next === "editing" ? "editing" : "workspaces";
@@ -626,23 +651,14 @@
       };
       doc.addEventListener("pointerdown", dismiss, true);
     };
-    const unmount = () => {
-      closePopover();
-      trigger?.remove();
-      trigger = null;
-      list?.remove();
-      list = null;
-      if (mounted?.span) mounted.span.style.display = "";
-      mounted = null;
-    };
     const mount = () => {
       const found = findHeader(doc);
       if (!found) {
-        unmount();
+        cleanup();
         return;
       }
-      if (mounted && mounted.header === found.header && mounted.span === found.span && trigger?.isConnected) return;
-      unmount();
+      if (mounted && mounted.header === found.header && mounted.span === found.span && trigger?.isConnected && list?.isConnected) return;
+      cleanup();
       const { span, header } = found;
       trigger = doc.createElement("button");
       trigger.type = "button";
@@ -657,6 +673,7 @@
       span.parentElement?.insertBefore(trigger, span);
       span.style.display = "none";
       mounted = { span, header };
+      listContainer(header);
       applyMode();
     };
     let scheduled = false;
@@ -675,7 +692,7 @@
     mount();
     return () => {
       observer?.disconnect();
-      unmount();
+      cleanup();
     };
   }
 

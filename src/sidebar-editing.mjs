@@ -7,13 +7,15 @@
 // browser: it finds the section label by its text and by its parent (which holds
 // the search input and the filter/add buttons), hides only that label, and puts
 // a button in its place. The search field, the view-options menu and the add
-// button are never touched. Choosing the editing area hides the list container
-// next to the header and shows a list of projects that already have an ACP
-// Session; clicking one asks the video panel to open that project, and the panel
-// resumes the Session the Host has bound to it.
+// button are never touched. Choosing the editing area hides every sibling after
+// the header (the shipped list container) and shows our list of projects that
+// already have an ACP Session; clicking one asks the video panel to open that
+// project, and the panel resumes the Session the Host has bound to it.
 //
-// Everything is re-applied on mutation because React re-renders the header (the
-// label flips between "工作区" and "会话" when the group mode changes).
+// React re-renders this header (the label flips between "工作区" and "会话"), so
+// every pass starts by removing all previously injected nodes. That is what
+// keeps one trigger and one list: a stale trigger left in place is what made the
+// header read "素材剪辑区 ▾ 工作区 ▾" in 0.13.2.
 
 import { areaBus } from './area-bus.mjs';
 
@@ -56,9 +58,25 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
   let popover = null;
   let loading = false;
   let observer = null;
+  /** Elements hidden by the editing mode, restored when the workspace returns. */
+  let hidden = [];
+
+  const restoreHidden = () => {
+    for (const node of hidden) { try { node.style.display = ''; } catch { /* gone */ } }
+    hidden = [];
+  };
 
   const closePopover = () => {
     if (popover) { popover.remove(); popover = null; }
+  };
+
+  /** Remove every injected node and undo every hide. Idempotent and cheap. */
+  const cleanup = () => {
+    closePopover();
+    for (const node of doc.querySelectorAll(`[${SWITCH}], [${POPOVER}], [${LIST}]`)) node.remove();
+    restoreHidden();
+    if (mounted?.span) mounted.span.style.display = '';
+    trigger = null; list = null; mounted = null;
   };
 
   const listContainer = header => {
@@ -66,10 +84,9 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     list = doc.createElement('div');
     list.setAttribute(LIST, '');
     list.style.cssText = 'display:none;padding:2px 4px 6px;overflow:auto;';
-    // The header's next sibling is the shipped list container; ours sits right
-    // after it in the same parent so it inherits the same width and scrolling.
-    const area = header.nextElementSibling;
-    (area?.parentElement ?? header.parentElement)?.insertBefore(list, area?.nextSibling ?? null);
+    // The shipped list is a sibling after the header; ours joins the same parent
+    // so it inherits the same width and scroll box.
+    (header.parentElement ?? header).append(list);
     return list;
   };
 
@@ -134,15 +151,23 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     const { span, header } = mounted;
     trigger.textContent = mode === 'editing' ? '素材剪辑区 ▾' : '工作区 ▾';
     trigger.setAttribute('aria-label', mode === 'editing' ? '切换到工作区列表' : '切换到 OpenFilm 素材剪辑区');
-    span.style.display = mode === 'editing' ? 'none' : '';
-    // When the editing area is chosen the shipped label is redundant; our button
-    // carries the name. The span is only hidden, never removed.
+    // Our button carries the name in both modes; the shipped label stays hidden.
     span.style.display = 'none';
-    const area = header.nextElementSibling;
-    if (area) area.style.display = mode === 'editing' ? 'none' : '';
     const container = listContainer(header);
-    container.style.display = mode === 'editing' ? 'block' : 'none';
-    if (mode === 'editing') void load(container);
+    restoreHidden();
+    if (mode === 'editing') {
+      // Everything after the header is the shipped list (plus any wrappers the
+      // version adds); hide all of it, then show ours as the only list.
+      for (let node = header.nextElementSibling; node; node = node.nextElementSibling) {
+        if (node === container) continue;
+        hidden.push(node);
+        node.style.display = 'none';
+      }
+      container.style.display = 'block';
+      void load(container);
+    } else {
+      container.style.display = 'none';
+    }
   };
 
   const setMode = next => {
@@ -193,19 +218,14 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     doc.addEventListener('pointerdown', dismiss, true);
   };
 
-  const unmount = () => {
-    closePopover();
-    trigger?.remove(); trigger = null;
-    list?.remove(); list = null;
-    if (mounted?.span) mounted.span.style.display = '';
-    mounted = null;
-  };
-
   const mount = () => {
     const found = findHeader(doc);
-    if (!found) { unmount(); return; }
-    if (mounted && mounted.header === found.header && mounted.span === found.span && trigger?.isConnected) return;
-    unmount();
+    if (!found) { cleanup(); return; }
+    if (mounted && mounted.header === found.header && mounted.span === found.span
+      && trigger?.isConnected && list?.isConnected) return;
+    // A re-render may have replaced the label without removing our nodes; start
+    // from a clean slate so exactly one trigger and one list exist.
+    cleanup();
     const { span, header } = found;
     trigger = doc.createElement('button');
     trigger.type = 'button';
@@ -219,6 +239,7 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     span.parentElement?.insertBefore(trigger, span);
     span.style.display = 'none';
     mounted = { span, header };
+    listContainer(header);
     applyMode();
   };
 
@@ -236,6 +257,6 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
 
   return () => {
     observer?.disconnect();
-    unmount();
+    cleanup();
   };
 }
