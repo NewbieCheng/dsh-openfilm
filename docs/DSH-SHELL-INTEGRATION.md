@@ -1,7 +1,7 @@
 # DSH 三栏外壳 · 改造案例（详细版）
 
-> **这是三栏形态的详细案例，不是通用 skill。** 通用能力看两个 skill：
-> [`skills/dsh-ui-remix`](../skills/dsh-ui-remix/SKILL.md)（UI 改造）、[`skills/dsh-backend-bridge`](../skills/dsh-backend-bridge/SKILL.md)（后端衔接）。
+> **这是三栏形态的详细案例，不是通用 skill。** 通用能力在独立仓库 [dsh-harness-remix](https://github.com/NewbieCheng/dsh-harness-remix)：
+> [dsh-ui-remix](https://github.com/NewbieCheng/dsh-harness-remix/tree/main/skills/dsh-ui-remix)（UI 改造）、[dsh-backend-bridge](https://github.com/NewbieCheng/dsh-harness-remix/tree/main/skills/dsh-backend-bridge)（后端衔接）。
 > 本文保留完整的插槽表、A/B/C 配方与逐条验收，供“会话放右边”这类具体形态参考。
 > 基准：DSH Web 客户端（`@deepseek-ai/dsh-client-*`）+ 本仓 `dsh-openfilm` 0.13.4。
 > 事实来源：DSH 客户端 source map（77 个插槽）+ 真机界面。更新：2026-11-13。
@@ -489,15 +489,16 @@ dsh web --port 47824 --no-open          # 输出带 token 的 URL
 
 ### 13.4 作为 skill 使用
 
-通用版已拆成两个可直接安装的 skill（本仓 `skills/`，会被 `node scripts/install-skills.mjs` 镜像到 `<dshHome>/skills`）：
+通用版在独立仓库 **[dsh-harness-remix](https://github.com/NewbieCheng/dsh-harness-remix)**，与本仓无关，装到 DSH 即可：
 
 | skill | 覆盖 |
 |---|---|
-| `skills/dsh-ui-remix` | 通用 UI 改造：替换原生组件、任意插槽、整壳接入（iframe/WebView）、留洞、主题、元素定位、注入范式 |
-| `skills/dsh-backend-bridge` | 后端衔接：Host 骨架、路由/鉴权、ACP 边车、模型/权限、存储、诊断、测试 |
+| `dsh-ui-remix` | 通用 UI 改造：替换原生组件、任意插槽、整壳接入（iframe/WebView）、留洞、主题、元素定位、注入范式 |
+| `dsh-backend-bridge` | 后端衔接：Host 骨架、路由/鉴权、ACP 边车、模型/权限、存储、诊断、测试 |
 
 ```sh
-node scripts/install-skills.mjs        # 装到 ~/.dsh/skills
+git clone https://github.com/NewbieCheng/dsh-harness-remix.git
+cp -r dsh-harness-remix/skills/* ~/.dsh/skills/
 ```
 
 装好后对 AI 说“用 dsh-ui-remix 改造界面”或“用 dsh-backend-bridge 接后端”即可。

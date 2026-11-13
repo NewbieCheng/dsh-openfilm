@@ -39,7 +39,7 @@
 | [docs/NOTES.md](docs/NOTES.md) | 考古 | 关键决策与故障档案 |
 
 专题手册：[模板](docs/TEMPLATES.md)、[动效生产](docs/MOTION.md)、[风格库](docs/STYLES.md)、[镜头卡](docs/SHOT-CARDS.md)、[口播转写](docs/TRANSCRIBE.md)、[DSH 三栏外壳与插槽](docs/DSH-SHELL-INTEGRATION.md)、[界面地图](docs/UI-MAP.md)。
-通用 skill：[DSH UI 改造](skills/dsh-ui-remix/SKILL.md)（换官方组件/任意插槽/整壳接入/留洞/主题）、[DSH 后端衔接](skills/dsh-backend-bridge/SKILL.md)（Host 路由/ACP/模型/权限）；`node scripts/install-skills.mjs` 安装。
+通用 skill（独立仓库）：[dsh-harness-remix](https://github.com/NewbieCheng/dsh-harness-remix)（DSH UI 改造 + 后端衔接）。
 
 ## 能力与边界
 
