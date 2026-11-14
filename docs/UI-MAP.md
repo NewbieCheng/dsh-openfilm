@@ -136,17 +136,18 @@ DSH Web 壳（侧栏 + 主区域）
 
 ## 4. “工作区改为下拉”的实施方案（已实现 0.13.2，窄注入）
 
-**目标**：把“工作区”标题行做成下拉选择器：`工作区` / `OpenFilm 素材剪辑区`。搜索/筛选/新建按钮不动。
+**目标**：把“工作区”标题行做成下拉选择器：`工作区` / `剪辑区`。切到剪辑区时头部只留搜索按钮（视图选项、新建工作区隐藏），退回工作区全部恢复。
 
 **注入点**：`sidebar.workspaces` 标题行（DSH DOM，见 §1.4 的采集办法）。
 
 **做法**（窄注入，只追加）：
-1. 在标题文字后插一个下拉箭头按钮（`data-no996-workspace-switch`），不替换标题、不碰右侧三个按钮；
-2. 点开浮层两项：`工作区`（默认）/ `OpenFilm 素材剪辑区`；
-3. 选“剪辑区”：把标题下面那块列表容器隐藏，插入我们的列表容器；选“工作区”恢复；
-4. MutationObserver 跟随 React 重渲染；选择记在 `localStorage`；
-5. 列表数据：Host 新增只读 `GET /api/no996-openfilm/editing-sessions`，返回 `{projectId, projectName, sessionId, title, updatedAt}`（来自 `acp-sessions.json` + 项目登记表，不调模型）；
-6. 点击一条：打开“视频创作”面板并导航到该项目（`postMessage` 导航 + `localStorage.lastProject`），恢复该项目的 ACP 会话（现有映射）。
+1. 在标题文字前插一个按钮（`data-no996-workspace-switch`），不替换标题、不碰右侧按钮；按钮绝对定位在 header 左侧，header 加 `data-no996-switch-host` 并用 `--n996-switch-w` 预留左内边距——搜索展开时只会占用剩余宽度，不会挤掉/盖住切换；
+2. 点开浮层两项：`工作区`（默认）/ `剪辑区`；选“剪辑区”时把标题下面那块列表容器隐藏，插入我们的列表容器，头部只留搜索（视图选项、新建工作区按钮隐藏）；选“工作区”全部恢复；
+3. 列表数据：只读 `GET /api/no996-openfilm/editing-sessions` 返回**全部 Studio 项目**（0 对话也返回），每项带 `sessions[]` 和可选绑定 `sessionId`；数据来自 Studio 项目列表 + `acp-sessions.json` + 聊天记录，不调模型；
+4. 搜索：`src/editing-filter.mjs` 本地过滤项目显示名/原名/路径/ID 和对话显示名（空标题按「新对话」），命中即展开文件夹、不再受前 5 条限制，命中文字高亮；清空搜索恢复原折叠；
+5. 点击对话：打开“视频创作”面板并导航到该项目（`postMessage` 导航 + `localStorage.lastProject`）；点为 0 对话的文件夹时从 ⋯ →「在视频创作里打开」；
+6. 删除项目：`POST /api/no996-openfilm/editing-delete-project`，先停 ACP、把项目目录移入 `<Projects>/../.no996-trash/`（或显式彻底删除），再删聊天记录/绑定/置顶；DSH 会话只归档。细节见 [EDITING-DELETE.md](EDITING-DELETE.md)。
+7. 视觉：切换/折叠/更多/菜单项用内联 SVG（1.7 线宽），选中态为强调色圆点（不用对勾）；菜单 130ms 顶部升起、弹窗 160ms、toast 180ms，`prefers-reduced-motion` 关闭；操作后的列表用静默刷新，不闪 loading 帧。
 
 **必须同步改的约定**：
 - `tests/sidebar-untouched.test.mjs`：从“零注入”改为“允许窄注入、仍禁止占用 `sidebar.workspaces` 单槽/行级菜单”；

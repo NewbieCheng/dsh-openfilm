@@ -37,6 +37,7 @@ async function open({ failWrite = false } = {}) {
               if (failWrite) throw new Error('disk full');
               record = value;
             },
+            delete: async () => { record = undefined; },
           }),
           close: async () => {},
         };
@@ -46,6 +47,16 @@ async function open({ failWrite = false } = {}) {
   const store = await openOfficialChatStore(ctx, { z, requireVerifiedProject: identity });
   return { store, record: () => record };
 }
+
+test('removing a project drops its chat record without re-verifying a deleted folder', async () => {
+  const { store, record } = await open();
+  await store.remove('proj123');
+  assert.equal(record(), undefined);
+  // Idempotent: the second call is a no-op, not an error.
+  await store.remove('proj123');
+  const loaded = await store.load('proj123');
+  assert.deepEqual(loaded.sessions, []);
+});
 
 test('saving a list without a conversation drops that conversation\'s turns', async () => {
   const { store, record } = await open();

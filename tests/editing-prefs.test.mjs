@@ -33,6 +33,18 @@ test('an invalid project id is refused instead of stored', () => {
   assert.deepEqual(prefs.all(), {});
 });
 
+test('removing a project forgets its pin/title and every conversation pref', () => {
+  const prefs = createEditingPrefs();
+  prefs.set('proj_ABC123', { pinned: true, title: 'x' });
+  prefs.setSession('proj_ABC123', 'sess_XYZ789', { pinned: true, title: 'y' });
+  prefs.setSession('proj_OTHER1', 'sess_XYZ789', { title: '别的项目' });
+  assert.equal(prefs.remove('proj_ABC123'), true);
+  assert.equal(prefs.get('proj_ABC123'), undefined);
+  assert.equal(prefs.getSession('proj_ABC123', 'sess_XYZ789'), undefined);
+  assert.deepEqual(prefs.getSession('proj_OTHER1', 'sess_XYZ789'), { pinned: false, title: '别的项目' });
+  assert.equal(prefs.remove('proj_ABC123'), false);
+});
+
 test('conversation pins and titles are stored per session', () => {
   const prefs = createEditingPrefs();
   prefs.setSession('proj_ABC123', 'sess_XYZ789', { pinned: true, title: '第一条' });

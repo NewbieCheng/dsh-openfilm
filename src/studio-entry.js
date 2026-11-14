@@ -129,7 +129,7 @@ window.__ModuleLoader__.load({
         // `shell.overlay` is rendered for the whole frame lifetime, so the panel
         // it hosts survives page switches instead of reloading Studio each time.
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'no996-openfilm-panel', order: 0, locale: NS, inject: () => ({ startStudio }) }, PanelKeepAlive));
-        // The Workspace header becomes a two-way switch (工作区 / 素材剪辑区).
+        // The Workspace header becomes a two-way switch (工作区 / 剪辑区).
         // It is installed outside React on purpose: the sidebar belongs to DSH,
         // and this is a narrow, reversible append that only hides one label.
         if (typeof document !== 'undefined' && typeof window !== 'undefined') {

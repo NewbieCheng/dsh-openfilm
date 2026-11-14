@@ -56,6 +56,9 @@ import { createOfficialApprovals } from './official-approvals.mjs';
 import { createAcpAgentService } from './acp-agent-service.mjs';
 import { createAcpSessionStore } from './acp-session-store.mjs';
 import { createEditingPrefs } from './editing-prefs.mjs';
+import { createProjectTrash } from './project-trash.mjs';
+import { createEditingProjectDelete } from './editing-project-delete.mjs';
+import { buildEditingProjects } from './editing-sessions.mjs';
 import { ensureProjectInstructions } from './project-instructions.mjs';
 import { createMcpEndpoint, createMcpTokens, mcpServerEntry } from './mcp-server.mjs';
 import { attachOfficialEventStream } from './official-event-stream.mjs';
@@ -532,6 +535,19 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // Pin and display name of a project in the editing area; cosmetic and local to
   // this list (never the project's real name or the DSH Session title).
   const editingPrefs = createEditingPrefs({ file: join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'no996-openfilm', 'editing-prefs.json') });
+  // The only irreversible folder action: guarded move to `<projects root>/../.no996-trash`
+  // (or an explicit permanent delete). Kept injectable for tests.
+  const projectTrash = createProjectTrash();
+  const deleteEditingProject = createEditingProjectDelete({
+    verifyProject: verifyOfficialProject,
+    acpSessions,
+    editingPrefs,
+    officialStore,
+    archive,
+    trash: projectTrash,
+    reset: projectId => acpAgentService?.reset?.(projectId),
+    log,
+  });
   /** Read a small JSON request body; returns {} on anything malformed. */
   const readJsonBody = async (req, limit = 8192) => {
     try {
@@ -922,6 +938,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   let unregisterEditingPrefs;
   let unregisterEditingArchive;
   let unregisterEditingDelete;
+  let unregisterEditingDeleteProject;
   let unregisterStandalone;
   let unregisterTemplatesPage;
   let unregisterDebugUrl;
@@ -1138,10 +1155,12 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       }
     },
   }));
-  // The sidebar's "OpenFilm 素材剪辑区" dropdown: which projects have an editing
-  // conversation, and which DSH Session it is bound to. Read-only and cheap: the
-  // project list comes from Studio, the binding from the ACP session store. No
-  // Session is created and no model is called.
+  // The sidebar's "剪辑区" dropdown: every Studio project (a folder), with its
+  // editing conversations and the DSH Session the panel happens to be bound to.
+  // Read-only and cheap: the project list comes from Studio, the binding from
+  // the ACP session store. No Session is created and no model is called.
+  // Projects without conversations stay listed: a folder that vanished after
+  // its last conversation was deleted could never be deleted from here.
   unregisterEditingSessions = trackRoute(registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/editing-sessions',
     async handler(req, res) {
@@ -1177,32 +1196,14 @@ export function createStudioController(ctx, createProxy, { officialShell = false
             name: basename(String(record.cwd ?? '')) || record.projectId,
             path: typeof record.cwd === 'string' ? record.cwd : '',
           }));
-        const items = [];
-        for (const project of projects) {
-          if (!project || typeof project.id !== 'string') continue;
-          const record = bound.get(project.id);
-          if (!record || typeof record.sessionId !== 'string') continue;
-          // An archived conversation stays listed: it is where the project's
-          // history lives, and the panel opens it read-only with a restore
-          // action (hiding it made the whole area look empty).
-          const archived = archive && typeof archive.isArchived === 'function'
-            ? archive.isArchived(record.sessionId) === true
-            : false;
-          const pref = prefs[project.id];
-          items.push({
-            projectId: project.id,
-            sessionId: record.sessionId,
-            archived,
-            pinned: pref?.pinned === true,
-            ...(typeof pref?.title === 'string' && pref.title ? { title: pref.title } : {}),
-            name: typeof project.name === 'string' && project.name
-              ? project.name
-              : (typeof project.title === 'string' && project.title ? project.title : basename(String(project.path ?? '')) || project.id),
-            path: typeof project.path === 'string' ? project.path : '',
-          });
-        }
-        // Pinned rows lead; the rest keep Studio's own order.
-        items.sort((left, right) => (right.pinned ? 1 : 0) - (left.pinned ? 1 : 0));
+        // An archived conversation stays listed: it is where the project's
+        // history lives, and the panel opens it read-only with a restore
+        // action (hiding it made the whole area look empty). Pinned rows lead.
+        const items = buildEditingProjects(projects, {
+          bound,
+          prefs,
+          isArchived: sessionId => archive && typeof archive.isArchived === 'function' ? archive.isArchived(sessionId) : false,
+        });
         // Each project is a folder whose conversations are the Studio chat's
         // own sessions. The ACP binding is one session; the chat store is the
         // authority on which conversations exist in the panel.
@@ -1223,7 +1224,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
                 .filter(session => /^[A-Za-z0-9_-]{6,60}$/.test(session.sessionId));
             } catch { /* fall back to the ACP binding */ }
           }
-          if (!sessions.length) {
+          if (!sessions.length && item.sessionId) {
             sessions = [{ sessionId: item.sessionId, title: '', updatedAt: '', archived: item.archived }];
           }
           for (const session of sessions) {
@@ -1337,7 +1338,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         if (Number.isSafeInteger(data?.revision)) await store.saveSessions(projectId, { sessions, last, expectedRevision: data.revision });
       } catch { /* a stale transcript is cosmetic; the binding still goes */ }
       if (one === null || !record || record.sessionId === one) acpSessions.remove(projectId);
-      if (one === null) editingPrefs.set(projectId, { pinned: false, title: '' });
       if (record && typeof record.sessionId === 'string' && (one === null || record.sessionId === one)) {
         // Archive the DSH Session rather than deleting its files: DSH keeps its
         // own index, and an archived Session is recoverable.
@@ -1346,6 +1346,36 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         } catch { /* best effort */ }
       }
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ ok: true, remaining }));
+    },
+  }));
+  // Delete the project itself: its OpenFilm folder (default: a recoverable trash
+  // beside the projects root), every Studio conversation it has, the ACP binding,
+  // pins/titles, and archive the bound DSH Sessions. The folder move is the
+  // irreversible step, so it runs first and aborts the whole request on failure:
+  // chat records are never dropped for a project that stayed on disk.
+  unregisterEditingDeleteProject = trackRoute(registerRoute({
+    kind: 'exact', path: '/api/no996-openfilm/editing-delete-project',
+    async handler(req, res) {
+      res.setHeader('cache-control', 'no-store');
+      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end(); return; }
+      const admission = ctx.connection.admit({ headers: req.headers });
+      if ('rejection' in admission) { res.writeHead(admission.rejection).end(admission.rejection === 403 ? 'DSH_ORIGIN_REJECTED' : 'DSH_SESSION_REQUIRED'); return; }
+      if (admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('DSH_BROWSER_REQUIRED'); return; }
+      const body = await readJsonBody(req);
+      const projectId = typeof body.projectId === 'string' ? body.projectId : '';
+      if (!/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) { res.writeHead(400).end('BAD_PROJECT'); return; }
+      const permanent = body.permanent === true;
+      let result;
+      try { result = await deleteEditingProject(projectId, { permanent }); }
+      catch (error) {
+        const code = String(error?.code ?? '');
+        if (code === 'UNKNOWN_PROJECT') { res.writeHead(404).end('UNKNOWN_PROJECT'); return; }
+        if (code === 'PROJECT_BUSY') { res.writeHead(409).end('PROJECT_BUSY'); return; }
+        if (code === 'PROJECT_NOT_OPENFILM' || code === 'PROJECT_PATH_INVALID') { res.writeHead(422).end(code); return; }
+        res.writeHead(500).end('DELETE_FAILED');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ ok: true, ...result }));
     },
   }));
   unregisterStandalone = trackRoute(registerRoute({

@@ -66,6 +66,19 @@ export function createEditingPrefs({ file, fs } = {}) {
       flush();
       return this.get(projectId) ?? { pinned: false };
     },
+    /** Forget a project's pin/title and every conversation preference under it. */
+    remove(projectId) {
+      if (typeof projectId !== 'string' || !PROJECT_ID.test(projectId)) return false;
+      let changed = false;
+      if (data.projects[projectId]) { delete data.projects[projectId]; changed = true; }
+      for (const key of Object.keys(data.sessions ?? {})) {
+        if (!key.startsWith(`${projectId}:`)) continue;
+        delete data.sessions[key];
+        changed = true;
+      }
+      if (changed) flush();
+      return changed;
+    },
     all() {
       return Object.fromEntries(Object.entries(data.projects).map(([projectId, record]) => [projectId, {
         pinned: record?.pinned === true,

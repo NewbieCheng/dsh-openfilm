@@ -492,8 +492,50 @@
     });
   }
 
+  // src/editing-filter.mjs
+  var SESSION_FALLBACK = "\u65B0\u5BF9\u8BDD";
+  function sessionDisplayTitle(session) {
+    const title = typeof session?.title === "string" ? session.title.trim() : "";
+    return title || SESSION_FALLBACK;
+  }
+  function projectDisplayTitle(project) {
+    const title = typeof project?.title === "string" ? project.title.trim() : "";
+    return title || typeof project?.name === "string" && project.name || (typeof project?.projectId === "string" ? project.projectId : "");
+  }
+  var lower = (value) => typeof value === "string" ? value.toLowerCase() : "";
+  var includes = (value, needle) => lower(value).includes(needle);
+  function normalizeQuery(query) {
+    return typeof query === "string" ? query.trim().toLowerCase() : "";
+  }
+  function matchRange(text2, query) {
+    const needle = normalizeQuery(query);
+    if (!needle) return null;
+    const index = lower(text2).indexOf(needle);
+    return index < 0 ? null : { start: index, end: index + needle.length };
+  }
+  function filterEditing(projects, { query = "", archived = true } = {}) {
+    const needle = normalizeQuery(query);
+    const rows = [];
+    for (const project of Array.isArray(projects) ? projects : []) {
+      if (!project || typeof project !== "object") continue;
+      if (!archived && project.archived === true) continue;
+      const sessions = (Array.isArray(project.sessions) ? project.sessions : []).filter((session) => session && typeof session === "object").filter((session) => archived || session.archived !== true);
+      if (!needle) {
+        rows.push({ project, sessions, open: false });
+        continue;
+      }
+      const projectHit = [projectDisplayTitle(project), project.name, project.path, project.projectId].some((value) => includes(value, needle));
+      const matched = projectHit ? sessions : sessions.filter((session) => includes(sessionDisplayTitle(session), needle));
+      if (!projectHit && !matched.length) continue;
+      rows.push({ project, sessions: matched, open: true });
+    }
+    return rows;
+  }
+
   // src/sidebar-editing.mjs
   var SWITCH = "data-no996-workspace-switch";
+  var SWITCH_HOST = "data-no996-switch-host";
+  var TOAST = "data-no996-toast";
   var POPOVER = "data-no996-workspace-popover";
   var LIST = "data-no996-editing-list";
   var VIEW_MENU = "data-no996-view-menu";
@@ -504,7 +546,30 @@
   var VIEW_KEY = "no996.openfilm.editingView";
   var LABELS = /* @__PURE__ */ new Set(["\u5DE5\u4F5C\u533A", "\u4F1A\u8BDD"]);
   var PANEL_LABELS = /* @__PURE__ */ new Set(["\u89C6\u9891\u521B\u4F5C", "Video studio"]);
+  var EDITING_LABEL = "\u526A\u8F91\u533A";
   var text = (value) => typeof value === "string" ? value.trim() : "";
+  var isId = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{6,40}$/.test(value);
+  var ICONS = {
+    chevron: '<path d="m6 9 6 6 6-6"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    more: '<circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none"/>',
+    pin: '<path d="M12 17v5"/><path d="M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.8a2 2 0 0 0-1.1-1.8l-1.8-.9A2 2 0 0 1 15 10.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
+    pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
+    archive: '<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+    restore: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v6h6"/>',
+    trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M21 14v7H3V3h7"/>',
+    refresh: '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
+    eraser: '<path d="m7 21-4.3-4.3a2.4 2.4 0 0 1 0-3.4l9.6-9.6a2.4 2.4 0 0 1 3.4 0l5.6 5.6a2.4 2.4 0 0 1 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>',
+    message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="m9 10 6 6M15 10l-6 6"/>',
+    sliders: '<path d="M4 8h10M18 8h2M4 16h4M12 16h8"/><circle cx="16" cy="8" r="2"/><circle cx="10" cy="16" r="2"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    type: '<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>',
+    dot: '<circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/>',
+    grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+    clapper: '<path d="M20.2 6 3 11l-.9-2.4a2 2 0 0 1 1.3-2.5l13.5-4a2 2 0 0 1 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>'
+  };
   function findHeader(doc) {
     for (const span of doc.querySelectorAll("span")) {
       if (!LABELS.has(text(span.textContent))) continue;
@@ -555,10 +620,17 @@
     let loading = false;
     let observer = null;
     let hidden = [];
-    let folderButton = null;
     let style = null;
     let onDocumentClick = null;
     let onSearch = null;
+    const icon = (name, size = 16) => {
+      const span = doc.createElement("span");
+      span.className = "n996-icon";
+      span.setAttribute("aria-hidden", "true");
+      span.style.cssText = `display:inline-flex;flex:none;align-items:center;justify-content:center;width:${size}px;height:${size}px;`;
+      span.innerHTML = `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] ?? ""}</svg>`;
+      return span;
+    };
     const postJson = async (path, body) => {
       const response = await fetch(path, {
         method: "POST",
@@ -566,7 +638,12 @@
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body)
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        const error = new Error(detail || `HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
       return response.json().catch(() => ({}));
     };
     const restoreHidden = () => {
@@ -577,18 +654,14 @@
         }
       }
       hidden = [];
-      if (folderButton) {
-        try {
-          folderButton.style.display = "";
-        } catch {
-        }
-      }
     };
     const closePopover = () => {
       if (popover) {
         popover.remove();
         popover = null;
       }
+      trigger?.classList.remove("n996-open");
+      trigger?.setAttribute("aria-expanded", "false");
     };
     const closeMenus = () => {
       for (const node of doc.querySelectorAll(`[${VIEW_MENU}], [${ROW_MENU}], [${MODAL}]`)) node.remove();
@@ -596,10 +669,14 @@
     const cleanup = () => {
       closePopover();
       closeMenus();
-      for (const node of doc.querySelectorAll(`[${SWITCH}], [${POPOVER}], [${LIST}], [${STYLE}]`)) node.remove();
+      for (const node of doc.querySelectorAll(`[${SWITCH}], [${POPOVER}], [${LIST}], [${STYLE}], [${TOAST}]`)) node.remove();
       restoreHidden();
       if (mounted?.span) mounted.span.style.display = "";
-      if (mounted?.header) mounted.header.removeAttribute("data-no996-editing");
+      if (mounted?.header) {
+        mounted.header.removeAttribute("data-no996-editing");
+        mounted.header.removeAttribute(SWITCH_HOST);
+        mounted.header.style.removeProperty("--n996-switch-w");
+      }
       if (mounted?.header && onSearch) {
         try {
           mounted.header.removeEventListener("input", onSearch, true);
@@ -616,7 +693,6 @@
       list = null;
       mounted = null;
       style = null;
-      folderButton = null;
       onSearch = null;
       onDocumentClick = null;
     };
@@ -628,7 +704,34 @@
         '[data-no996-editing] [class*="_sectionLabelHidden"]{opacity:1!important;visibility:visible!important;max-width:45%!important;margin-right:0!important;transform:none!important}',
         '[data-no996-editing] [class*="_headerActionsHidden"]{opacity:1!important;visibility:visible!important;max-width:60px!important;transform:none!important;pointer-events:auto!important}',
         "[data-no996-editing] [data-no996-workspace-switch]{flex:none!important;min-width:max-content!important}",
-        '[data-no996-editing] [class*="_searchSlot"]{min-width:0!important}'
+        '[data-no996-editing] [class*="_searchSlot"]{min-width:0!important}',
+        // One leading slot per folder row: folder at rest, chevron on hover.
+        "[data-no996-editing-list] .n996-folder{display:inline-flex;flex:none;align-items:center;justify-content:center;width:16px;height:16px;color:var(--dsw-alias-label-secondary, currentColor)}",
+        "[data-no996-editing-list] .n996-chevron{display:none;flex:none;align-items:center;justify-content:center;width:16px;height:16px;opacity:.62;transition:transform .16s cubic-bezier(.2,.8,.2,1),opacity .12s ease}",
+        "[data-no996-editing-list] .n996-folder-toggle:hover .n996-folder{display:none}",
+        "[data-no996-editing-list] .n996-folder-toggle:hover .n996-chevron{display:inline-flex}",
+        "[data-no996-editing-list] .n996-folder-toggle{transition:background-color .12s ease}",
+        "[data-no996-editing-list] .n996-row-open{transition:background-color .12s ease}",
+        "[data-no996-editing-list] .n996-row-action{transition:opacity .12s ease,background-color .12s ease}",
+        "[data-no996-workspace-switch]{transition:background-color .12s ease,color .12s ease}",
+        "[data-no996-workspace-switch] .n996-trigger-chevron{transition:transform .16s cubic-bezier(.2,.8,.2,1)}",
+        "[data-no996-workspace-switch].n996-open .n996-trigger-chevron{transform:rotate(180deg)}",
+        // Reserve a fixed slot for the mode switch: the switch floats over the
+        // header's left edge and the header starts its content after it, so an
+        // expanding search cannot cover it.
+        "[data-no996-switch-host]{position:relative!important;padding-left:calc(4px + var(--n996-switch-w, 56px))!important}",
+        "[data-no996-switch-host] [data-no996-workspace-switch]{position:absolute;left:4px;top:50%;transform:translateY(-50%);z-index:2}",
+        // Menus and dialogs arrive in place instead of flashing: one short,
+        // top-anchored rise; no bounce, no per-item cascade.
+        "@keyframes n996-rise{from{opacity:0;transform:translateY(-4px) scale(.985)}to{opacity:1;transform:none}}",
+        "@keyframes n996-fade{from{opacity:0}to{opacity:1}}",
+        "@keyframes n996-pop{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}",
+        "@keyframes n996-toast{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}",
+        "[data-no996-row-menu],[data-no996-view-menu],[data-no996-workspace-popover]{animation:n996-rise .13s cubic-bezier(.2,.8,.2,1);transform-origin:top left}",
+        "[data-no996-modal]{animation:n996-fade .12s ease-out}",
+        "[data-no996-modal] > div{animation:n996-pop .16s cubic-bezier(.2,.8,.2,1)}",
+        "[data-no996-toast]{animation:n996-toast .18s cubic-bezier(.2,.8,.2,1)}",
+        "@media (prefers-reduced-motion: reduce){[data-no996-row-menu],[data-no996-view-menu],[data-no996-workspace-popover],[data-no996-modal],[data-no996-modal] > div,[data-no996-toast],.n996-chevron,.n996-trigger-chevron{animation:none!important;transition:none!important}}"
       ].join("");
       (doc.head ?? doc.documentElement).append(style);
     };
@@ -640,19 +743,24 @@
       (header.parentElement ?? header).append(list);
       return list;
     };
-    const filtered = () => {
-      const needle = query.trim().toLowerCase();
-      let rows = projects.filter((project) => {
-        if (!view.archived && project.archived) return false;
-        if (!needle) return true;
-        const title = project.title || project.name || project.projectId;
-        const sessions = Array.isArray(project.sessions) ? project.sessions : [];
-        return [title, project.name, project.path, project.projectId].some((value) => typeof value === "string" && value.toLowerCase().includes(needle)) || sessions.some((session) => typeof session?.title === "string" && session.title.toLowerCase().includes(needle));
-      });
+    const filteredRows = () => {
+      let rows = filterEditing(projects, { query, archived: view.archived });
       if (view.sort === "name") {
-        rows = [...rows].sort((left, right) => (left.title || left.name || "").localeCompare(right.title || right.name || "", "zh-CN"));
+        rows = [...rows].sort((left, right) => projectDisplayTitle(left.project).localeCompare(projectDisplayTitle(right.project), "zh-CN"));
       }
       return rows;
+    };
+    const appendHighlight = (parent, label, needle) => {
+      const range = matchRange(label, needle);
+      if (!range) {
+        parent.append(label);
+        return;
+      }
+      parent.append(label.slice(0, range.start));
+      const mark = doc.createElement("mark");
+      mark.textContent = label.slice(range.start, range.end);
+      mark.style.cssText = "background:rgba(255,190,60,.28);color:inherit;border-radius:2px;padding:0 1px;";
+      parent.append(mark, label.slice(range.end));
     };
     const relative = (iso) => {
       const time = typeof iso === "string" ? Date.parse(iso) : NaN;
@@ -665,10 +773,10 @@
       const days = Math.round(hours / 24);
       return `${days}\u5929\u524D`;
     };
-    const folderGlyph = () => {
+    const folderGlyph = (open) => {
       const span = doc.createElement("span");
-      span.style.cssText = "display:inline-flex;flex:none;width:16px;height:16px;color:var(--dsw-alias-label-secondary, currentColor);";
-      span.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1.5 4.5A1 1 0 0 1 2.5 3.5h3l1.2 1.4h5.8a1 1 0 0 1 1 1v6.6a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1z"/></svg>';
+      span.className = "n996-folder";
+      span.innerHTML = open ? '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1.5 4.4A1 1 0 0 1 2.5 3.4h3l1.2 1.4h6.3a1 1 0 0 1 1 1v1.7H1.5z"/><path d="M1.8 7.5h12.9l-1.3 4.9a1 1 0 0 1-1 .7H3.6a1 1 0 0 1-1-.8z"/></svg>' : '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1.5 4.5A1 1 0 0 1 2.5 3.5h3l1.2 1.4h5.8a1 1 0 0 1 1 1v6.6a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1z"/></svg>';
       return span;
     };
     const openProject = (project) => {
@@ -681,12 +789,18 @@
       closePopover();
       closeMenus();
     };
+    const pinBadge = () => {
+      const pin = icon("pin", 12);
+      pin.style.cssText += ";opacity:.78;margin-right:2px;vertical-align:-1px;color:var(--dsw-alias-label-tertiary, currentColor)";
+      return pin;
+    };
     const rowAction = (parent, label, onClick) => {
       const button = doc.createElement("button");
       button.type = "button";
-      button.textContent = "\u22EF";
-      button.setAttribute("aria-label", "\u4F1A\u8BDD\u64CD\u4F5C");
-      button.style.cssText = "flex:none;width:24px;border:0;border-radius:6px;background:none;color:inherit;opacity:0;cursor:pointer;font:inherit;font-size:15px;line-height:1;";
+      button.className = "n996-row-action";
+      button.setAttribute("aria-label", label);
+      button.append(icon("more", 16));
+      button.style.cssText = "display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:none;color:inherit;opacity:0;cursor:pointer;font:inherit;line-height:1;";
       parent.addEventListener("mouseenter", () => {
         button.style.opacity = ".75";
       });
@@ -703,30 +817,48 @@
     const renderRows = (container, next) => {
       projects = Array.isArray(next) ? next : [];
       container.replaceChildren();
-      const rows = filtered();
+      const rows = filteredRows();
       if (!rows.length) {
         const empty = doc.createElement("div");
-        empty.textContent = query ? "\u6CA1\u6709\u5339\u914D\u7684\u4F1A\u8BDD\u3002" : "\u8FD8\u6CA1\u6709\u526A\u8F91\u4F1A\u8BDD\uFF1A\u5148\u5728\u89C6\u9891\u521B\u4F5C\u91CC\u6253\u5F00\u4E00\u4E2A\u9879\u76EE\u3002";
-        empty.style.cssText = "padding:8px 10px;font-size:12px;opacity:.6;";
+        empty.textContent = query ? "\u6CA1\u6709\u5339\u914D\u7684\u9879\u76EE\u6216\u5BF9\u8BDD\u3002" : "\u8FD8\u6CA1\u6709\u526A\u8F91\u9879\u76EE\uFF1A\u5148\u5728\u89C6\u9891\u521B\u4F5C\u91CC\u5EFA\u4E00\u4E2A\u3002";
+        empty.style.cssText = "padding:8px 10px 2px;font-size:12px;opacity:.6;";
         container.append(empty);
+        const viewLink = doc.createElement("button");
+        viewLink.type = "button";
+        viewLink.textContent = "\u89C6\u56FE\u9009\u9879\u2026";
+        viewLink.style.cssText = "display:block;margin:0 10px 4px;padding:2px 0;border:0;background:none;color:var(--dsw-alias-label-tertiary, inherit);font:inherit;font-size:12px;cursor:pointer;";
+        viewLink.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openViewMenu(viewLink);
+        });
+        container.append(viewLink);
         return;
       }
-      for (const project of rows) {
+      for (const row of rows) {
+        const project = row.project;
+        const folderOpen = row.open || !collapsed.has(project.projectId);
+        const sessions = row.sessions;
         const folder = doc.createElement("div");
         folder.style.cssText = "display:flex;align-items:center;gap:2px;border-radius:6px;";
         const toggle = doc.createElement("button");
         toggle.type = "button";
+        toggle.className = "n996-folder-toggle";
+        toggle.setAttribute("aria-expanded", folderOpen ? "true" : "false");
         toggle.style.cssText = "display:flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0;padding:6px 8px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;font-size:13px;";
         const chevron = doc.createElement("span");
-        chevron.textContent = collapsed.has(project.projectId) ? "\u25B8" : "\u25BE";
-        chevron.style.cssText = "flex:none;width:10px;font-size:10px;opacity:.6;";
+        chevron.className = "n996-chevron";
+        chevron.setAttribute("aria-hidden", "true");
+        chevron.append(icon("chevron", 14));
+        chevron.style.transform = folderOpen ? "none" : "rotate(-90deg)";
         const name = doc.createElement("span");
-        name.textContent = (project.pinned ? "\u{1F4CC} " : "") + (project.title || project.name || project.projectId);
+        if (project.pinned) name.append(pinBadge());
+        appendHighlight(name, projectDisplayTitle(project), query);
         name.style.cssText = "flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;";
         const count = doc.createElement("span");
-        count.textContent = String((project.sessions ?? []).length);
+        count.textContent = String(sessions.length);
         count.style.cssText = "flex:none;font-size:11px;opacity:.45;";
-        toggle.append(chevron, folderGlyph(), name, count);
+        toggle.append(folderGlyph(folderOpen), chevron, name, count);
         toggle.addEventListener("mouseenter", () => {
           toggle.style.background = "var(--bg-hover, rgba(127,127,127,.12))";
         });
@@ -736,24 +868,26 @@
         toggle.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
+          if (query) return;
           if (collapsed.has(project.projectId)) collapsed.delete(project.projectId);
           else collapsed.add(project.projectId);
           renderRows(container, projects);
         });
-        const more = rowAction(folder, "\u4F1A\u8BDD\u64CD\u4F5C", (anchor) => openRowMenu(anchor, project, null));
+        const more = rowAction(folder, "\u9879\u76EE\u64CD\u4F5C", (anchor) => openRowMenu(anchor, project, null));
         folder.append(toggle, more);
         container.append(folder);
-        if (collapsed.has(project.projectId)) continue;
-        const sessions = Array.isArray(project.sessions) ? project.sessions : [];
-        const shown = expanded.has(project.projectId) ? sessions : sessions.slice(0, 5);
+        if (!folderOpen) continue;
+        const shown = query ? sessions : expanded.has(project.projectId) ? sessions : sessions.slice(0, 5);
         for (const session of shown) {
           const child = doc.createElement("div");
-          child.style.cssText = "display:flex;align-items:center;gap:2px;border-radius:6px;margin-left:22px;";
+          child.style.cssText = "display:flex;align-items:center;gap:2px;border-radius:6px;margin-left:26px;";
           const open = doc.createElement("button");
           open.type = "button";
           open.style.cssText = "display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0;padding:5px 8px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;font-size:13px;";
           const title = doc.createElement("span");
-          title.textContent = (session.pinned ? "\u{1F4CC} " : "") + (session.archived ? "\u5DF2\u5F52\u6863 \xB7 " : "") + (session.title || "\u65B0\u5BF9\u8BDD");
+          if (session.pinned) title.append(pinBadge());
+          if (session.archived) title.append("\u5DF2\u5F52\u6863 \xB7 ");
+          appendHighlight(title, sessionDisplayTitle(session), query);
           title.style.cssText = "flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
           const time = doc.createElement("span");
           time.textContent = relative(session.updatedAt);
@@ -774,11 +908,11 @@
           child.append(open, childMore);
           container.append(child);
         }
-        if (!expanded.has(project.projectId) && sessions.length > 5) {
+        if (!query && !expanded.has(project.projectId) && sessions.length > 5) {
           const moreButton = doc.createElement("button");
           moreButton.type = "button";
           moreButton.textContent = `\u5C55\u5F00\u5176\u4F59 ${sessions.length - 5} \u4E2A\u4F1A\u8BDD`;
-          moreButton.style.cssText = "display:block;margin-left:22px;padding:4px 8px;border:0;background:none;color:var(--dsw-alias-label-tertiary, inherit);font:inherit;font-size:12px;cursor:pointer;";
+          moreButton.style.cssText = "display:block;margin-left:26px;padding:4px 8px;border:0;background:none;color:var(--dsw-alias-label-tertiary, inherit);font:inherit;font-size:12px;cursor:pointer;";
           moreButton.addEventListener("click", (event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -789,19 +923,25 @@
         }
       }
     };
-    const load = async (container) => {
+    const load = async (container, { quiet = false } = {}) => {
       if (loading) return;
       loading = true;
-      const waiting = doc.createElement("div");
-      waiting.textContent = "\u6B63\u5728\u8BFB\u53D6\u526A\u8F91\u4F1A\u8BDD\u2026";
-      waiting.style.cssText = "padding:8px 10px;font-size:12px;opacity:.6;";
-      container.replaceChildren(waiting);
+      if (!quiet) {
+        const waiting = doc.createElement("div");
+        waiting.textContent = "\u6B63\u5728\u8BFB\u53D6\u526A\u8F91\u4F1A\u8BDD\u2026";
+        waiting.style.cssText = "padding:8px 10px;font-size:12px;opacity:.6;";
+        container.replaceChildren(waiting);
+      }
       try {
         const data = await fetchSessions?.();
         renderRows(container, Array.isArray(data?.projects) ? data.projects : []);
       } catch (error) {
         if (error?.code === "ROUTE_MISSING") {
           cleanup();
+          return;
+        }
+        if (quiet) {
+          toast("\u5237\u65B0\u5931\u8D25\uFF0C\u5217\u8868\u4FDD\u6301\u539F\u6837\u3002");
           return;
         }
         const failed = doc.createElement("div");
@@ -824,18 +964,22 @@
       }
     };
     const refresh = () => {
-      if (list) void load(list);
+      if (list) void load(list, { quiet: true });
     };
-    const menuButton = (parent, label, onClick, checked) => {
+    const menuButton = (parent, label, onClick, { checked = false, danger = false, icon: iconName = "" } = {}) => {
       const button = doc.createElement("button");
       button.type = "button";
-      button.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;";
-      button.textContent = label;
+      button.setAttribute("role", "menuitem");
+      button.style.cssText = "display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0;border-radius:6px;background:none;text-align:left;cursor:pointer;font:inherit;color:" + (danger ? "var(--dsw-alias-state-error-primary, #e5484d)" : "inherit") + ";transition:background-color .12s ease;";
+      if (iconName) button.append(icon(iconName, 15));
+      const textNode = doc.createElement("span");
+      textNode.style.cssText = "flex:1 1 auto;min-width:0;";
+      textNode.textContent = label;
+      button.append(textNode);
       if (checked) {
-        const check = doc.createElement("span");
-        check.textContent = "\u2713";
-        check.style.cssText = "opacity:.8;";
-        button.append(check);
+        const dot = icon("dot", 10);
+        dot.style.color = "var(--dsw-alias-state-business-primary, #4b7bec)";
+        button.append(dot);
       }
       button.addEventListener("mouseenter", () => {
         button.style.background = "var(--bg-hover, rgba(127,127,127,.14))";
@@ -850,6 +994,11 @@
         onClick();
       });
       parent.append(button);
+    };
+    const menuSeparator = (parent) => {
+      const line = doc.createElement("div");
+      line.style.cssText = "height:1px;margin:4px 6px;background:var(--border-subtle, rgba(255,255,255,.12));";
+      parent.append(line);
     };
     const openMenuAt = (anchor, attribute) => {
       const menu = doc.createElement("div");
@@ -871,26 +1020,27 @@
     const openViewMenu = (anchor) => {
       closeMenus();
       const menu = openMenuAt(anchor, VIEW_MENU);
+      menu.setAttribute("role", "menu");
       menuButton(menu, "\u6392\u5E8F\uFF1A\u6700\u8FD1\u66F4\u65B0", () => {
         view = { ...view, sort: "recent" };
         saveView();
         refresh();
-      }, view.sort === "recent");
+      }, { checked: view.sort === "recent", icon: "clock" });
       menuButton(menu, "\u6392\u5E8F\uFF1A\u540D\u79F0", () => {
         view = { ...view, sort: "name" };
         saveView();
         refresh();
-      }, view.sort === "name");
+      }, { checked: view.sort === "name", icon: "type" });
       menuButton(menu, "\u663E\u793A\u5DF2\u5F52\u6863", () => {
         view = { ...view, archived: !view.archived };
         saveView();
         refresh();
-      }, view.archived);
+      }, { checked: view.archived, icon: "archive" });
       menuButton(menu, "\u663E\u793A\u8DEF\u5F84", () => {
         view = { ...view, path: !view.path };
         saveView();
         refresh();
-      }, view.path);
+      }, { checked: view.path, icon: "eye" });
     };
     const saveView = () => {
       try {
@@ -901,25 +1051,44 @@
     const openRowMenu = (anchor, project, session) => {
       closeMenus();
       const menu = openMenuAt(anchor, ROW_MENU);
+      menu.setAttribute("role", "menu");
       const base = { projectId: project.projectId, ...session ? { sessionId: session.sessionId } : {} };
+      if (!session) {
+        menuButton(menu, "\u89C6\u56FE\u9009\u9879\u2026", () => {
+          openViewMenu(anchor);
+        }, { icon: "sliders" });
+        menuButton(menu, "\u5237\u65B0\u5217\u8868", () => {
+          refresh();
+        }, { icon: "refresh" });
+        menuButton(menu, "\u5728\u89C6\u9891\u521B\u4F5C\u91CC\u6253\u5F00", () => {
+          openProject(project);
+        }, { icon: "external" });
+        menuSeparator(menu);
+      }
       const pinned = session ? session.pinned === true : project.pinned === true;
-      const archived = session ? session.archived === true : project.archived === true;
       menuButton(menu, pinned ? "\u53D6\u6D88\u7F6E\u9876" : "\u7F6E\u9876", async () => {
         try {
           await postJson("/api/no996-openfilm/editing-prefs", { ...base, pinned: !pinned });
           refresh();
         } catch {
         }
-      });
-      menuButton(menu, "\u91CD\u547D\u540D\u2026", () => openRename(project, session));
-      menuButton(menu, archived ? "\u6062\u590D\u4F1A\u8BDD" : "\u5F52\u6863\u4F1A\u8BDD", async () => {
-        try {
-          await postJson("/api/no996-openfilm/editing-archive", { ...base, archived: !archived });
-          refresh();
-        } catch {
-        }
-      });
-      menuButton(menu, session ? "\u5220\u9664\u4F1A\u8BDD\u2026" : "\u5220\u9664\u5168\u90E8\u4F1A\u8BDD\u2026", () => openConfirm(project, session));
+      }, { icon: "pin" });
+      menuButton(menu, "\u91CD\u547D\u540D\u2026", () => openRename(project, session), { icon: "pencil" });
+      if (session) {
+        const archived = session.archived === true;
+        menuButton(menu, archived ? "\u6062\u590D\u5BF9\u8BDD" : "\u5F52\u6863\u5BF9\u8BDD", async () => {
+          try {
+            await postJson("/api/no996-openfilm/editing-archive", { ...base, archived: !archived });
+            refresh();
+          } catch {
+          }
+        }, { icon: archived ? "restore" : "archive" });
+        menuButton(menu, "\u5220\u9664\u5BF9\u8BDD\u2026", () => openConfirm(project, session), { icon: "message", danger: true });
+      } else {
+        menuSeparator(menu);
+        if ((project.sessions ?? []).length) menuButton(menu, "\u6E05\u7A7A\u5BF9\u8BDD\uFF08\u4FDD\u7559\u9879\u76EE\uFF09\u2026", () => openConfirm(project, null), { icon: "eraser" });
+        menuButton(menu, "\u5220\u9664\u9879\u76EE\u2026", () => openDeleteProject(project), { icon: "trash", danger: true });
+      }
     };
     const openModal = (title, body, actions) => {
       const overlay = doc.createElement("div");
@@ -935,22 +1104,26 @@
       content.append(body);
       const footer = doc.createElement("div");
       footer.style.cssText = "display:flex;justify-content:flex-end;gap:8px;";
-      for (const [label, onClick, primary] of actions) {
+      const buttons = [];
+      for (const [label, onClick, variant] of actions) {
         const button = doc.createElement("button");
         button.type = "button";
         button.textContent = label;
-        button.style.cssText = "padding:6px 14px;border-radius:7px;border:1px solid var(--border-subtle, rgba(255,255,255,.14));background:" + (primary ? "var(--dsw-alias-state-business-primary, #4b7bec)" : "none") + ";color:inherit;cursor:pointer;font:inherit;";
+        const solid = variant === "primary" || variant === "danger";
+        const background = variant === "danger" ? "var(--dsw-alias-state-error-primary, #e5484d)" : variant === "primary" ? "var(--dsw-alias-state-business-primary, #4b7bec)" : "none";
+        button.style.cssText = "padding:6px 14px;border-radius:7px;border:1px solid var(--border-subtle, rgba(255,255,255,.14));background:" + background + ";color:" + (solid ? "#fff" : "inherit") + ";cursor:pointer;font:inherit;";
         button.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          onClick();
+          void onClick(button);
         });
         footer.append(button);
+        buttons.push(button);
       }
       card.append(heading, content, footer);
       overlay.append(card);
       doc.body.append(overlay);
-      return { overlay, card };
+      return { overlay, card, buttons };
     };
     const openRename = (project, session) => {
       closeMenus();
@@ -958,7 +1131,7 @@
       input.value = session ? session.title || "\u65B0\u5BF9\u8BDD" : project.title || project.name || project.projectId;
       input.style.cssText = "box-sizing:border-box;width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border-subtle, rgba(255,255,255,.16));background:transparent;color:inherit;font:inherit;";
       const { overlay } = openModal(session ? "\u91CD\u547D\u540D\u5BF9\u8BDD" : "\u91CD\u547D\u540D\u9879\u76EE", input, [
-        ["\u53D6\u6D88", () => overlay.remove(), false],
+        ["\u53D6\u6D88", () => overlay.remove(), null],
         ["\u4FDD\u5B58", async () => {
           const title = input.value.trim();
           overlay.remove();
@@ -971,42 +1144,173 @@
             refresh();
           } catch {
           }
-        }, true]
+        }, "primary"]
       ]);
       input.focus();
       input.select?.();
     };
+    const openProjectId = () => {
+      try {
+        const id = doc.defaultView?.localStorage?.getItem("no996.openfilm.lastProject");
+        return isId(id) ? id : "";
+      } catch {
+        return "";
+      }
+    };
+    const deleteMessage = (error) => {
+      const message = String(error?.message ?? "");
+      if (message.includes("PROJECT_BUSY")) return "\u9879\u76EE\u6B63\u5728\u88AB\u4F7F\u7528\uFF0C\u5148\u5173\u6389\u89C6\u9891\u521B\u4F5C\u6216 Studio \u518D\u8BD5\u3002";
+      if (message.includes("PROJECT_NOT_OPENFILM")) return "\u8FD9\u4E2A\u76EE\u5F55\u4E0D\u50CF\u662F OpenFilm \u9879\u76EE\uFF0C\u5DF2\u53D6\u6D88\u3002";
+      if (message.includes("PROJECT_PATH_INVALID")) return "\u9879\u76EE\u8DEF\u5F84\u4E0D\u5408\u6CD5\uFF0C\u5DF2\u53D6\u6D88\u3002";
+      if (message.includes("UNKNOWN_PROJECT")) return "Studio \u91CC\u627E\u4E0D\u5230\u8FD9\u4E2A\u9879\u76EE\uFF0C\u5DF2\u53D6\u6D88\u3002";
+      return "\u5220\u9664\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5\u3002";
+    };
+    const toast = (message) => {
+      const node = doc.createElement("div");
+      node.setAttribute(TOAST, "");
+      node.textContent = message;
+      node.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483002;max-width:min(560px,calc(100vw - 32px));padding:8px 12px;border-radius:8px;background:var(--bg-elevated,#232325);border:1px solid var(--border-subtle,rgba(255,255,255,.14));box-shadow:0 10px 30px rgba(0,0,0,.4);font:12px/1.5 system-ui,sans-serif;color:inherit;word-break:break-all;";
+      doc.body.append(node);
+      doc.defaultView?.setTimeout?.(() => node.remove(), 8e3);
+    };
     const openConfirm = (project, session) => {
       closeMenus();
       const body = doc.createElement("div");
-      body.textContent = session ? "\u53EA\u5220\u9664\u8FD9\u6761\u4F1A\u8BDD\u548C\u804A\u5929\u8BB0\u5F55\uFF0C\u9879\u76EE\u6587\u4EF6\u5939\u548C film \u4F1A\u4FDD\u7559\u3002" : "\u5220\u9664\u8FD9\u4E2A\u9879\u76EE\u4E0B\u7684\u5168\u90E8\u4F1A\u8BDD\u548C\u804A\u5929\u8BB0\u5F55\uFF1B\u9879\u76EE\u6587\u4EF6\u5939\u548C film \u4F1A\u4FDD\u7559\u3002";
-      const { overlay } = openModal(session ? "\u5220\u9664\u4F1A\u8BDD" : "\u5220\u9664\u5168\u90E8\u4F1A\u8BDD", body, [
-        ["\u53D6\u6D88", () => overlay.remove(), false],
-        ["\u5220\u9664", async () => {
-          overlay.remove();
+      body.textContent = session ? "\u53EA\u5220\u9664\u8FD9\u6761\u5BF9\u8BDD\u548C\u804A\u5929\u8BB0\u5F55\uFF1B\u9879\u76EE\u6587\u4EF6\u5939\u3001film \u548C\u5176\u5B83\u5BF9\u8BDD\u90FD\u4E0D\u52A8\u3002" : "\u5220\u9664\u8FD9\u4E2A\u9879\u76EE\u4E0B\u7684\u5168\u90E8\u5BF9\u8BDD\u548C\u804A\u5929\u8BB0\u5F55\uFF1B\u9879\u76EE\u6587\u4EF6\u5939\u548C film \u4F1A\u4FDD\u7559\u3002";
+      const { overlay } = openModal(session ? "\u5220\u9664\u5BF9\u8BDD" : "\u6E05\u7A7A\u5BF9\u8BDD\uFF08\u4FDD\u7559\u9879\u76EE\uFF09", body, [
+        ["\u53D6\u6D88", () => overlay.remove(), null],
+        ["\u5220\u9664", async (button) => {
+          button.disabled = true;
           try {
             await postJson("/api/no996-openfilm/editing-delete", {
               projectId: project.projectId,
               ...session ? { sessionId: session.sessionId } : {}
             });
+            overlay.remove();
             refresh();
-          } catch {
+          } catch (failure) {
+            button.disabled = false;
+            toast(deleteMessage(failure));
           }
-        }, true]
+        }, "danger"]
       ]);
+    };
+    const openDeleteProject = (project) => {
+      closeMenus();
+      const title = projectDisplayTitle(project);
+      const count = Array.isArray(project.sessions) ? project.sessions.length : 0;
+      const body = doc.createElement("div");
+      const details = doc.createElement("div");
+      const lines = [];
+      if (typeof project.path === "string" && project.path) lines.push(`\u4F4D\u7F6E\uFF1A${project.path}`);
+      lines.push(count ? `\u5C06\u5220\u9664 ${count} \u4E2A\u5BF9\u8BDD\u548C\u804A\u5929\u8BB0\u5F55\uFF1B\u9879\u76EE\u91CC\u7684 film\u3001\u7D20\u6750\u3001.film/.openfilm \u4F1A\u4E00\u8D77\u5904\u7406\u3002` : "\u5C06\u5220\u9664\u8FD9\u4E2A\u9879\u76EE\u7684\u6587\u4EF6\u5939\u3001film\u3001\u7D20\u6750\u548C\u5176\u4E2D\u7684\u5BF9\u8BDD\u8BB0\u5F55\u3002");
+      details.textContent = lines.join("\n");
+      details.style.cssText = "white-space:pre-wrap;word-break:break-all;";
+      body.append(details);
+      const choice = doc.createElement("div");
+      choice.style.cssText = "display:flex;flex-direction:column;gap:6px;margin:10px 0 4px;";
+      const name = `n996-delete-${Math.random().toString(36).slice(2)}`;
+      const option = (value, label, checked) => {
+        const line = doc.createElement("label");
+        line.style.cssText = "display:flex;align-items:center;gap:8px;cursor:pointer;";
+        const input = doc.createElement("input");
+        input.type = "radio";
+        input.name = name;
+        input.value = value;
+        input.checked = checked;
+        input.style.cssText = "margin:0;";
+        const textNode = doc.createElement("span");
+        textNode.textContent = label;
+        line.append(input, textNode);
+        choice.append(line);
+        return input;
+      };
+      option("trash", "\u79FB\u5165\u56DE\u6536\u7AD9\uFF08\u53EF\u624B\u52A8\u627E\u56DE\uFF09", true);
+      const permanent = option("permanent", "\u5F7B\u5E95\u5220\u9664\uFF0C\u4E0D\u53EF\u6062\u590D", false);
+      body.append(choice);
+      const note = doc.createElement("div");
+      note.hidden = true;
+      note.style.cssText = "color:var(--dsw-alias-state-error-primary, #e5484d);margin-top:8px;";
+      if (openProjectId() === project.projectId) {
+        note.hidden = false;
+        note.textContent = "\u8FD9\u4E2A\u9879\u76EE\u6B63\u5728\u89C6\u9891\u521B\u4F5C\u91CC\u6253\u5F00\uFF0C\u8BF7\u5148\u5207\u5230\u522B\u7684\u9879\u76EE\u518D\u5220\u9664\u3002";
+      }
+      body.append(note);
+      const { overlay, buttons } = openModal(`\u5220\u9664\u9879\u76EE\u300C${title}\u300D\uFF1F`, body, [
+        ["\u53D6\u6D88", () => overlay.remove(), null],
+        ["\u5220\u9664\u9879\u76EE", async (button) => {
+          if (button.disabled) return;
+          const original = button.textContent;
+          button.disabled = true;
+          button.textContent = "\u6B63\u5728\u5220\u9664\u2026";
+          note.hidden = true;
+          try {
+            const result = await postJson("/api/no996-openfilm/editing-delete-project", {
+              projectId: project.projectId,
+              permanent: permanent.checked
+            });
+            overlay.remove();
+            try {
+              if (openProjectId() === project.projectId) doc.defaultView?.localStorage?.removeItem("no996.openfilm.lastProject");
+            } catch {
+            }
+            refresh();
+            toast(result?.trashPath ? `\u5DF2\u5220\u9664\u9879\u76EE\u300C${title}\u300D\uFF0C\u6587\u4EF6\u5DF2\u79FB\u5165\u56DE\u6536\u7AD9\uFF1A${result.trashPath}` : `\u5DF2\u5F7B\u5E95\u5220\u9664\u9879\u76EE\u300C${title}\u300D\u3002`);
+          } catch (failure) {
+            button.disabled = false;
+            button.textContent = original;
+            note.hidden = false;
+            note.style.color = "var(--dsw-alias-state-error-primary, #e5484d)";
+            note.textContent = deleteMessage(failure);
+          }
+        }, "danger"]
+      ]);
+      if (openProjectId() === project.projectId) {
+        const primary = buttons[1];
+        primary.disabled = true;
+        primary.style.opacity = ".5";
+      }
+    };
+    const syncHeaderActions = () => {
+      if (!mounted) return;
+      const { header, actions } = mounted;
+      let searchRoot = header.querySelector("input");
+      while (searchRoot?.parentElement && searchRoot.parentElement !== header) {
+        searchRoot = searchRoot.parentElement;
+      }
+      const editing = mode === "editing";
+      for (const button of header.querySelectorAll("button")) {
+        if (button === trigger) continue;
+        if (searchRoot?.contains(button)) continue;
+        button.style.display = editing ? "none" : "";
+      }
+      if (actions) actions.style.display = editing ? "none" : "";
     };
     const applyMode = () => {
       if (!mounted || !trigger) return;
-      const { span, header, actions } = mounted;
-      trigger.textContent = mode === "editing" ? "\u7D20\u6750\u526A\u8F91\u533A \u25BE" : "\u5DE5\u4F5C\u533A \u25BE";
-      trigger.setAttribute("aria-label", mode === "editing" ? "\u5207\u6362\u5230\u5DE5\u4F5C\u533A\u5217\u8868" : "\u5207\u6362\u5230 OpenFilm \u7D20\u6750\u526A\u8F91\u533A");
+      const { span, header } = mounted;
+      trigger.replaceChildren();
+      const triggerLabel = doc.createElement("span");
+      triggerLabel.textContent = mode === "editing" ? EDITING_LABEL : "\u5DE5\u4F5C\u533A";
+      const triggerCaret = icon("chevron", 12);
+      triggerCaret.classList.add("n996-trigger-chevron");
+      trigger.append(triggerLabel, triggerCaret);
+      trigger.setAttribute("aria-haspopup", "menu");
+      trigger.setAttribute("aria-expanded", popover ? "true" : "false");
+      trigger.setAttribute("aria-label", mode === "editing" ? "\u5207\u6362\u5230\u5DE5\u4F5C\u533A\u5217\u8868" : `\u5207\u6362\u5230${EDITING_LABEL}`);
       trigger.style.padding = "2px 6px";
       trigger.style.borderRadius = "6px";
       trigger.style.background = mode === "editing" ? "var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.16))" : "none";
       span.style.display = "none";
       if (mode === "editing") header.setAttribute("data-no996-editing", "");
       else header.removeAttribute("data-no996-editing");
-      if (actions) actions.style.display = mode === "editing" ? "none" : "";
+      const measure = () => {
+        const width = trigger.getBoundingClientRect().width;
+        if (width > 0) header.style.setProperty("--n996-switch-w", `${Math.ceil(width) + 6}px`);
+      };
+      measure();
+      doc.defaultView?.requestAnimationFrame?.(measure);
+      syncHeaderActions();
       const container = listContainer(header);
       restoreHidden();
       if (mode === "editing") {
@@ -1032,19 +1336,27 @@
     const openPopover = () => {
       closePopover();
       if (!trigger) return;
+      trigger.classList.add("n996-open");
+      trigger.setAttribute("aria-expanded", "true");
       popover = doc.createElement("div");
       popover.setAttribute(POPOVER, "");
+      popover.setAttribute("role", "menu");
       popover.style.cssText = "position:fixed;z-index:2147483000;min-width:210px;padding:4px;border-radius:8px;background:var(--bg-elevated, #232325);border:1px solid var(--border-subtle, rgba(255,255,255,.12));box-shadow:0 10px 30px rgba(0,0,0,.45);font:13px system-ui,sans-serif;color:inherit;";
-      const item = (label, value) => {
+      const item = (label, value, iconName) => {
         const button = doc.createElement("button");
         button.type = "button";
-        button.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;";
-        button.textContent = label;
+        button.setAttribute("role", "menuitemradio");
+        button.setAttribute("aria-checked", mode === value ? "true" : "false");
+        button.style.cssText = "display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0;border-radius:6px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;transition:background-color .12s ease;";
+        if (iconName) button.append(icon(iconName, 15));
+        const textNode = doc.createElement("span");
+        textNode.style.cssText = "flex:1 1 auto;min-width:0;";
+        textNode.textContent = label;
+        button.append(textNode);
         if (mode === value) {
-          const check = doc.createElement("span");
-          check.textContent = "\u2713";
-          check.style.cssText = "opacity:.8;";
-          button.append(check);
+          const dot = icon("dot", 10);
+          dot.style.color = "var(--dsw-alias-state-business-primary, #4b7bec)";
+          button.append(dot);
         }
         button.addEventListener("mouseenter", () => {
           button.style.background = "var(--bg-hover, rgba(127,127,127,.14))";
@@ -1060,8 +1372,8 @@
         });
         popover.append(button);
       };
-      item("\u5DE5\u4F5C\u533A", "workspaces");
-      item("OpenFilm \u7D20\u6750\u526A\u8F91\u533A", "editing");
+      item("\u5DE5\u4F5C\u533A", "workspaces", "grid");
+      item(EDITING_LABEL, "editing", "clapper");
       const rect = trigger.getBoundingClientRect();
       popover.style.left = `${Math.max(8, Math.min(rect.left, (doc.defaultView?.innerWidth ?? 1200) - 230))}px`;
       popover.style.top = `${Math.round(rect.bottom + 4)}px`;
@@ -1080,9 +1392,14 @@
         cleanup();
         return;
       }
-      if (mounted && mounted.header === found.header && mounted.span === found.span && trigger?.isConnected && list?.isConnected) return;
+      if (mounted && mounted.header === found.header && mounted.span === found.span && trigger?.isConnected && list?.isConnected) {
+        syncHeaderActions();
+        return;
+      }
       cleanup();
+      ensureStyle();
       const { span, header, actions } = found;
+      header.setAttribute(SWITCH_HOST, "");
       trigger = doc.createElement("button");
       trigger.type = "button";
       trigger.setAttribute(SWITCH, "");
@@ -1092,6 +1409,12 @@
         event.stopPropagation();
         if (popover) closePopover();
         else openPopover();
+      });
+      trigger.addEventListener("mouseenter", () => {
+        trigger.style.background = mode === "editing" ? "var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.22))" : "var(--bg-hover, rgba(127,127,127,.12))";
+      });
+      trigger.addEventListener("mouseleave", () => {
+        trigger.style.background = mode === "editing" ? "var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.16))" : "none";
       });
       span.parentElement?.insertBefore(trigger, span);
       span.style.display = "none";
@@ -1105,15 +1428,6 @@
         if (list) renderRows(list, projects);
       };
       header.addEventListener("input", onSearch, true);
-      const viewButton = actions?.querySelector("button") ?? null;
-      if (viewButton) {
-        viewButton.addEventListener("click", (event) => {
-          if (mode !== "editing") return;
-          event.preventDefault();
-          event.stopPropagation();
-          openViewMenu(viewButton);
-        }, true);
-      }
       onDocumentClick = (event) => {
         const target = event.target?.closest?.('button, [role="button"], a');
         if (target && PANEL_LABELS.has(text(target.textContent)) && mode !== "editing") setMode("editing");

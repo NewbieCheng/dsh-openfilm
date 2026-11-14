@@ -10,3 +10,8 @@ node_modules/
 # 上游 checkout 缓存与开发态壳产物（不是发布内容）
 .upstream/
 .dev/
+# 开发期临时产物（Chrome profile、截图、帧）
+.tmp-*/
+.tmp-*
+# 发布产物不进 git（用 npm pack 生成到 dist/）
+dist/

@@ -111,6 +111,21 @@ export async function openOfficialChatStore(ctx, { z, requireVerifiedProject } =
     });
   }
 
+  /**
+   * Drop a project's complete chat record. Called only when the project folder
+   * itself is being deleted, so the usual folder verification would fail; the
+   * key is enough, and the table's delete is idempotent.
+   */
+  function remove(projectId) {
+    if (closing) return Promise.reject(failure('OFFICIAL_CHAT_CLOSED', 'Chat store is closing or closed'));
+    if (typeof projectId !== 'string' || !PROJECT_ID.test(projectId)) return Promise.reject(failure('OFFICIAL_CHAT_INPUT', 'A valid project ID is required'));
+    const key = keyOf(projectId);
+    const previous = inFlight.get(key);
+    const pending = (previous ? previous.catch(() => {}) : Promise.resolve()).then(() => table.delete(key));
+    inFlight.set(key, pending);
+    return pending.finally(() => { if (inFlight.get(key) === pending) inFlight.delete(key); });
+  }
+
   function saveSessions(projectId, { sessions, last, expectedRevision } = {}) {
     let copy;
     try { copy = snapshot({ sessions, last, expectedRevision }); } catch (error) { return Promise.reject(error); }
@@ -162,5 +177,5 @@ export async function openOfficialChatStore(ctx, { z, requireVerifiedProject } =
     }
     return closePromise;
   }
-  return Object.freeze({ load, saveSessions, saveTurn, close });
+  return Object.freeze({ load, saveSessions, saveTurn, remove, close });
 }
