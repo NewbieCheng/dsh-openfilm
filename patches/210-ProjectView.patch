@@ -1,0 +1,21 @@
+diff --git a/packages/openfilm/studio/ui/src/components/ProjectView.tsx b/packages/openfilm/studio/ui/src/components/ProjectView.tsx
+index ac36b35..f8ba6f1 100644
+--- a/packages/openfilm/studio/ui/src/components/ProjectView.tsx
++++ b/packages/openfilm/studio/ui/src/components/ProjectView.tsx
+@@ -80,6 +80,7 @@ import { decodes, type PlayCheck } from '@/lib/decodes';
+ import { factsOfProbe, mediaListingOf, resourceKindOf, srcHitsAsset, warmProjectMedia, type MediaListing, type MediaProxy, type MediaResult, type MediaSources, type WorkspaceResource } from '@/lib/workspace-resources';
+ import { recycleRefusalOf } from '@/lib/recycle';
+ import { BrandLoadingScreen } from './BrandLoadingScreen';
++import { WorkbenchAccountControls } from './WorkbenchAccount';
+ import { SettingsModal } from './settings/SettingsModal';
+ import { useSettings } from './settings/use-settings';
+ import { DesktopDialog } from './DesktopDialog';
+@@ -4587,6 +4588,8 @@ export function ProjectView({ projectId, onProject, onLeave }: {
+               </Tooltip>
+               </>)}
+               <ExportTray ref={exportTrayRef} projectId={projectId} onError={toast.showError} />
++              {/* Workbench account chip (truncated) left of reload; detail panel opens on the right. */}
++              <WorkbenchAccountControls onSettings={setSettingsOpen} />
+               {/* the edit or the canvas, in the panes' place: the one shown, its icon and name, and a click for the other */}
+               <Tooltip label={[t(canvasOpen ? 'canvas.toEdit' : 'canvas.toCanvas'), keyHint('work-mode')].filter(Boolean).join(' · ')} side="bottom">
+                 <button type="button" aria-label={t(canvasOpen ? 'canvas.toEdit' : 'canvas.toCanvas')} data-work-mode={canvasOpen ? 'canvas' : 'edit'} disabled={Boolean(layoutDraft.draft)} onClick={() => setCanvasOpen(!canvasOpen)}

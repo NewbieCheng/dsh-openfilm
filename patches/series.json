@@ -5,7 +5,7 @@
   },
   "generatedFrom": {
     "file": "patch.diff",
-    "sha256": "bb3e1389603fb2ed3246101ae750062dc87cae4107ae4c17a6d91dee944276a2"
+    "sha256": "92f4e5d555d0cac9a5acdd13e12ed10891fd08cd902e94f5950256fe7d5e8af9"
   },
   "patches": [
     {
@@ -145,48 +145,56 @@
       "bytes": 1633
     },
     {
-      "id": "180-RecoveryGate",
-      "file": "180-RecoveryGate.patch",
+      "id": "180-EnvironmentNotice",
+      "file": "180-EnvironmentNotice.patch",
+      "source": "apps/desktop/shell/EnvironmentNotice.tsx",
+      "group": "chat",
+      "sha256": "623d66b2babbd8bb98fdcd1b53c58e63c12f36e7a9c83e3ba6e50c8dad6e2d39",
+      "bytes": 9036
+    },
+    {
+      "id": "190-RecoveryGate",
+      "file": "190-RecoveryGate.patch",
       "source": "apps/desktop/shell/RecoveryGate.tsx",
       "group": "chat",
       "sha256": "412b5604f84055fc15c98ec4a13678c67a05db4d539ba1faedbd874c4830f9f8",
       "bytes": 2890
     },
     {
-      "id": "190-main",
-      "file": "190-main.patch",
+      "id": "200-main",
+      "file": "200-main.patch",
       "source": "apps/desktop/shell/main.tsx",
       "group": "chat",
-      "sha256": "0d275405b6aeffd67cf98679693676b77bb1d86ea3744e74506673cb9320e478",
-      "bytes": 948
+      "sha256": "db0586de999fb6e40d84229e3b06543d5df5d8d31d97aeb4f86e6dfb4d8c8d71",
+      "bytes": 1027
     },
     {
-      "id": "200-ProjectView",
-      "file": "200-ProjectView.patch",
+      "id": "210-ProjectView",
+      "file": "210-ProjectView.patch",
       "source": "packages/openfilm/studio/ui/src/components/ProjectView.tsx",
       "group": "chat",
       "sha256": "e735de7b410c6bbba5015d877dabfcbe1f24d93ff707e7da4d92829904ee2e17",
       "bytes": 1853
     },
     {
-      "id": "210-WorkbenchAccount",
-      "file": "210-WorkbenchAccount.patch",
+      "id": "220-WorkbenchAccount",
+      "file": "220-WorkbenchAccount.patch",
       "source": "packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx",
       "group": "chat",
       "sha256": "60afc68e056c75e48a90ba7ce0361a208bee54a6ae520ecd6d769a76aa99f803",
       "bytes": 15349
     },
     {
-      "id": "220-contract",
-      "file": "220-contract.patch",
+      "id": "230-contract",
+      "file": "230-contract.patch",
       "source": "packages/shared/src/contract.ts",
       "group": "shared",
       "sha256": "29ff9533aabfbc2373810234ae762e4f856b5e052dfc748ec0d1873ef24edb84",
       "bytes": 1729
     },
     {
-      "id": "230-markdown-blocks",
-      "file": "230-markdown-blocks.patch",
+      "id": "240-markdown-blocks",
+      "file": "240-markdown-blocks.patch",
       "source": "packages/shared/src/markdown-blocks.ts",
       "group": "shared",
       "sha256": "d9d3ec49a9eed7b40d02cf1099add6f047fe9bc376619f9dec3530a140248690",

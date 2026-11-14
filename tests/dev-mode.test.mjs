@@ -38,9 +38,10 @@ test('without dev mode and without a session, status is logged out', async (t) =
   assert.equal(status.dev, undefined);
 });
 
-test('shell-ui no longer probes on page load', () => {
+test('the environment check is source now, and nothing probes on load', () => {
   const source = readFileSync(join(root, 'assets', 'shell-ui.js'), 'utf8');
-  assert.match(source, /window\.__no996CheckTools=function\(\)\{run\(\);\};/);
+  // Moved into the shell source (apps/desktop/shell/EnvironmentNotice.tsx).
+  assert.doesNotMatch(source, /__no996CheckTools=/);
   // 页面加载时不得直接调用 run()：旧代码在环境面板 IIFE 末尾就跑了。
   assert.equal(/\n\s{4}run\(\);\n\s{2\}\)\(\);/.test(source), false);
 });
