@@ -8,7 +8,7 @@ rot-if: 拆分完成或策略改变
 
 # ADR-0008：两个巨型闭包按职责拆开，分两步走
 
-- 状态：生效（第一步、第二步前两批已落地，其余路由待迁）
+- 状态：生效（两步均已落地；14 条路由已迁 11 条，余 3 条）
 - 日期：2026-11-14
 
 ## 背景
@@ -47,22 +47,38 @@ rot-if: 拆分完成或策略改变
 | `src/studio-controller/router.mjs` | register/track/mount/rollback + 重复路径容忍 | 完成 |
 | `src/studio-controller/routes/system.mjs` | asr、system/check、system/install + 共享快照 | 完成（3 条） |
 | `src/studio-controller/routes/diagnostics.mjs` | client-log（枚举事件、512 B、仅本机浏览器） | 完成（1 条） |
+| `src/studio-controller/routes/assets.mjs` | attachment（64-hex 摘要 → 对象库） | 完成（1 条） |
+| `src/studio-controller/routes/chat.mjs` | mcp（唯一跳过 cookie 准入的路由） | 完成（1 条） |
+| `src/studio-controller/routes/editing.mjs` | editing-sessions/prefs/archive/delete/delete-project | 完成（5 条） |
 
-控制器 1,558 → 1,392 行。剩下的 10 条路由目标形态：
+控制器 1,558 → 1,141 行。剩下的 3 条路由目标形态：
 
 ```text
 src/studio-controller/
   index.mjs               createStudioController：构图 + 装配（目标 < 250 行）
   router.mjs              registerRoute/trackRoute/rollback（TDZ 保护留在这里）
   routes/editing.mjs      editing-sessions、editing-delete-project、archive
-  routes/diagnostics.mjs  diagnose、bootstrap（client-log 已迁）
-  routes/system.mjs       system/check、system/install、asr（已迁）
-  routes/chat.mjs         mcp、debug-url
-  routes/assets.mjs       attachment
-  routes/editing.mjs     editing-sessions/prefs/archive/delete/delete-project
+  routes/diagnostics.mjs  diagnose、bootstrap
+  routes/debug.mjs        debug-url（依赖 runtime/proxyFor/debugBridge，最重）
+  routes/pages.mjs        standalone、templates 页（内联 HTML）
+
+已迁：system×3、client-log、attachment、mcp、editing×5。
 ```
 
 每个 `registerX(deps)` 接收显式依赖（ctx、log、proxy、officialRpc、sessions…），不再捕获闭包。迁移顺序：先建 `router.mjs` 与依赖对象，再逐组搬路由，**每搬一组重跑 614 条测试**。
+
+## 教训：抽出来的代码会静默失作用域
+
+editing 五条路由搬出去时，第一版**编译通过、测试全绿**，但运行时会炸三处：
+
+1. `basename` 忘了 import（`node:path`），列表一旦走到"用文件夹名兜底"就 500；
+2. `officialStore` / `deleteEditingProject` / `acpAgentService` 是控制器闭包里的名字，
+   没进依赖对象 → ReferenceError，而且只在点开侧栏时才出现；
+3. `../editing-sessions.mjs` 的相对路径少了一层（应为 `../../`），模块加载即失败。
+
+源码文本测试（本节开头列的那 6 个）一条都没抓到，因为它们读的是**字符串**，不是行为。
+因此新增 `tests/editing-routes.test.mjs`：用桩件真的调用 handler，覆盖列表管道、405、
+依赖抛错降级、外部 peer 拒绝。搬剩下的路由时按同样方式补一个调用测试，而不是只改断言。
 
 ## 代价
 
@@ -72,4 +88,4 @@ src/studio-controller/
 
 ## 证据
 
-`src/studio-proxy/{websocket,upstream}.mjs`、`src/studio-controller/{http-body,turns,router}.mjs`、`src/studio-controller/routes/{system,diagnostics}.mjs`；`docs/reference/modules.md`（生成的行数清单）；`npm test` 618 条。
+`src/studio-proxy/{websocket,upstream}.mjs`、`src/studio-controller/{http-body,turns,router}.mjs`、`src/studio-controller/routes/{system,diagnostics,assets,chat,editing}.mjs`；`docs/reference/modules.md`（生成的行数清单）；`npm test` 618 条。

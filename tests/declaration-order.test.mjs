@@ -24,11 +24,16 @@ test('acpSessions is declared before archiveState reads it', () => {
   assert.ok(declared < read, 'archiveState runs at request time, but a TDZ read is still a crash');
 });
 
-test('the MCP endpoint exists before its route handler references it', () => {
-  const endpoint = at('const mcpEndpoint = createMcpEndpoint(');
-  const route = at("path: '/api/no996-openfilm/mcp'");
-  assert.ok(endpoint > 0 && route > 0);
-  assert.ok(endpoint < route);
+test('the MCP endpoint exists before the chat route is mounted', () => {
+  const read = path => readFileSync(fileURLToPath(new URL(`../${path}`, import.meta.url)), 'utf8');
+  const controller = read('src/studio-controller.mjs');
+  const endpoint = controller.indexOf('const mcpEndpoint = createMcpEndpoint(');
+  const mount = controller.indexOf('createChatRoutes({');
+  assert.ok(endpoint > 0, 'the endpoint is created in the controller');
+  assert.ok(mount > 0, 'the chat routes are mounted in the controller');
+  assert.ok(endpoint < mount, 'mounting before the endpoint exists would hand over undefined');
+  // The path itself moved to the chat module; that is where it must stay unique.
+  assert.match(read('src/studio-controller/routes/chat.mjs'), /path: '\/api\/no996-openfilm\/mcp'/);
 });
 
 test('the ACP service handle is declared before the RPC handlers read it', () => {

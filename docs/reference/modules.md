@@ -8,13 +8,13 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 # 模块清单（自动生成）
 
-> 生成命令：`npm run docs:gen`。105 个模块、15302 行。
-> **无同名测试**的模块：36 个 —— 这是待补清单，不是失败项。
+> 生成命令：`npm run docs:gen`。108 个模块、15374 行。
+> **无同名测试**的模块：39 个 —— 这是待补清单，不是失败项。
 > "同名测试"按 `tests/*<模块名>*.test.mjs` 匹配，只说明"有测试提到它"，不保证覆盖。
 
 | 模块 | 行数 | 导出 | 同名测试 |
 |---|---|---|---|
-| `src/studio-controller.mjs` | 1392 | createStudioController | **无** |
+| `src/studio-controller.mjs` | 1144 | createStudioController | **无** |
 | `src/sidebar-editing.mjs` | 936 | EDITING_LABEL, installWorkspaceSwitch | `sidebar-editing-rows.test.mjs` |
 | `src/studio-proxy.mjs` | 852 | startStudioProxy | `studio-proxy-files.test.mjs` |
 | `src/acp-agent-service.mjs` | 561 | catalogFromConfigOptions, createAcpAgentService | `acp-agent-service.test.mjs` |
@@ -26,6 +26,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/tool-installer.mjs` | 256 | TOOL_SOURCES, createToolInstaller, readTarMember | `tool-installer.test.mjs` |
 | `src/transcribe-service.mjs` | 255 | CACHE_VERSION, createTranscribeService, fingerprint | **无** |
 | `src/acp-client.mjs` | 251 | createAcpClient, resolveAcpCommand | `acp-client.test.mjs` |
+| `src/studio-controller/routes/editing.mjs` | 249 | createEditingRoutes | **无** |
 | `src/official-permission.mjs` | 237 | FULL_ACCESS, PROJECT_PERMISSIONS_DOMAIN, WORKSPACE_WRITE, openProjectPermissions | `official-permission.test.mjs` |
 | `src/captcha-challenge.mjs` | 236 | createCaptchaChallenge | **无** |
 | `src/client-entry.js` | 197 | — | **无** |
@@ -104,12 +105,14 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/official-shell.mjs` | 40 | resolveOfficialShell | **无** |
 | `src/draft-tool.mjs` | 38 | createDraftTool | `draft-tool.test.mjs` |
 | `src/studio-controller/routes/diagnostics.mjs` | 38 | createDiagnosticsRoutes | **无** |
+| `src/studio-controller/routes/assets.mjs` | 37 | createAssetRoutes | **无** |
 | `src/panel-keepalive.mjs` | 36 | createActivationStore | `panel-keepalive.test.mjs` |
 | `src/style-lab.mjs` | 36 | styleLabInjection, styleLabVersion | `style-lab.test.mjs` |
 | `src/studio-controller/turns.mjs` | 35 | createTurnLog | **无** |
 | `src/asr-media.mjs` | 34 | createMediaEdge | `asr-media.test.mjs` |
 | `src/guide-tool.mjs` | 34 | createGuideTool | **无** |
 | `src/official-model-catalog.mjs` | 34 | officialModelOptions | **无** |
+| `src/studio-controller/routes/chat.mjs` | 34 | createChatRoutes | **无** |
 | `src/auth-client.mjs` | 32 | authAction, authEndpoint | **无** |
 | `src/dsh-ai.mjs` | 29 | createDshAskAgent | **无** |
 | `src/editing-sessions.mjs` | 29 | buildEditingProjects | `editing-sessions.test.mjs` |
@@ -122,10 +125,11 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 ## 无同名测试
 
-- `src/studio-controller.mjs`（1392 行）
+- `src/studio-controller.mjs`（1144 行）
 - `src/login-page.mjs`（440 行）
 - `src/studio-panel.mjs`（370 行）
 - `src/transcribe-service.mjs`（255 行）
+- `src/studio-controller/routes/editing.mjs`（249 行）
 - `src/captcha-challenge.mjs`（236 行）
 - `src/client-entry.js`（197 行）
 - `src/studio-entry.js`（169 行）
@@ -151,9 +155,11 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 - `src/official-event-hub.mjs`（43 行）
 - `src/official-shell.mjs`（40 行）
 - `src/studio-controller/routes/diagnostics.mjs`（38 行）
+- `src/studio-controller/routes/assets.mjs`（37 行）
 - `src/studio-controller/turns.mjs`（35 行）
 - `src/guide-tool.mjs`（34 行）
 - `src/official-model-catalog.mjs`（34 行）
+- `src/studio-controller/routes/chat.mjs`（34 行）
 - `src/auth-client.mjs`（32 行）
 - `src/dsh-ai.mjs`（29 行）
 - `src/studio-controller/http-body.mjs`（15 行）
