@@ -79,6 +79,7 @@ import { createRouter } from './studio-controller/router.mjs';
 import { createAssetRoutes } from './studio-controller/routes/assets.mjs';
 import { createChatRoutes } from './studio-controller/routes/chat.mjs';
 import { createBootstrapRoute } from './studio-controller/routes/bootstrap.mjs';
+import { createDiagnoseRoute } from './studio-controller/routes/diagnose.mjs';
 import { createDiagnosticsRoutes } from './studio-controller/routes/diagnostics.mjs';
 import { createEditingRoutes } from './studio-controller/routes/editing.mjs';
 import { createSystemRoutes } from './studio-controller/routes/system.mjs';
@@ -795,7 +796,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   let unregisterTemplateBridge;
   let unregisterAuthBridge;
   let unregisterArchiveBridge;
-  let unregister;
   let unregisterAttachment;
   let unregisterClientLog;
   let unregisterStandalone;
@@ -839,71 +839,22 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     },
     isDisposed: () => disposed,
   }));
-  unregister = trackRoute(registerRoute({
-    kind: 'exact', path: '/api/no996-openfilm/diagnose',
-    async handler(req, res) {
-      res.setHeader('cache-control', 'no-store');
-      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end(); return; }
-      const admission = ctx.connection.admit({ headers: req.headers });
-      if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('{}'); return; }
-      const proxy = await lastProxy?.catch(() => undefined);
-      // Which project the page is asking about, if it named one. Both the turn
-      // record and the grouping state are per project.
-      const diagnoseProject = await (async () => {
-        try {
-          const chunks = [];
-          for await (const chunk of req) { chunks.push(chunk); if (Buffer.concat(chunks).byteLength > 4096) return ''; }
-          const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-          const id = typeof parsed?.projectId === 'string' ? parsed.projectId : '';
-          return /^[A-Za-z0-9_-]{6,40}$/.test(id) ? id : '';
-        } catch { return ''; }
-      })();
-      // Whether the video-editing preset actually activated, not just whether its
-      // row exists: the roster carries each preset's activation diagnostic.
-      let preset = null;
-      try {
-        const registry = ctx.get?.('agentPresets');
-        const roster = typeof registry?.list === 'function' ? await registry.list() : [];
-        const found = roster.find(item => item?.id === 'openfilm-video-editing');
-        preset = found ? { id: 'openfilm-video-editing', ok: !found.error && !found.failure, detail: String(found.error ?? found.failure ?? 'ok').slice(0, 200) } : { id: 'openfilm-video-editing', ok: false, detail: 'not registered' };
-      } catch (error) { preset = { id: 'openfilm-video-editing', ok: false, detail: String(error?.message || error).slice(0, 200) }; }
-      const studio = await runtime.health();
-      if (studio.running !== lastHealthRunning) {
-        log.info('studio-health', { running: studio.running });
-        lastHealthRunning = studio.running;
-      }
-      const body = JSON.stringify({
-        mode: officialShell ? 'official' : 'dsh',
-        studio,
-        preset,
-        proxy: proxy?.diagnostics?.() ?? null,
-        // Whether this Host can see DSH's archive set, and how many Sessions it
-        // currently hides. A zero count on an available watcher means "none".
-        archive: { available: archive.available, archivedCount: archive.archivedIds().length },
-        // The three-link evidence for "the panel shows nothing": what the bridge
-        // published, whether a live stream took it, and what the page counted.
-        bridge: bridgeTrace.snapshot(),
-        // Whether this build can switch a Session's permission at all, and what it
-        // offers — the first thing to check when the consent card stays silent.
-        permission: await (async () => {
-          try {
-            const store = await permissions();
-            return { available: store.available(), names: store.names() };
-          } catch (error) { return { available: false, error: String(error?.code ?? 'PERMISSION_UNAVAILABLE') }; }
-        })(),
-        // Per-turn evidence for "the panel shows nothing": frames received, updates
-        // emitted, and which frames died in translation. Without this, exhausted
-        // agent output and dropped events look identical.
-        turns: agentService ? agentService.diagnose(diagnoseProject) : null,
-        // Whether the conversation is really grouped under the project's folder.
-        grouping: 'acp',
-        // The last few events, so a support message can carry the history that
-        // explains the symptom without asking for a file path.
-        log: { file: log.file, tail: log.tail(12) },
-      });
-      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
-    },
-  }));
+  // Diagnose (evidence for "the panel shows nothing") lives in its own module.
+  const diagnose = createDiagnoseRoute({
+    ctx,
+    register: registerRoute,
+    track: trackRoute,
+    log,
+    officialShell,
+    archive,
+    bridgeTrace,
+    runtime,
+    permissions,
+    agentService,
+    getLastProxy: () => lastProxy,
+  });
+  const [unregisterDiagnose] = diagnose.disposers;
+
   // Attachment bytes (validated digest → object store) live in their own module.
   const assets = createAssetRoutes({ ctx, register: registerRoute, track: trackRoute });
   const [unregisterAttachment] = assets.disposers;

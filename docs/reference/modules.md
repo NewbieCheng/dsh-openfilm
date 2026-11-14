@@ -8,13 +8,13 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 # 模块清单（自动生成）
 
-> 生成命令：`npm run docs:gen`。109 个模块、15411 行。
-> **无同名测试**的模块：40 个 —— 这是待补清单，不是失败项。
+> 生成命令：`npm run docs:gen`。110 个模块、15450 行。
+> **无同名测试**的模块：41 个 —— 这是待补清单，不是失败项。
 > "同名测试"按 `tests/*<模块名>*.test.mjs` 匹配，只说明"有测试提到它"，不保证覆盖。
 
 | 模块 | 行数 | 导出 | 同名测试 |
 |---|---|---|---|
-| `src/studio-controller.mjs` | 1105 | createStudioController | **无** |
+| `src/studio-controller.mjs` | 1056 | createStudioController | **无** |
 | `src/sidebar-editing.mjs` | 936 | EDITING_LABEL, installWorkspaceSwitch | `sidebar-editing-rows.test.mjs` |
 | `src/studio-proxy.mjs` | 852 | startStudioProxy | `studio-proxy-files.test.mjs` |
 | `src/acp-agent-service.mjs` | 561 | catalogFromConfigOptions, createAcpAgentService | `acp-agent-service.test.mjs` |
@@ -76,6 +76,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/asr-segments.mjs` | 95 | SEGMENT_LIMITS, normalizeSegments, planSegments | `asr-segments.test.mjs` |
 | `src/acp-profile-models.mjs` | 91 | activeProfileDir, applyAcpModelProviders, providerBlocks | `acp-profile-models.test.mjs` |
 | `src/asr-sensevoice.mjs` | 89 | createSenseVoiceRecognizer, loadSherpa | **无** |
+| `src/studio-controller/routes/diagnose.mjs` | 88 | createDiagnoseRoute | **无** |
 | `src/get-tool.mjs` | 87 | createGetTool | **无** |
 | `src/download-sources.mjs` | 86 | MODEL_BASES, MODEL_REPO, TOOL_SOURCES, augmentPath, knownBinaryDirs, modelBases… | `download-sources.test.mjs` |
 | `src/theme.mjs` | 82 | THEME_SURFACES, createTheme, theme, themeSurfaceFor | `studio-debug-theme.test.mjs`、`theme-bake.test.mjs`、`theme-injection.test.mjs`、`theme.test.mjs` |
@@ -126,7 +127,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 ## 无同名测试
 
-- `src/studio-controller.mjs`（1105 行）
+- `src/studio-controller.mjs`（1056 行）
 - `src/login-page.mjs`（440 行）
 - `src/studio-panel.mjs`（370 行）
 - `src/transcribe-service.mjs`（255 行）
@@ -143,6 +144,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 - `src/studio-controller/routes/system.mjs`（107 行）
 - `src/studio-proxy/upstream.mjs`（103 行）
 - `src/asr-sensevoice.mjs`（89 行）
+- `src/studio-controller/routes/diagnose.mjs`（88 行）
 - `src/get-tool.mjs`（87 行）
 - `src/studio-controller/routes/bootstrap.mjs`（76 行）
 - `src/studio-proxy-auth.mjs`（76 行）
