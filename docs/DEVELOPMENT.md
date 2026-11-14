@@ -193,6 +193,8 @@ npm run shell:bake  # 发版前把主题烘焙进 vendor/official-shell/ui
 - 覆盖重点：事件翻译与顺序、思考与工具行、错误分类、模板复制/限额/链接拒绝、草稿原子性与冲突、会话归属、`.film/opened`、CLI 动词收窄、诊断判词。
 - 上游界面断言在 `tests/kernel-shell-match.test.mjs`：检查补丁里必须出现的标记（`data-thought`、`data-tool-name`、`kind:'image'`、`InlinePicture`），改界面时补丁要一起更新。
 - 新增行为必须带测试；本仓历史 bug 大多是"逻辑没问题但顺序/形状假设错"。
+- CI（`.github/workflows/ci.yml`）跑 `windows-latest`：`npm ci` → lint → test → docs/brand/templates/patches → 无构建产物 → 工作区干净。**只在 Windows 跑是有意的**（支持面就是 Windows 桌面集成，见 workflow 顶部注释）；加系统进矩阵要同时做真机验收。
+- 行尾统一 LF（`.gitattributes`）：Windows runner 默认 `core.autocrlf=true`，不锁行尾时逐字节比较与钉死哈希会在 runner 上假红。
 
 ---
 
