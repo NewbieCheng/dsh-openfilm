@@ -7,7 +7,7 @@
 - 修法：端点改到 `/api/no996-openfilm/mcp-host`，路由与交给子进程的 URL 同一处取值；`tests/mcp-endpoint-path.test.mjs` 钉住"不能用保留路径、两边必须一致"。
 - 可观测：每次给子进程发凭据前，Host 自己先 POST 一次 `initialize`，把实际状态码写进 `plugin.log`（`mcp-self-check`）。下次这类故障日志里直接有状态码。
 - 另修：`registerRoute` 在声明前被使用（TDZ），导致插件 activate 阶段报 `Cannot access 'registerRoute' before initialization`、状态「异常」；`tests/declaration-order.test.mjs` 补了顺序断言。
-- 新增 [`docs/playbooks/incidents.md`](docs/playbooks/incidents.md)：故障账（症状/根因/为什么没抓到/现在靠什么挡住）。
+- 两次真机故障记进 [`docs/playbooks/incident.md`](docs/playbooks/incident.md)（现象/根因/改法/边界），并在「反复出现的坑」表里加一行「保留路径」。
 
 ## 0.15.1 —— 剪辑区视觉收口：SVG 图标、无对勾选中、入场动效
 

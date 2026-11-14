@@ -25,6 +25,49 @@ rot-if: 出现新的故障类别，或某个根因被结构性消除
 
 ## 2. 故障档案
 
+### 2026-11-14 · 对话全挂、模型只剩「默认」：MCP 端点占了 DSH 保留路径
+
+**现象**：面板 `OpenFilm capability unavailable: agent:prompt — [503]
+ACP_REQUEST_FAILED`；模型菜单只剩「默认」；`plugin.log` 每两秒一轮
+`mcp-client(no996-openfilm): initial connection or tool synchronization failed`
+→ `acp-session-failed` → `official-rpc-failed channel:"agent:models"`。
+
+**根因**：MCP 端点注册在 `/api/no996-openfilm/mcp`。DSH 保留所有 `/api/<plugin>/mcp`
+给插件清单里声明的 MCP 服务，我们不是那个用途时 Host 在路由之前就用 400 回掉——
+自己的 handler 一次都没跑到，ACP 子进程连不上端点，`session/new` 失败，于是模型、
+对话、思考强度全都没了。
+
+**怎么一眼分辨**（不用读 DSH 源码）：
+
+| 路径 | GET 返回 | 含义 |
+|---|---|---|
+| 已注册的 exact 路由（如 `/bootstrap`） | 405 | 我们的 handler 跑到了 |
+| 没注册的路径（如 `/mcp-session`） | 401 | 插件作用域守卫 |
+| 保留路径 `/mcp` | **400 空 body** | DSH 自己接走了，不是我们的代码 |
+
+**改法**：端点改 `/api/no996-openfilm/mcp-host`；交给子进程的 URL 与路由同一处取值，
+`tests/mcp-endpoint-path.test.mjs` 钉住"不能用保留路径、两边必须一致"；每次发凭据前
+Host 自己 POST 一次 `initialize`，把状态码写进 `plugin.log`（`mcp-self-check`）。
+
+**边界**：只改了路径与可观测性，没动 MCP 协议本身；子进程仍只拿到这一条 bearer。
+
+### 2026-11-14 · 插件「启用失败」：Cannot access 'registerRoute' before initialization
+
+**现象**：插件管理状态「异常」，红条 `1 entry did not activate dsh-openfilm`，
+面板完全打不开。与 2026-11-12 那条 `trackRoute` 是同一个病的新位置。
+
+**根因**：路由拆模块后，`createSystemRoutes({ register: registerRoute })` 排在
+`const registerRoute = router.register;` 之前；同作用域先读后声明是 TDZ。
+
+**为什么 CI 是绿的**：没有任何测试真的**调用** `createStudioController`——拆出去的
+模块有测试，静态 `import` 只解析不执行函数体。
+
+**改法**：`createRouter` 与三个绑定整体上移到第一个使用者之前；
+`tests/declaration-order.test.mjs` 断言三个绑定紧挨着 router，且四个 `create*Routes({`
+都在绑定之后。
+
+**边界**：只钉住这一类（路由绑定）。其他"声明顺序"错误仍靠读代码发现。
+
 ### 2026-11-12 · 「本地服务」里的模型不能靠注入加
 
 **现象**：给「设置 → 服务 → 本地服务」加 SenseVoice，先在 `assets/shell-ui.js` 里往弹窗 DOM 追加卡片。视觉上和原生的行不是一种东西，用户明确拒绝注入。
@@ -96,6 +139,7 @@ UI 完全由 `/api/local-models` 的数据驱动，所以**不需要重建 Studi
 | 文档假设 | 测试数、文件数写死在多份文档里 | 数字不抄，能生成就生成 |
 | 双实例 | profile 里同时有用户层与 bundle 条目，两个实例都 apply，第二个抛 "already registered"，整个插件 failed | 只留一个条目 |
 | TDZ | 路由注册块写在 `const trackRoute` 之前 | `Cannot access 'trackRoute' before initialization`，apply 抛错 = 整个插件失败 |
+| 保留路径 | 自己的 handler 挂在 `/api/<plugin>/mcp`，请求被 Host 的 400 接走 | 换个路径；`curl` 一条已注册路由对比 405/401/400 |
 
 ## 4. 新增一条故障记录
 
