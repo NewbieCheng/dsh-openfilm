@@ -42,11 +42,17 @@ test('the template picker is fully in the shell source now', () => {
   assert.doesNotMatch(injection, /no996-template-modal/);
 });
 
-test('the login gate ships in the bundle, not as a page script', () => {
+test('the login gate is a component, not a page script', () => {
+  // The gate used to be a 643-line DOM injection that appended itself to
+  // documentElement. It is LoginGate.tsx now (same copy, same stylesheet); only the
+  // generated city backdrop is still a side-effect import.
   assert.doesNotMatch(injection, /no996-shell-login/);
   assert.doesNotMatch(injection, /__NOF_MOUNT_CITY__/);
   assert.match(bundle, /no996-shell-login/);
   assert.match(bundle, /__NOF_MOUNT_CITY__/);
+  assert.match(bundle, /欢迎回来，准点下班。/);
+  assert.match(bundle, /登录并继续剪辑/);
+  assert.match(bundle, /记住本机账号和密码/);
 });
 
 test('both components are mounted by the shell entry', () => {

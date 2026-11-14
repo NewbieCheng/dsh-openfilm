@@ -27,7 +27,8 @@ rot-if: 新增/撤掉任何一处没走源码的改动
 | 账号条 / 登录态 | `packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx`（React 源码，补丁） |
 | 故障恢复卡（工作台已停止运行） | `apps/desktop/shell/RecoveryGate.tsx`（React 源码，补丁；2026-11 从 `assets/shell-ui.js` 迁出） |
 | 主题 token + 覆盖 | 发布产物在构建期由 `npm run shell:bake` 烘进 `vendor/official-shell/ui/assets/no996-theme.css`；运行时那份只是开发热更 |
-| 全屏登录门 + 城市背景 | 构建期由 `npm run login:sync` 把 `assets/shell-login.js`、`assets/login-city.js` 复制进上游壳并打包；界面代码仍是原来的 DOM 实现，只是不再按页注入 |
+| 全屏登录门 | `apps/desktop/shell/LoginGate.tsx`（React，样式 `login.css`）；`assets/shell-login.js` 只作迁移期的参考实现 |
+| 城市背景 | 生成物 `assets/login-city.js`，构建期由 `npm run login:sync` 复制进上游壳，`import` 后挂 `window.__NOF_MOUNT_CITY__` |
 | 视频工具环境检查卡 | 仍是注入，见上表 |
 
 ## 2. 侧栏那一处为什么是"窄注入"

@@ -61,8 +61,10 @@ function main() {
     'apps/desktop/shell/RecoveryGate.tsx',
     'apps/desktop/shell/EnvironmentNotice.tsx',
     'apps/desktop/chat/src/components/TemplatePicker.tsx',
-    'apps/desktop/shell/login-gate.js',
     'apps/desktop/shell/login-city.js',
+    'apps/desktop/shell/LoginGate.tsx',
+    'apps/desktop/shell/login.css',
+    'apps/desktop/shell/brand-mark.ts',
   ];
   // Include staged + unstaged edits, and brand-new files on the PATCHED
   // allowlist (plain --untracked-files=no would omit OnboardingGate-style adds).

@@ -22,7 +22,7 @@ rot-if: 每个批次开始/结束、任何"待拍板"有结论
 | U5 故障卡/恢复卡转源码 | `apps/desktop/shell/RecoveryGate.tsx`，注入已删 | 源码完成 / 真机待验 |
 | U2 环境检查卡转源码 | `apps/desktop/shell/EnvironmentNotice.tsx`，注入已删 | 源码完成 / 真机待验 |
 | U1 模板选择弹窗转源码 | `apps/desktop/chat/src/components/TemplatePicker.tsx`；旧注入先让路不删 | 源码完成 / 真机待验 |
-| U4 登录首页进壳 | 构建期 `login:sync` + 壳内 import，界面实现仍是原 DOM | 已不再注入 / 真机待验 |
+| U4 登录首页 | `LoginGate.tsx` + `login.css`，城市背景仍由 `login:sync` 复制 | 源码完成 / 真机待验 |
 | U3 账号条/登录态 | 本来就在 `WorkbenchAccount.tsx`（补丁） | 无需迁移 |
 | U6 主题进构建 | 发布产物由 `shell:bake` 烘进，运行时那份只是开发热更 | 无需迁移 |
 | U1 旧注入删除 | 真机验收通过后删掉 `shell-ui.js` 里的弹窗与让路判断 | 待做（验收后） |

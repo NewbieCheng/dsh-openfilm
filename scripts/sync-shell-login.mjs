@@ -15,9 +15,11 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const TARGET = join(ROOT, '.upstream', 'openfilm', 'apps', 'desktop', 'shell');
 
+// Only the city is still shared: the gate itself is LoginGate.tsx in the shell now,
+// and assets/shell-login.js stays behind as the reference until the React gate is
+// verified on a real machine.
 const PAIRS = [
   ['assets/login-city.js', 'login-city.js'],
-  ['assets/shell-login.js', 'login-gate.js'],
 ];
 
 function sync({ check }) {

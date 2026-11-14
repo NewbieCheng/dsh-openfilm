@@ -1,0 +1,22 @@
+diff --git a/apps/desktop/shell/main.tsx b/apps/desktop/shell/main.tsx
+index bb5a8ea..cdf82d1 100644
+--- a/apps/desktop/shell/main.tsx
++++ b/apps/desktop/shell/main.tsx
+@@ -10,10 +10,16 @@ import { FocusNav } from 'openfilm/studio-ui/components/FocusNav.tsx';
+ import { applyStudioHost } from 'openfilm/studio-ui/lib/host.ts';
+ import { mountChat } from '../chat/src/mount';
+ import { CanvasModelPicker, canvasWritingModel } from '../chat/src/components/ModelPopover';
++import { RecoveryGate } from './RecoveryGate';
++import { EnvironmentNotice } from './EnvironmentNotice';
++// The city backdrop is a generated module that only defines window.__NOF_MOUNT_CITY__;
++// the gate itself is React (LoginGate.tsx).
++import './login-city';
++import { LoginGate } from './LoginGate';
+ import './shell.css';
+ import '../chat/src/chat.css';
+ 
+ host.canvasWriting = { Picker: CanvasModelPicker, selection: canvasWritingModel };
+ applyStudioHost();
+-createRoot(document.getElementById('root')!).render(<StrictMode><FocusNav /><App /></StrictMode>);
++createRoot(document.getElementById('root')!).render(<StrictMode><FocusNav /><App /><RecoveryGate /><EnvironmentNotice /><LoginGate /></StrictMode>);
+ void mountChat(document.getElementById('of-chat')!);
