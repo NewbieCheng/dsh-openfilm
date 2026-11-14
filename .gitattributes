@@ -1,0 +1,19 @@
+# LF everywhere: the index and every checkout.
+#
+# A Windows CI runner checks out with core.autocrlf=true by default, which turned
+# every text file into CRLF there and broke byte-level comparisons on the runner
+# while passing locally: generated docs, the pinned film-doc SHA-256, template page
+# HTML, and the AcpClient shell-quoting test all failed for that one reason.
+* text=auto eol=lf
+
+# Real binaries: never normalize, never try to diff text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff2 binary
+*.mp4 binary
+*.tgz binary
+*.zip binary
