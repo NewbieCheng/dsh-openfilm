@@ -5,7 +5,7 @@
   },
   "generatedFrom": {
     "file": "patch.diff",
-    "sha256": "d2f9ae9a0ca3151d23cf75adab6a669e7e8aeffd731760927ce15b8ba8a87fe7"
+    "sha256": "3ee83c5efb8fa3ed4298f85aaccba4129c942353092aafd40abb393a5352da07"
   },
   "patches": [
     {
@@ -13,8 +13,8 @@
       "file": "010-App.patch",
       "source": "apps/desktop/chat/src/App.tsx",
       "group": "chat",
-      "sha256": "272f58718a400bb813b43f9e800cb248927857961b00f3d1d46bf71ca557456c",
-      "bytes": 5127
+      "sha256": "f4f1b8868893e226e5c5a2f6fa5f18a6146cb63c5581ff8aec1cee828899d901",
+      "bytes": 6849
     },
     {
       "id": "020-AgentActivityRow",
@@ -141,8 +141,8 @@
       "file": "170-chat-store.patch",
       "source": "apps/desktop/chat/src/lib/chat-store.ts",
       "group": "chat",
-      "sha256": "f55aec1053550487ed26a5a0515901207f8a14be9b3c32036d52bbe1a0543e80",
-      "bytes": 1143
+      "sha256": "af828c7313279b061785c42005cb318bc3b939a395bb583b2ed937daa50ca990",
+      "bytes": 2606
     },
     {
       "id": "180-local-agent-run",

@@ -1,8 +1,36 @@
 diff --git a/apps/desktop/chat/src/lib/chat-store.ts b/apps/desktop/chat/src/lib/chat-store.ts
-index 9134f7a..7eb8990 100644
+index 9134f7a..6380e31 100644
 --- a/apps/desktop/chat/src/lib/chat-store.ts
 +++ b/apps/desktop/chat/src/lib/chat-store.ts
-@@ -88,6 +88,21 @@ export function setChatSessions(project: string, sessions: ProjectSessionItem[])
+@@ -82,12 +82,49 @@ async function readAgain(project: string): Promise<void> {
+   joinKept(record(project), kept);
+ }
+ 
++/**
++ * dsh-openfilm: re-read this project's conversations from the Host and replace what
++ * the page holds.
++ *
++ * The sidebar outside this page can delete or add a conversation, and Studio can
++ * lose a project folder while the chat is open. This page keeps its list in state
++ * from when the project opened, so without a re-read the session bar keeps drawing
++ * a conversation that no longer exists. Returns whether anything changed, so a
++ * poll can skip the re-render.
++ */
++export async function refreshChatSessions(project: string): Promise<boolean> {
++  let kept: { sessions?: ProjectSessionItem[] } | null = null;
++  try { kept = await app.chat.load(project); } catch { return false; }
++  const next = (Array.isArray(kept?.sessions) ? kept.sessions : [])
++    .filter((entry): entry is ProjectSessionItem => Boolean(entry && typeof entry.id === 'string' && typeof entry.createdAt === 'string'));
++  const current = record(project).sessions;
++  const stamp = (list: ProjectSessionItem[]) => list.map(entry => `${entry.id}\u0000${entry.updatedAt ?? ''}\u0000${entry.title ?? ''}`).join('\u0001');
++  if (stamp(next) === stamp(current)) return false;
++  record(project).sessions = next;
++  return true;
++}
++
+ export const chatSessions = (project: string): ProjectSessionItem[] => record(project).sessions;
+ export function setChatSessions(project: string, sessions: ProjectSessionItem[]) {
+   record(project).sessions = sessions;
    writeSessions(project);
  }
  

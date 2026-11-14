@@ -2,7 +2,7 @@
 id: playbooks-incident
 reader: 值班的人、排查 bug 的人
 fact-source: 真实故障记录（2026-11）、%TEMP%/dsh-openfilm/plugin.log、docs/architecture
-checked: 0.15.6
+checked: 0.15.7
 rot-if: 出现新的故障类别，或某个根因被结构性消除
 -->
 
@@ -24,6 +24,20 @@ rot-if: 出现新的故障类别，或某个根因被结构性消除
 判据：**重载后 `plugin.log` 的 `startedAt` 更新**才算真的重载了。管理器返回 `restart-required` 时，如实告诉用户要重启，别声称已生效。
 
 ## 2. 故障档案
+
+### 2026-11-14 · 左删右还在：两边读同一份记录，但只有一边会重读
+
+**现象**：在剪辑区删掉一条对话/一个项目，右侧对话下拉里仍然看得到；插件重启后两侧也会各说各话。
+
+**根因**：两侧都读项目的 `.film/chat`，但缓存策略不同——左侧每次操作后 `refresh()`，右侧
+`App.tsx` 的 `useState(() => loadSessions(projectKey))` **只在切换项目时读一次**，`chat-store` 还按
+项目缓存整份记录。没有任何外部变更的监听，于是"删掉的"只在内存里消失。
+
+**改法**：两侧都加 10 秒自读（页面可见时）+ 左侧 focus 重读；右侧 A1 补丁
+（`apps/desktop/chat/src/App.tsx`、`lib/chat-store.ts` 的 `refreshChatSessions`），payload 变才重绘。
+当前会话被删时回到空态，不跳到别的对话。
+
+**边界**：轮询是最终一致，最坏 10 秒；要"秒级"就得上 Host 推送，代价是新增一条 SSE 与跨 frame 的投递。
 
 ### 2026-11-14 · 思考过程看得见了：官方把 thought 行扔了
 

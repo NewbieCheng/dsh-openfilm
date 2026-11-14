@@ -167,6 +167,11 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
 
   /** Remove every injected node and undo every hide. Idempotent and cheap. */
   const cleanup = () => {
+    if (pollTimer !== null) {
+      doc.defaultView?.clearInterval?.(pollTimer);
+      doc.defaultView?.removeEventListener?.('focus', refresh);
+      pollTimer = null;
+    }
     closePopover();
     closeMenus();
     for (const node of doc.querySelectorAll(`[${SWITCH}], [${POPOVER}], [${LIST}], [${STYLE}], [${TOAST}]`)) node.remove();
@@ -430,7 +435,13 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     }
     try {
       const data = await fetchSessions?.();
-      renderRows(container, Array.isArray(data?.projects) ? data.projects : []);
+      const projects = Array.isArray(data?.projects) ? data.projects : [];
+      // A quiet reload that finds the same list must not repaint: the poll below
+      // runs every 10 s, and rebuilding rows under the pointer would eat clicks.
+      const key = JSON.stringify(projects);
+      if (quiet && key === lastKey) return;
+      lastKey = key;
+      renderRows(container, projects);
     } catch (error) {
       // The Host route disappearing means the plugin is no longer serving this
       // page (stopped/disabled): put the shipped sidebar back instead of
@@ -457,6 +468,22 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
   };
 
   const refresh = () => { if (list) void load(list, { quiet: true }); };
+  // The other side of the panel (and Studio itself) can change the projects or
+  // their conversations while this list is on screen; a plugin restart or a
+  // folder deleted in Explorer used to need a manual reload. Cheap by design: the
+  // payload is compared before anything is repainted.
+  let lastKey = '';
+  let pollTimer = null;
+  const startPolling = () => {
+    if (pollTimer !== null) return;
+    const view = doc.defaultView;
+    if (!view?.setInterval) return;
+    pollTimer = view.setInterval(() => {
+      if (doc.visibilityState === 'hidden' || !list || !list.isConnected) return;
+      refresh();
+    }, 10000);
+    view.addEventListener?.('focus', refresh);
+  };
 
   const menuButton = (parent, label, onClick, { checked = false, danger = false, icon: iconName = '' } = {}) => {
     const button = doc.createElement('button');
@@ -808,6 +835,7 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
       }
       container.style.display = 'block';
       void load(container);
+      startPolling();
     } else {
       container.style.display = 'none';
     }

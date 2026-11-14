@@ -2,7 +2,7 @@
 id: roadmap
 reader: 所有人（接下来做什么）
 fact-source: 上一版 ROADMAP 的剩余项、STATUS 的待验项、用户拍板记录
-checked: 0.15.6
+checked: 0.15.7
 rot-if: 每个批次开始/结束、任何"待拍板"有结论
 -->
 

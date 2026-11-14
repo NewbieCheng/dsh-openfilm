@@ -667,6 +667,11 @@
       for (const node of doc.querySelectorAll(`[${VIEW_MENU}], [${ROW_MENU}], [${MODAL}]`)) node.remove();
     };
     const cleanup = () => {
+      if (pollTimer !== null) {
+        doc.defaultView?.clearInterval?.(pollTimer);
+        doc.defaultView?.removeEventListener?.("focus", refresh);
+        pollTimer = null;
+      }
       closePopover();
       closeMenus();
       for (const node of doc.querySelectorAll(`[${SWITCH}], [${POPOVER}], [${LIST}], [${STYLE}], [${TOAST}]`)) node.remove();
@@ -934,7 +939,11 @@
       }
       try {
         const data = await fetchSessions?.();
-        renderRows(container, Array.isArray(data?.projects) ? data.projects : []);
+        const projects2 = Array.isArray(data?.projects) ? data.projects : [];
+        const key = JSON.stringify(projects2);
+        if (quiet && key === lastKey) return;
+        lastKey = key;
+        renderRows(container, projects2);
       } catch (error) {
         if (error?.code === "ROUTE_MISSING") {
           cleanup();
@@ -965,6 +974,18 @@
     };
     const refresh = () => {
       if (list) void load(list, { quiet: true });
+    };
+    let lastKey = "";
+    let pollTimer = null;
+    const startPolling = () => {
+      if (pollTimer !== null) return;
+      const view2 = doc.defaultView;
+      if (!view2?.setInterval) return;
+      pollTimer = view2.setInterval(() => {
+        if (doc.visibilityState === "hidden" || !list || !list.isConnected) return;
+        refresh();
+      }, 1e4);
+      view2.addEventListener?.("focus", refresh);
     };
     const menuButton = (parent, label, onClick, { checked = false, danger = false, icon: iconName = "" } = {}) => {
       const button = doc.createElement("button");
@@ -1326,6 +1347,7 @@
         }
         container.style.display = "block";
         void load(container);
+        startPolling();
       } else {
         container.style.display = "none";
       }

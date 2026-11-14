@@ -2,7 +2,7 @@
 id: index
 reader: 所有人（第一次进仓库）
 fact-source: 本目录下的文件清单
-checked: 0.15.6
+checked: 0.15.7
 rot-if: 新增/删除 docs/ 下的顶层文档
 -->
 

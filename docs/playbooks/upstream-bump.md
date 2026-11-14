@@ -2,7 +2,7 @@
 id: playbooks-upstream
 reader: 维护上游的人
 fact-source: patches/series.json、vendor/official-shell/manifest.json、src/official-shell.mjs
-checked: 0.15.6
+checked: 0.15.7
 rot-if: 上游目录结构或补丁流程变化
 -->
 

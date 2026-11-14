@@ -1,5 +1,5 @@
 diff --git a/apps/desktop/chat/src/App.tsx b/apps/desktop/chat/src/App.tsx
-index 9c7041b..0abcab7 100644
+index 9c7041b..2efbdc3 100644
 --- a/apps/desktop/chat/src/App.tsx
 +++ b/apps/desktop/chat/src/App.tsx
 @@ -10,6 +10,7 @@ import { ArrowDown, Coins, CornerDownLeft, LibraryBig, Loader2, Plus, Square } f
@@ -10,15 +10,16 @@ index 9c7041b..0abcab7 100644
  import { ProjectConversation, TurnUndoContext, primeStoredTranscript } from '@/components/ProjectConversation';
  import type { ProjectVersion } from '@/components/project-version';
  import { ProjectStarters } from '@/components/ProjectStarters';
-@@ -69,6 +70,7 @@ import { studioRefsFromTransfer, transferHasStudioRefs } from '@/lib/studio-tran
+@@ -69,6 +70,8 @@ import { studioRefsFromTransfer, transferHasStudioRefs } from '@/lib/studio-tran
  import { agentModelSummary, agentOptions, currentAgent, effectivePrefs, offeredOption, useLocalAgents } from '@/state/local-agent-store';
  import { useLiveActivityFromStore } from '@/lib/live-activity';
  import { loadLastSession, loadSessions, newSession, saveLastSession, saveSessions } from '@/lib/local-sessions';
++import { refreshChatSessions } from '@/lib/chat-store';
 +import { deleteChatSession } from '@/lib/chat-store';
  import type { ProjectSessionItem } from '@/lib/project-sessions';
  import { conversationAgent, conversationPrefs, keptPrefs } from '@/lib/conversation-agent';
  import { AGENT_DEFINITIONS, isAgentId } from '../../src/agent-definitions.mjs';
-@@ -156,6 +158,8 @@ export function App({ initialProject, initialSelection, initialFfmpeg }: {
+@@ -156,6 +159,8 @@ export function App({ initialProject, initialSelection, initialFfmpeg }: {
            onPick={onProject ? (skill) => app.useSkill?.(skill) : undefined}
            onMake={onProject ? () => window.dispatchEvent(new Event(MAKE_SKILL)) : undefined} />
        ) : null}
@@ -27,7 +28,38 @@ index 9c7041b..0abcab7 100644
        {/* shell.css owns the single line below the window's top bar. The seam on the right is the resize handle. */}
        <Divider />
        <div className="flex min-h-0 flex-1 flex-col">
-@@ -964,6 +968,13 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+@@ -188,6 +193,30 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+     return last && list.some((s) => s.id === last) ? last : list[0]?.id ?? newSession().id;
+   });
+   React.useEffect(() => { saveLastSession(projectKey, sessionId); }, [projectKey, sessionId]);
++  /* dsh-openfilm: the sidebar outside this page (and Studio itself) can add or
++     delete a conversation while this list sits in state. Re-read on a slow tick and
++     when the window comes back, so both sides agree without a reload. A deleted
++     conversation that was open leaves the empty starter — it must not silently
++     jump to another conversation's turns. */
++  React.useEffect(() => {
++    let stopped = false;
++    const check = () => {
++      if (stopped || document.visibilityState === 'hidden') return;
++      void refreshChatSessions(projectKey).then((changed) => {
++        if (!changed || stopped) return;
++        const list = loadSessions(projectKey);
++        setSessions(list);
++        setSessionId((current) => (current && !list.some((entry) => entry.id === current) ? '' : current));
++      }).catch(() => { /* the next tick tries again */ });
++    };
++    const timer = window.setInterval(check, 10000);
++    document.addEventListener('visibilitychange', check);
++    return () => {
++      stopped = true;
++      window.clearInterval(timer);
++      document.removeEventListener('visibilitychange', check);
++    };
++  }, [projectKey]);
+   const touchSession = React.useCallback((id: string, patch: (s: ProjectSessionItem) => Partial<ProjectSessionItem>) => {
+     setSessions((list) => {
+       const now = new Date().toISOString();
+@@ -964,6 +993,13 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
    const onSelectSession = (id: string) => { setSessionId(id); composerRef.current?.focus(); };
    const onRenameSession = (id: string, title: string) => editSession(id, { title });
    const onPinSession = (id: string, pinned: boolean) => editSession(id, { pinned });
@@ -41,7 +73,7 @@ index 9c7041b..0abcab7 100644
    /* the conversation shown, archived: a new one in its place */
    const onArchiveSession = (id: string, archived: boolean) => {
      if (archived && running.has(id)) return;
-@@ -996,6 +1007,11 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+@@ -996,6 +1032,11 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
  
    const editComposerCard = (
      <div className="flex flex-col gap-1">
@@ -53,7 +85,7 @@ index 9c7041b..0abcab7 100644
        <div
          /* a file from the disk dropped on the card is brought along, a pill where it was let go (on the words) or at
             the cursor; Studio's things dropped on it become pills too */
-@@ -1028,9 +1044,10 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+@@ -1028,9 +1069,10 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
            attachFiles(filesFromTransfer(event.dataTransfer), { x: event.clientX, y: event.clientY });
          }}
          data-prompt-shell=""
@@ -66,7 +98,7 @@ index 9c7041b..0abcab7 100644
        >
          {openedFile ? <AttachmentPreview item={openedFile} onClose={() => setOpenedFile(null)} /> : null}
          <div className="flex items-end gap-1 py-2.5 pl-3.5 pr-2">
-@@ -1132,6 +1149,7 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
+@@ -1132,6 +1174,7 @@ function ChatPane({ project, banners, selection, assetsOpen, assetsOverlay }: {
                    onRenameSession={onRenameSession}
                    onPinSession={onPinSession}
                    onArchiveSession={onArchiveSession}

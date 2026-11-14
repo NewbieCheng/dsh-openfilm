@@ -70,3 +70,14 @@ test('search matches visible conversation titles, not just folder names', () => 
   assert.ok(source.includes('appendHighlight(title, sessionDisplayTitle(session), query)'));
   assert.ok(source.includes('const shown = query ? sessions'));
 });
+
+test('the list re-reads itself, so a delete on the other side shows up without a reload', () => {
+  // A quiet reload with the same payload must not repaint: the poll runs every 10 s
+  // and rebuilding rows under the pointer would eat clicks.
+  assert.ok(source.includes('if (quiet && key === lastKey) return;'));
+  assert.ok(source.includes('startPolling()'));
+  assert.ok(source.includes('}, 10000);'));
+  assert.ok(source.includes("if (doc.visibilityState === 'hidden' || !list || !list.isConnected) return;"));
+  // Cleanup stops the poll; a removed list must not keep a timer alive.
+  assert.ok(source.includes('doc.defaultView?.clearInterval?.(pollTimer);'));
+});

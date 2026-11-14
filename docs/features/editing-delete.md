@@ -2,7 +2,7 @@
 id: features-editing-delete
 reader: 维护剪辑区的人
 fact-source: src/editing-project-delete.mjs、src/project-trash.mjs、src/studio-controller.mjs
-checked: 0.15.6
+checked: 0.15.7
 rot-if: 删除作用域、回收站位置或守卫条件变化
 -->
 
@@ -39,6 +39,17 @@ HTTP 入口是 `POST /api/no996-openfilm/editing-delete-project`（[`src/studio-
 （`acpSessions.get(projectId).cwd`）。原因：Studio 的列表会因为索引没刷新而不包含一个真实存在的
 文件夹，而那种文件夹恰恰是最想删的——以前这里直接回 404，界面上只留一句"删除失败"。
 两条来源都在日志里留痕：`delete-attempt`（source=studio|binding）、`delete-failed`（code）。
+
+## 删完之后两侧必须都刷新
+
+左侧（剪辑区）与右侧（对话下拉）读同一份记录，但缓存不同：
+
+| 侧 | 刷新时机 |
+|---|---|
+| 左侧 | 每次操作后 `refresh()`；**另外每 10 秒（页面可见时）自读一次**，payload 不变就不重绘 |
+| 右侧 | A1 补丁：页面打开期间每 10 秒 `refreshChatSessions()` 重读会话列表；当前会话被删→回到空态 |
+
+`chat-store.refreshChatSessions` 只替换页面副本、不写回，所以轮询不会覆盖磁盘上的记录。
 
 ## 守卫
 
