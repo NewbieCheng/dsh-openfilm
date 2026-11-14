@@ -1929,16 +1929,1380 @@ index 0000000..9bd6e9c
 +    </div>
 +  );
 +}
+diff --git a/apps/desktop/shell/login-city.js b/apps/desktop/shell/login-city.js
+new file mode 100644
+index 0000000..67c2c93
+--- /dev/null
++++ b/apps/desktop/shell/login-city.js
+@@ -0,0 +1,704 @@
++/* 由 scripts/build-login-city.mjs 生成，请勿手改。
++ * 源：vendor/motion/styles/demos/01-flat-vector（DrawAI mg-styles，MIT）。
++ * 用途：登录页城市背景；window.__NOF_MOUNT_CITY__(svg) → { renderAt(t) }。
++ */
++window.__NOF_MOUNT_CITY__ = async function (root) {
++
++// ============================================================ utilities
++const NS = 'http://www.w3.org/2000/svg';
++const S = root;
++// reel v5 (?v5=1): title 「扁平矢量」 replaces the wordmark, window.linkAt(t), ?nolink=dot,cap,rays,coin. Default path untouched.
++const QS = new URLSearchParams(location.search), V5 = QS.get('v5') === '1';
++const NOLINK = new Set(V5 ? (QS.get('nolink') || '').split(',').map(s => s.trim()).filter(Boolean) : []);
++const C = { U:'#2B2BFF', UD:'#1F1FCC', UL:'#4D4DFF', UT:'#3B3BFF', UP:'#A3A3FF', CO:'#FF5A4E', COD:'#E0433A', COL:'#FF8C82',
++  SU:'#FFC62B', SUD:'#F0A91A', SUE:'#D98F00', MI:'#2EE6A8', MID:'#1FC28C', CR:'#FFF6E9', CRD:'#F1E3CC', CRS:'#E6D3B8',
++  INK:'#151433', INKW:'#2A2962', SK:'#FFB48C', SKD:'#F2976E' };
++function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]); (parent || S).appendChild(e); return e; }
++const G = (p, a) => el('g', a, p);
++const f3 = v => Math.round(v * 1000) / 1000;
++function tf(e, x, y, sx = 1, sy = sx, r = 0) {
++  if (Math.abs(sx) < 1e-4 || Math.abs(sy) < 1e-4) { sx = 0; sy = 0; }
++  e.setAttribute('transform', `translate(${f3(x)} ${f3(y)}) rotate(${f3(r)}) scale(${sx.toFixed(5)} ${sy.toFixed(5)})`);
++}
++const vis = (e, v) => { e.style.display = v ? '' : 'none'; };
++function rng(seed) { let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
++const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
++const lerp = (a, b, u) => a + (b - a) * u;
++const inv = (a, b, x) => clamp((x - a) / (b - a));
++const E = {
++  inQ: u => u * u, outQ: u => 1 - (1 - u) ** 2, ioQ: u => u < .5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2,
++  inC: u => u ** 3, outC: u => 1 - (1 - u) ** 3, ioC: u => u < .5 ? 4 * u ** 3 : 1 - (-2 * u + 2) ** 3 / 2,
++  outQt: u => 1 - (1 - u) ** 4, ioQt: u => u < .5 ? 8 * u ** 4 : 1 - (-2 * u + 2) ** 4 / 2,
++  outX: u => u >= 1 ? 1 : 1 - 2 ** (-10 * u),
++  outB: (u, s = 1.70158) => 1 + (s + 1) * (u - 1) ** 3 + s * (u - 1) ** 2,
++  inB: (u, s = 1.70158) => (s + 1) * u ** 3 - s * u ** 2,
++};
++function bezier(x1, y1, x2, y2) {
++  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx, cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
++  const sx = t => ((ax * t + bx) * t + cx) * t, sy = t => ((ay * t + by) * t + cy) * t, dx = t => (3 * ax * t + 2 * bx) * t + cx;
++  return u => { if (u <= 0) return 0; if (u >= 1) return 1; let t = u; for (let i = 0; i < 10; i++) { const d = dx(t); if (Math.abs(d) < 1e-6) break; t = clamp(t - (sx(t) - u) / d); } return sy(t); };
++}
++E.pop = bezier(0.34, 1.56, 0.64, 1);          // the classic MG overshoot curve
++// closed-form damped spring 0 -> 1 (value / velocity), and a damped impulse
++function spring(t, f = 2, z = .4) { if (t <= 0) return 0; const w = 2 * Math.PI * f, a = z * w, b = w * Math.sqrt(1 - z * z); return 1 - Math.exp(-a * t) * (Math.cos(b * t) + (a / b) * Math.sin(b * t)); }
++function springV(t, f = 2, z = .4) { if (t <= 0) return 0; const w = 2 * Math.PI * f, a = z * w, b = w * Math.sqrt(1 - z * z); return Math.exp(-a * t) * (w * w / b) * Math.sin(b * t); }
++function kick(t, t0, f = 3, z = .35) { if (t <= t0) return 0; const w = 2 * Math.PI * f, tt = t - t0; return Math.exp(-z * w * tt) * Math.sin(w * Math.sqrt(1 - z * z) * tt); }
++// spring pop with velocity-driven squash & stretch; residual pinned to exactly 1 after `pin` s (no sub-pixel drift under zoom)
++function pop(t, t0, f = 2.4, z = .42, amt = .12, pin = .9) {
++  const tt = t - t0; let s = spring(tt, f, z); let k = clamp(springV(tt, f, z) / (2 * Math.PI * f) * amt * 2, -.3, .3);
++  const w = E.ioQ(inv(pin * .7, pin, tt)); s = lerp(s, 1, w); k = lerp(k, 0, w); return [s, k];
++}
++const hump = u => 4 * u * (1 - u);
++
++// ============================================================ cues + fonts
++const cues = {"fps":30,"bpm":120,"key":"F","mode":"major","build":4,"drop":6,"outro":8,"frames":{"impact1":15,"impact2":24,"antic":27,"launch":31,"sunLand":40,"rays":41,"farRise":38,"bldStart":44,"bldStagger":3,"bldCount":9,"clouds":50,"birds":56,"trees":62,"winStart":64,"winEnd":82,"heroWin":84,"camAntic":86,"push":90,"glass":105,"arrive":112,"blink":114,"ping":120,"reactAntic":126,"headSnap":129,"exclaim":135,"bubbleAntic":144,"wipe":150,"wipe2":154,"wipe3":158,"coreDot":165,"burst1":180,"burst2":195,"burst3":210,"burst4":225,"collapseAntic":233,"merge":240,"logoWipe":240,"letters":243,"letterStagger":1,"dotLand2":255,"tagCN":259,"tagEN":266,"beatBob1":270,"beatBob2":285,"slam":164,"dotRise":247,"dotApex":250,"dotDrop":251,"cnFlip":276,"coreHit":171,"matchStart":237,"matchEnd":245}};
++const FR = cues.frames; const F = n => n / 30; const T = k => FR[k] / 30;
++await Promise.all([
++  document.fonts.load("700 200px 'Fredoka'", 'popwıse'), document.fonts.load("600 40px 'Fredoka'", 'EVERY DAY'),
++  document.fonts.load("700 120px 'Fredoka'", '¥'), document.fonts.load("700 60px 'Resource Han Rounded'", '每天，聪明一点点'),
++  ...(V5 ? [document.fonts.load("900 260px 'Resource Han Rounded'", '扁平矢量'), document.fonts.load("600 46px 'Fredoka'", 'FLAT VECTOR')] : []),
++]);
++await document.fonts.ready;
++const cv = document.createElement('canvas').getContext('2d');
++const meas = (font, s) => { cv.font = font; return cv.measureText(s); };
++const defs = el('defs', {}, S);
++
++// ============================================================ WORLD (city) — camera = one transform
++const GY = 820, R0 = 74, SCC = 1.12, CYC = 454, SUN = { x: 1300, y: 230, r: 124 };
++const world = G(S);
++el('rect', { x: -4000, y: -4000, width: 10000, height: 10000, fill: C.U }, world);
++// opening sky shapes: tone-on-tone brand shapes printed by impact 1 (bookend with the end frame), popped out as the skyline rises
++const SKY = [
++  { x: 430, y: 420, mk: g => el('circle', { cx: 0, cy: 0, r: 96, fill: 'none', stroke: C.UT, 'stroke-width': 30 }, g), t0: F(15), out: F(36), rs: 6 },
++  { x: 1500, y: 470, mk: g => el('path', { d: 'M-34 0 L34 0 M0 -34 L0 34', stroke: C.UT, 'stroke-width': 20, 'stroke-linecap': 'round' }, g), t0: F(17), out: F(38), rs: 14 },
++  { x: 610, y: 700, mk: g => el('rect', { x: -110, y: -36, width: 220, height: 72, rx: 36, fill: C.UT }, g), t0: F(24), out: F(40), rs: -4, r0: -24 },
++  { x: 1330, y: 690, mk: g => el('path', { d: 'M-80 0 A80 80 0 0 1 80 0 Z', fill: C.UT }, g), t0: F(25), out: F(42), rs: 5, r0: 18 },
++].map(d => { const g = G(world); d.mk(g); return { ...d, g }; });
++// far skyline (tone-on-tone), rises centre-out
++const farG = G(world); const far = [];
++{ const r = rng(7); let x = -140;
++  while (x < 2060) { const w = 70 + r() * 90, h = 170 + r() * 190; const gg = G(farG);
++    el('rect', { x: -w / 2, y: -h, width: w, height: h + 2, fill: C.UL }, gg);
++    const cols = Math.max(1, Math.floor((w - 20) / 26)), rows = Math.floor((h - 50) / 40);
++    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) if (r() < .33) el('rect', { x: -w / 2 + 14 + i * 26, y: -h + 24 + j * 40, width: 12, height: 16, rx: 3, fill: '#6060FF' }, gg);
++    far.push({ g: gg, x: x + w / 2, t0: T('farRise') + Math.abs(x + w / 2 - 960) / 960 * F(12) }); x += w + (r() * 16 - 6); } }
++// sun rays + the hero dot
++const raysG = G(world); const rays = []; raysG.setAttribute('id', 'nof-rays');
++for (let i = 0; i < 12; i++) rays.push(el('line', { stroke: C.CO, 'stroke-width': 12, 'stroke-linecap': 'round' }, raysG));
++const speedL = [0, 1].map(() => el('line', { stroke: C.CR, 'stroke-width': 8, 'stroke-linecap': 'round' }, world));
++const dotW = el('circle', { cx: 0, cy: 0, r: R0, fill: C.CO }, world); dotW.setAttribute('id', 'nof-sun');
++// clouds
++function cloud(p) { const gg = G(p); el('rect', { x: -100, y: -28, width: 200, height: 56, rx: 28, fill: C.CR }, gg); el('circle', { cx: -26, cy: -30, r: 44, fill: C.CR }, gg); el('circle', { cx: 42, cy: -20, r: 32, fill: C.CR }, gg); return gg; }
++const CLOUDS = [{ x: 380, y: 210, s: 1.0, from: -320 }, { x: 1600, y: 430, s: .85, from: 2260 }, { x: 860, y: 150, s: .6, from: -260 }].map((c, i) => ({ ...c, g: cloud(world), t0: T('clouds') + i * F(5) }));
++// birds
++const BIRDS = [0, 1, 2].map(i => { const gg = G(world); const wl = G(gg), wr = G(gg);
++  el('path', { d: 'M0 0 Q-12 -14 -28 -6', fill: 'none', stroke: C.INK, 'stroke-width': 5, 'stroke-linecap': 'round' }, wl);
++  el('path', { d: 'M0 0 Q12 -14 28 -6', fill: 'none', stroke: C.INK, 'stroke-width': 5, 'stroke-linecap': 'round' }, wr);
++  return { g: gg, wl, wr, i, s: [1, .8, .9][i] }; });
++// buildings
++const BLD = [
++  { cx: 215, w: 150, h: 250, c: C.MI, roof: 'flat', cols: 2, rows: 3 },
++  { cx: 405, w: 190, h: 400, c: C.CR, roof: 'step', cols: 3, rows: 6, door: 1 },
++  { cx: 600, w: 140, h: 310, c: C.CO, roof: 'arch', cols: 2, rows: 4 },
++  { cx: 770, w: 160, h: 470, c: C.SU, roof: 'antenna', cols: 3, rows: 7, door: 1 },
++  { cx: 970, w: 180, h: 540, c: C.INK, roof: 'sign', hero: true },
++  { cx: 1160, w: 150, h: 360, c: C.MI, roof: 'tri', cols: 2, rows: 5 },
++  { cx: 1345, w: 180, h: 280, c: C.SU, roof: 'flat', cols: 3, rows: 4, door: 1 },
++  { cx: 1530, w: 150, h: 430, c: C.CR, roof: 'dome', cols: 2, rows: 6 },
++  { cx: 1715, w: 170, h: 230, c: C.CO, roof: 'flat', cols: 3, rows: 3 },
++];
++const SHADE = { [C.MI]: C.MID, [C.CR]: C.CRD, [C.CO]: C.COD, [C.SU]: C.SUD, [C.INK]: '#0B0A22' };
++const WUNLIT = { [C.MI]: C.MID, [C.CR]: C.UL, [C.CO]: C.COD, [C.SU]: C.SUD, [C.INK]: C.INKW };
++const bldG = G(world); const lits = []; const wr_ = rng(11);
++BLD.forEach((b, bi) => {
++  b.g = G(bldG); b.t0 = T('bldStart') + bi * F(FR.bldStagger); const g = b.g, w = b.w, h = b.h, d = SHADE[b.c], sw = Math.round(w * .14);
++  if (b.roof === 'flat') el('rect', { x: -w / 2 - 6, y: -h - 10, width: w + 12, height: 14, rx: 5, fill: d }, g);
++  if (b.roof === 'step') { el('rect', { x: -w * .3, y: -h - 40, width: w * .6, height: 44, fill: b.c }, g); el('rect', { x: w * .3 - sw * .8, y: -h - 40, width: sw * .8, height: 44, fill: d }, g); el('rect', { x: -w * .3 - 5, y: -h - 48, width: w * .6 + 10, height: 12, rx: 5, fill: d }, g); }
++  if (b.roof === 'arch') { el('path', { d: `M${-w / 2} ${-h + 1} A${w / 2} ${w / 2} 0 0 1 ${w / 2} ${-h + 1} Z`, fill: b.c }, g); el('circle', { cx: 0, cy: -h - w * .2, r: w * .13, fill: SU_or(b) }, g); }
++  if (b.roof === 'antenna') { el('rect', { x: -w * .22, y: -h - 26, width: w * .44, height: 28, fill: d }, g); el('line', { x1: 0, y1: -h - 26, x2: 0, y2: -h - 92, stroke: C.INK, 'stroke-width': 6, 'stroke-linecap': 'round' }, g); b.tip = el('circle', { cx: 0, cy: -h - 96, r: 9, fill: C.CO }, g); }
++  if (b.roof === 'dome') { el('path', { d: `M${-w * .38} ${-h + 1} A${w * .38} ${w * .38} 0 0 1 ${w * .38} ${-h + 1} Z`, fill: d }, g); }
++  if (b.roof === 'tri') el('path', { d: `M${-w / 2 - 8} ${-h + 1} L0 ${-h - 74} L${w / 2 + 8} ${-h + 1} Z`, fill: d }, g);
++  if (b.roof === 'sign') { el('rect', { x: -40, y: -h - 30, width: 8, height: 32, fill: C.INK }, g); el('rect', { x: 32, y: -h - 30, width: 8, height: 32, fill: C.INK }, g);
++    el('rect', { x: -56, y: -h - 70, width: 112, height: 44, rx: 10, fill: C.CR }, g); el('circle', { cx: -30, cy: -h - 48, r: 11, fill: C.CO }, g);
++    el('rect', { x: -12, y: -h - 56, width: 50, height: 8, rx: 4, fill: C.INK }, g); el('rect', { x: -12, y: -h - 44, width: 34, height: 8, rx: 4, fill: C.INK }, g); }
++  el('rect', { x: -w / 2, y: -h, width: w, height: h + 1, fill: b.c }, g);
++  el('rect', { x: w / 2 - sw, y: -h, width: sw, height: h + 1, fill: d }, g);
++  if (b.hero) {
++    b.wins = [];
++    for (let j = 0; j < 9; j++) for (const x of [-76, 0]) { if (j === 5 && x === -76) el('rect', { x, y: -500 + j * 50, width: 64, height: 36, rx: 3, fill: C.INKW }, g); else el('circle', { cx: x + 32, cy: -482 + j * 50, r: 15, fill: C.INKW }, g); }
++    el('rect', { x: -22, y: -56, width: 44, height: 56, rx: 8, fill: C.INKW }, g);
++  } else {
++    const m = 16, gap = 12, usable = w - sw - 2 * m + 4, ww = (usable - (b.cols - 1) * gap) / b.cols, wh = 28;
++    const lit = b.c === C.SU ? C.CR : C.SU;
++    for (let j = 0; j < b.rows; j++) for (let i = 0; i < b.cols; i++) {
++      const x = -w / 2 + m + i * (ww + gap), y = -h + 36 + j * 46;
++      el('circle', { cx: x + ww / 2, cy: y + wh / 2, r: Math.min(ww, wh) * .47, fill: WUNLIT[b.c] }, g);
++      if (wr_() < .5) { const lg = G(g); el('circle', { cx: 0, cy: 0, r: Math.min(ww, wh) * .47, fill: lit }, lg); lits.push({ g: lg, x: x + ww / 2, y: y + wh / 2 }); }
++    }
++    if (b.door) el('rect', { x: -w * .12 - sw / 2, y: -52, width: w * .24, height: 52, rx: 8, fill: d }, g);
++  }
++});
++function SU_or(b) { return b.c === C.SU ? C.CR : C.SU; }
++{ const r = rng(5); const order = lits.map((_, i) => i).sort(() => r() - .5); order.forEach((li, k) => lits[li].t0 = T('winStart') + k * (T('winEnd') - T('winStart')) / order.length); }
++// trees
++const TREES = [{ x: 120, h: 60, r: 26 }, { x: 300, h: 70, r: 30 }, { x: 516, h: 84, r: 34 }, { x: 680, h: 62, r: 26 }, { x: 1074, h: 78, r: 32 }, { x: 1246, h: 66, r: 28 }, { x: 1622, h: 88, r: 36 }, { x: 1830, h: 70, r: 30 }]
++  .map((tr, i) => { const gg = G(world); el('rect', { x: -4, y: -tr.h, width: 8, height: tr.h, fill: C.INK }, gg); const yT = -tr.h - 1.8 * tr.r, yB = -tr.h + tr.r; el('rect', { x: -tr.r, y: yT, width: 2 * tr.r, height: yB - yT, rx: tr.r, fill: C.MI }, gg);
++    el('path', { d: `M0 ${yT} A${tr.r} ${tr.r} 0 0 1 ${tr.r} ${yT + tr.r} L${tr.r} ${yB - tr.r} A${tr.r} ${tr.r} 0 0 1 0 ${yB} Z`, fill: C.MID }, gg); return { ...tr, g: gg, t0: T('trees') + i * F(2) }; });
++const groundR = el('rect', { x: -4000, y: GY, width: 10000, height: 4000, fill: C.CR }, world);
++const groundLead = el('rect', { x: 0, y: GY, width: 170, height: 4000, fill: C.SU }, world);
++const shadow = el('ellipse', { cx: 960, cy: GY + 4, rx: 50, ry: 8, fill: C.CRS }, world);
++const road = el('rect', { x: -4000, y: 872, width: 10000, height: 42, fill: C.CRD }, world);
++const laneG = G(world); const lanes = []; for (let x = -40; x < 2000; x += 96) lanes.push({ x, e: el('rect', { x, y: 890, width: 48, height: 7, rx: 3.5, fill: C.CR }, laneG) });
++const slabs = BLD.map(b => { const g = G(world); el('path', { d: `M${-b.w / 2} 0 L${b.w / 2} 0 L${b.w / 2 - 34} 26 L${-b.w / 2 - 34} 26 Z`, fill: C.CRD }, g); return g; });
++const bus = G(world); const busB = G(bus); const busW = [];
++{ el('rect', { x: -104, y: -78, width: 208, height: 64, rx: 24, fill: C.CO }, busB); el('rect', { x: -104, y: -34, width: 208, height: 20, fill: C.COD }, busB);
++  el('path', { d: 'M104 -54 L104 -30 L60 -30 L60 -64 Q96 -64 104 -54 Z', fill: C.CR }, busB);
++  [-84, -40, 4].forEach(x => el('rect', { x, y: -64, width: 36, height: 24, rx: 7, fill: C.CR }, busB));
++  [-60, 64].forEach(x => { const w = G(bus); el('circle', { cx: 0, cy: 0, r: 17, fill: C.INK }, w); el('rect', { x: -3, y: -12, width: 6, height: 10, rx: 3, fill: C.CR }, w); busW.push({ g: w, x }); }); }
++const IMP = [['impact1', 1], ['impact2', .6]].map(([k, sc]) => ({ t0: T(k), sc,
++  rips: [C.SU, C.CRS].map(c => el('ellipse', { cx: 960, cy: GY + 6, rx: 0, ry: 0, fill: 'none', stroke: c, 'stroke-width': 0 }, world)),
++  lines: [-168, -143, -117, -63, -37, -12].map((a, i) => ({ a: a * Math.PI / 180, ln: el('line', { stroke: [C.SU, C.CR, C.SU, C.SU, C.CR, C.SU][i], 'stroke-width': 17 * (sc > .8 ? 1 : .75), 'stroke-linecap': 'round' }, world) })) }));
++
++// ============================================================ hero window + INTERIOR (drawn at 1920x1080, scaled 1/30 into a 64x36 window)
++const HB = BLD[4]; const HW = { x: 894, y: 570, w: 64, h: 36 }; const HL = { x: HW.x - HB.cx, y: HW.y - GY };
++const cpH = el('clipPath', { id: 'heroClip' }, defs); el('rect', { x: HL.x, y: HL.y, width: HW.w, height: HW.h }, cpH);
++const heroWinG = G(HB.g, { 'clip-path': 'url(#heroClip)' });
++const INT = G(heroWinG, { transform: `translate(${HL.x} ${HL.y}) scale(${HW.w / 1920}) translate(860 -153) scale(1.15) translate(-860 153)` });
++const blind = el('rect', { x: HL.x, y: HL.y, width: HW.w, height: HW.h, fill: C.INKW }, HB.g);
++const sill = el('rect', { x: HL.x - 5, y: HL.y + HW.h + 2, width: HW.w + 10, height: 6, rx: 3, fill: C.CR }, HB.g);
++const heroSparks = [0, 1, 2, 3].map(() => el('line', { stroke: C.CR, 'stroke-width': 4, 'stroke-linecap': 'round' }, HB.g));
++// --- room
++el('rect', { x: -20, y: -20, width: 1960, height: 1120, fill: C.SU }, INT);
++// back window with the city we came from
++{ const cp = el('clipPath', { id: 'bwClip' }, defs); el('rect', { x: 178, y: 158, width: 404, height: 284, rx: 8 }, cp);
++  el('rect', { x: 160, y: 140, width: 440, height: 320, rx: 18, fill: C.CR }, INT);
++  const gl = G(INT, { 'clip-path': 'url(#bwClip)' }); el('rect', { x: 170, y: 150, width: 420, height: 300, fill: C.U }, gl);
++  el('circle', { cx: 490, cy: 250, r: 46, fill: C.CO }, gl);
++  [[200, 90], [262, 150], [330, 110], [402, 170], [470, 120], [540, 90]].forEach(([x, h], i) => el('rect', { x, y: 442 - h, width: 58, height: h, fill: C.UL }, gl));
++  el('rect', { x: 230, y: 214, width: 96, height: 26, rx: 13, fill: C.CR }, gl);
++  el('rect', { x: 373, y: 150, width: 14, height: 300, fill: C.CR }, INT); el('rect', { x: 170, y: 293, width: 420, height: 14, fill: C.CR }, INT);
++  el('rect', { x: 136, y: 456, width: 488, height: 22, rx: 11, fill: C.SUD }, INT); }
++// poster
++el('rect', { x: 1470, y: 160, width: 260, height: 330, rx: 16, fill: C.MI }, INT);
++el('rect', { x: 1494, y: 184, width: 212, height: 282, rx: 8, fill: C.CR }, INT);
++el('circle', { cx: 1600, cy: 290, r: 62, fill: C.CO }, INT);
++el('path', { d: 'M1520 440 L1600 360 L1680 440 Z', fill: C.U }, INT);
++// lamp (swings from ceiling)
++const lamp = G(INT); { el('line', { x1: 0, y1: -40, x2: 0, y2: 170, stroke: C.INK, 'stroke-width': 6 }, lamp); el('circle', { cx: 0, cy: 214, r: 18, fill: C.CR }, lamp); el('path', { d: 'M-74 214 L-40 162 L40 162 L74 214 Z', fill: C.INK }, lamp); }
++// character (rig: CH hip null -> torso, shoulders -> elbows, neck -> head)
++const CH = G(INT);
++el('path', { d: 'M-180 80 L-180 -110 Q-180 -200 -90 -200 L90 -200 Q180 -200 180 -110 L180 80 Z', fill: C.MI }, CH);
++el('path', { d: 'M120 -196 Q180 -186 180 -110 L180 80 L132 80 Z', fill: C.MID }, CH);
++el('path', { d: 'M-36 -201 L0 -154 L36 -201 Z', fill: C.SK }, CH);
++function mkArm(side) { const sh = G(CH); const up = G(sh);
++  el('line', { x1: 0, y1: 0, x2: 0, y2: 116, stroke: C.MID, 'stroke-width': 60, 'stroke-linecap': 'round' }, up);
++  const fo = G(up); tf(fo, 0, 116);
++  el('line', { x1: 0, y1: 0, x2: 0, y2: 100, stroke: C.SK, 'stroke-width': 40, 'stroke-linecap': 'round' }, fo);
++  el('circle', { cx: 0, cy: 106, r: 25, fill: C.SK }, fo); const fg = G(fo); el('line', { x1: 0, y1: 0, x2: 0, y2: 34, stroke: C.SK, 'stroke-width': 17, 'stroke-linecap': 'round' }, fg); return { sh, up, fo, fg, side }; }
++const armL = mkArm(-1), armR = mkArm(1);
++const neck = G(CH); el('rect', { x: -26, y: -40, width: 52, height: 56, fill: C.SK }, neck);
++const head = G(neck);
++el('circle', { cx: -92, cy: 12, r: 19, fill: C.SK }, head); el('circle', { cx: 92, cy: 12, r: 19, fill: C.SK }, head);
++el('circle', { cx: 0, cy: 0, r: 95, fill: C.SK }, head);
++const bunG = G(head); el('circle', { cx: 34, cy: -118, r: 38, fill: C.INK }, bunG);
++el('path', { d: 'M-99 4 C-104 -76 -52 -112 4 -112 C62 -112 104 -74 99 4 C84 -40 44 -60 -8 -52 C-50 -46 -80 -26 -99 4 Z', fill: C.INK }, head);
++el('circle', { cx: -54, cy: 40, r: 14, fill: C.COL }, head); el('circle', { cx: 54, cy: 40, r: 14, fill: C.COL }, head);
++const eyes = [-34, 34].map(x => { const e = G(head); el('ellipse', { cx: 0, cy: 0, rx: 9, ry: 12, fill: C.INK }, e); return { g: e, x }; });
++const glasses = G(head); [-34, 34].forEach(x => el('circle', { cx: x, cy: 10, r: 28, fill: 'none', stroke: C.INK, 'stroke-width': 6 }, glasses));
++const glint = G(head); [-34, 34].forEach(x => el('line', { x1: x - 14, y1: 8, x2: x - 2, y2: -6, stroke: C.CR, 'stroke-width': 8, 'stroke-linecap': 'round' }, glint));
++el('path', { d: 'M-7 6 Q0 0 7 6', fill: 'none', stroke: C.INK, 'stroke-width': 6, 'stroke-linecap': 'round' }, glasses);
++const brows = [-1, 1].map(s => { const b = G(head); el('line', { x1: s * 22, y1: -30, x2: s * 48, y2: -26, stroke: C.INK, 'stroke-width': 7, 'stroke-linecap': 'round' }, b); return b; });
++const smile = el('path', { d: 'M-18 46 Q0 60 18 46', fill: 'none', stroke: C.INK, 'stroke-width': 6, 'stroke-linecap': 'round' }, head);
++const oMouth = el('ellipse', { cx: 0, cy: 54, rx: 10, ry: 13, fill: C.INK }, head);
++// laptop, desk, props
++el('rect', { x: 710, y: 588, width: 300, height: 156, rx: 18, fill: C.INK }, INT); el('circle', { cx: 860, cy: 668, r: 17, fill: C.CO }, INT);
++const mugHandle = el('circle', { cx: 566, cy: 690, r: 22, fill: 'none', stroke: C.CO, 'stroke-width': 14 }, INT);
++el('rect', { x: 476, y: 646, width: 88, height: 96, rx: 14, fill: C.CO }, INT); el('rect', { x: 476, y: 676, width: 88, height: 14, fill: C.CR }, INT);
++const steam = [0, 1].map(i => el('path', { d: `M${504 + i * 32} 630 C${488 + i * 32} 600 ${522 + i * 32} 580 ${506 + i * 32} 550 C${490 + i * 32} 520 ${522 + i * 32} 500 ${506 + i * 32} 470`, fill: 'none', stroke: C.CR, 'stroke-width': 9, 'stroke-linecap': 'round', 'stroke-dasharray': '46 260' }, INT));
++const plant = G(INT); { [[-30, -34], [0, -8], [30, 30]].forEach(([dx, rot], i) => { const lf = G(plant); tf(lf, 0, 0, 1, 1, rot); el('ellipse', { cx: 0, cy: -58, rx: 22, ry: 58, fill: i === 1 ? C.MI : C.MID }, lf); }); }
++el('rect', { x: 1600, y: 668, width: 80, height: 74, rx: 12, fill: C.INK }, INT);
++const phone = G(INT);
++{ el('path', { d: 'M-50 0 L-34 -30 L34 -30 L50 0 Z', fill: C.INK }, phone); el('rect', { x: -62, y: -238, width: 124, height: 224, rx: 22, fill: C.INK }, phone);
++  el('rect', { x: -52, y: -226, width: 104, height: 198, rx: 14, fill: C.UD }, phone); }
++const screenLit = G(phone); { el('rect', { x: -52, y: -226, width: 104, height: 198, rx: 14, fill: C.CR }, screenLit); el('circle', { cx: 26, cy: -196, r: 13, fill: C.CO }, screenLit);
++  [[-36, -150, 72], [-36, -128, 52], [-36, -106, 62]].forEach(([x, y, w]) => el('rect', { x, y, width: w, height: 10, rx: 5, fill: C.INK }, screenLit)); }
++const buzz = [-1, 1].map(s => { const b = G(INT); [0, 1].forEach(k => el('path', { d: `M${s * (76 + k * 18)} -150 Q${s * (92 + k * 18)} -120 ${s * (76 + k * 18)} -90`, fill: 'none', stroke: C.INK, 'stroke-width': 6, 'stroke-linecap': 'round' }, b)); return b; });
++el('rect', { x: -40, y: 736, width: 2000, height: 36, fill: C.UL }, INT); el('rect', { x: -40, y: 772, width: 2000, height: 330, fill: C.U }, INT);
++el('rect', { x: 330, y: 830, width: 300, height: 18, rx: 9, fill: C.UD }, INT); el('rect', { x: 1290, y: 830, width: 300, height: 18, rx: 9, fill: C.UD }, INT);
++// notification bubble (pivot = tail tip)
++const BUB = { x: 1300, y: 470 };
++const bubble = G(INT); el('circle', { cx: 0, cy: -84, r: 58, fill: C.CO }, bubble); el('path', { d: 'M-18 -36 L0 0 L18 -36 Z', fill: C.CO }, bubble);
++const bell = G(bubble); { el('path', { d: 'M-22 14 L-22 -4 C-22 -22 -12 -30 0 -30 C12 -30 22 -22 22 -4 L22 14 L29 20 L-29 20 Z', fill: C.CR }, bell); el('circle', { cx: 0, cy: 27, r: 7, fill: C.CR }, bell); el('circle', { cx: 0, cy: -32, r: 5, fill: C.CR }, bell); }
++const pingRings = [0, 1].map(() => el('circle', { cx: BUB.x, cy: BUB.y - 84, r: 60, fill: 'none', stroke: C.CO, 'stroke-width': 10 }, INT));
++const exclaim = G(INT); { el('rect', { x: -9, y: -70, width: 18, height: 58, rx: 9, fill: C.INK }, exclaim); el('circle', { cx: 0, cy: 8, r: 10, fill: C.INK }, exclaim);
++  el('line', { x1: -34, y1: -60, x2: -50, y2: -76, stroke: C.INK, 'stroke-width': 6, 'stroke-linecap': 'round' }, exclaim); el('line', { x1: 32, y1: -54, x2: 52, y2: -64, stroke: C.INK, 'stroke-width': 6, 'stroke-linecap': 'round' }, exclaim); }
++// selective shutter: flat wipe edges get 8 % of the global motion-blur span so they stay crisp (no gradient-looking rims)
++const crisp = (t, k = .08) => { const f0 = Math.round(t * 30) / 30; return f0 + (t - f0) * k; };
++const W1 = G(INT); el('circle', { cx: 0, cy: 0, r: 58, fill: C.CO }, W1); const w1t = el('path', { fill: C.CO }, W1);
++const W2 = G(INT); el('rect', { x: -1500, y: -750, width: 3000, height: 1500, rx: 750, fill: C.MI }, W2);
++const W3 = G(INT); el('path', { d: 'M-1700 0 A1700 1700 0 0 0 1700 0 Z', fill: C.CR }, W3);
++
++// ============================================================ camera
++const P = { x: HW.x + HW.w / 2, y: HW.y + HW.h / 2 }, S1 = 1920 / HW.w;
++function camera(t) {
++  const u = E.ioC(inv(F(24), F(56), t)), uy = E.outQ(inv(F(28), F(50), t));
++  let s = lerp(1.4, SCC, u) * (1 + .03 * kick(t, T('impact1') - F(.5), 4, .45) + .014 * kick(t, T('impact2') - F(.5), 4, .45)), cx = 960, cy = lerp(660, CYC, uy);
++  const ta = T('camAntic'), tp = T('push'), tg = T('glass'), t1 = T('arrive'), tS = t1 + F(3);
++  if (t > ta) {
++    const sB = SCC, spB = { x: (P.x - 960) * sB + 960, y: (P.y - CYC) * sB + 540 };
++    // ease-in (pow 2.2) to the glass, velocity-matched out-back settle: peak zoom speed lands exactly on the beat
++    const NP = 2.2, OB = 1.2, A0 = -0.05, kA = NP / (tg - tp), kB = (OB + 3) / (tS - tg), PG = (kB + A0 * kA) / (kA + kB);
++    let p = t < tp ? A0 * E.ioQ(inv(ta, tp, t)) : t < tg ? A0 + (PG - A0) * inv(tp, tg, t) ** NP : PG + (1 - PG) * E.outB(inv(tg, tS, t), OB);
++    s = Math.exp(lerp(Math.log(sB), Math.log(S1), p));
++    const sp = { x: lerp(spB.x, 960, p), y: lerp(spB.y, 540, p) };
++    cx = P.x - (sp.x - 960) / s; cy = P.y - (sp.y - 540) / s;
++    if (t > tS) { const w = E.ioQ(inv(tS, T('wipe') + F(10), t)); s *= 1 + 0.14 * w; cx = P.x + (1060 - 960) / S1 * w; cy = P.y + (500 - 540) / S1 * w; }
++  }
++  return { s, cx, cy };
++}
++function localToScreen(cam, lx, ly) { const wx = HW.x + lx * HW.w / 1920, wy = HW.y + ly * HW.h / 1080; return { x: (wx - cam.cx) * cam.s + 960, y: (wy - cam.cy) * cam.s + 540 }; }
++
++// ============================================================ QUADRANTS (screen space): the dot performs every beat on a full-bleed 2x2 grid
++const STRK = G(S); const sr_ = rng(77);
++const FLASH = el('rect', { fill: C.CR }, STRK); vis(FLASH, false);
++const STREAKS = Array.from({ length: 22 }, (_, i) => ({ a: (i / 22) * 2 * Math.PI + (sr_() - .5) * .3, r0: 190 + sr_() * 380, len: 200 + sr_() * 300, w: 16 + sr_() * 8, f0: 102 + (i % 3), p: el('path', { fill: i % 2 ? C.CR : C.SU }, STRK) }));
++const ICO = G(S); el('rect', { x: -10, y: -10, width: 1940, height: 1100, fill: C.CR }, ICO);
++const CHK = [[0, -540], [-960, 0]].map(([x, y]) => { const g = G(ICO); el('rect', { x, y, width: 960, height: 540, fill: C.CRD }, g); return g; });
++const R_D = 50, CEN = { x: 960, y: 540 };
++const mixHex = (a, b, k) => { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * k).toString(16).padStart(2, '0')).join(''); };
++const GHOST = G(ICO);
++const QD = [
++  { k: 'bar',   x0: 0,   y0: 0,   col: C.U,  ink: C.CR,  dsh: C.SU, n: '01', w: '进步', right: false, lx: 76,   ly: 108,  t0: T('burst1'), L: { x: 600, y: 388 },  K: { x: 600, y: 118 }, da: -24, dr0: 70 },
++  { k: 'check', x0: 960, y0: 0,   col: C.MI, ink: C.INK, dsh: C.U,  n: '02', w: '搞定', right: true,  lx: 1844, ly: 108,  t0: T('burst2'), L: { x: 1280, y: 310 }, K: { x: 1605, y: 185 }, da: -165, dr0: 70 },
++  { k: 'heart', x0: 960, y0: 540, col: C.SU, ink: C.INK, dsh: C.U,  n: '03', w: '心动', right: true,  lx: 1844, ly: 1006, t0: T('burst3'), L: { x: 1440, y: 810 }, K: { x: 1440, y: 810 }, da: -90, dr0: 214 },
++  { k: 'coin',  x0: 0,   y0: 540, col: C.CO, ink: C.CR,  dsh: C.SU, n: '04', w: '攒钱', right: false, lx: 76,   ly: 1006, t0: T('burst4'), L: { x: 480, y: 810 },  K: { x: 480, y: 810 }, da: -90, dr0: 206 },
++];
++const qR = (q, P) => Math.max(...[[q.x0, q.y0], [q.x0 + 960, q.y0], [q.x0, q.y0 + 540], [q.x0 + 960, q.y0 + 540]].map(([x, y]) => Math.hypot(x - P.x, y - P.y))) + 6;
++QD.forEach((q, i) => {
++  const cp = el('clipPath', { id: 'qc' + i }, defs); el('rect', { x: q.x0, y: q.y0, width: 960, height: 540 }, cp);
++  q.g = G(ICO, { 'clip-path': `url(#qc${i})` }); q.RL = qR(q, q.L); q.RK = qR(q, q.K);
++  q.burst = el('circle', { cx: q.L.x, cy: q.L.y, r: 0, fill: q.col }, q.g);
++  q.ic = G(q.g);
++  q.lab = G(q.g); { const tx = el('text', { x: 0, y: 0, 'text-anchor': q.right ? 'end' : 'start', fill: q.ink }, q.lab);
++    const a = el('tspan', { style: "font:600 30px 'Fredoka'; letter-spacing:2px" }, tx); a.textContent = q.n;
++    const b = el('tspan', { dx: 16, style: "font:700 40px 'Resource Han Rounded'; letter-spacing:5px" }, tx); b.textContent = q.w; }
++  q.dashes = [-1, 0, 1].map(j => ({ a: (q.da + j * 44) * Math.PI / 180, ln: el('line', { stroke: q.dsh, 'stroke-width': 12, 'stroke-linecap': 'round' }, q.g) }));
++  q.keyD = el('circle', { cx: q.K.x, cy: q.K.y, r: R_D, fill: C.CO }, q.g);
++  q.gh = G(GHOST); { const tx = el('text', { x: 0, y: 0, 'text-anchor': q.right ? 'end' : 'start', fill: mixHex(i % 2 ? C.CRD : C.CR, q.col, .3) }, q.gh);
++    const a = el('tspan', { style: "font:600 30px 'Fredoka'; letter-spacing:2px" }, tx); a.textContent = q.n;
++    const b = el('tspan', { dx: 16, style: "font:700 40px 'Resource Han Rounded'; letter-spacing:5px" }, tx); b.textContent = q.w; }
++});
++{ const q = QD[0];   // bar chart: the dot rides up on the tallest bar and stays as its cap
++  q.bars = [[360, 120, C.UL], [480, 190, C.UL], [600, 270, C.CR]].map(([x, h, c]) => { const g = G(q.ic); el('rect', { x: -42, y: -h, width: 84, height: h + 20, rx: 24, fill: c }, g); return { g, x, h }; });
++  q.base = G(q.ic); el('rect', { x: -190, y: 440, width: 380, height: 26, rx: 13, fill: C.CR }, q.base); }
++{ const q = QD[1];   // check: the dot is the pen tip, draws the stroke and stays as its full stop
++  q.stroke = el('path', { d: 'M1280 310 L1385 415 L1605 185', fill: 'none', stroke: C.INK, 'stroke-width': 62, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', pathLength: 1, 'stroke-dasharray': '1 2', 'stroke-dashoffset': 1 }, q.ic); }
++{ const q = QD[2];   // heart: the dot splits into two circles + a diamond
++  q.hg = G(q.ic); q.hc = [-1, 1].map(() => el('circle', { cx: 0, cy: 0, r: 110, fill: C.CO }, q.hg)); q.hd = el('rect', { x: -.5, y: -.5, width: 1, height: 1, fill: C.CO }, q.hg); }
++{ const q = QD[3];   // coin: the dot flips edge-on into a coin
++  q.cg = G(q.ic); q.rim = G(q.cg); q.rimC = el('circle', { cx: 0, cy: 0, r: 180, fill: C.SUE }, q.rim); q.face = G(q.cg);
++  q.fDot = el('circle', { cx: 0, cy: 0, r: 180, fill: C.CO }, q.face);
++  q.fFront = G(q.face); el('circle', { cx: 0, cy: 0, r: 180, fill: C.SU }, q.fFront); el('circle', { cx: 0, cy: 0, r: 140, fill: 'none', stroke: C.SUD, 'stroke-width': 16 }, q.fFront);
++  { const tx = el('text', { x: 0, y: 68, 'text-anchor': 'middle', fill: C.SUE, style: "font:700 200px 'Fredoka'" }, q.fFront); tx.textContent = '¥'; }
++  q.fBack = G(q.face); el('circle', { cx: 0, cy: 0, r: 180, fill: C.SUD }, q.fBack); el('circle', { cx: 0, cy: 0, r: 118, fill: C.SUE }, q.fBack); }
++const heroD = el('circle', { cx: 0, cy: 0, r: R_D, fill: C.CO }, ICO);
++const zipD = QD.map(() => { const c = el('circle', { cx: 0, cy: 0, r: R_D, fill: C.CO }, ICO); vis(c, false); return c; });
++// hop schedule: anticipation start a, take-off o, landing l (= the beat), arc height H
++const HOPS = [[171, 173, 'burst1', 250], [185, 188, 'burst2', 110], [200, 203, 'burst3', 140], [215, 218, 'burst4', 520]].map(([a, o, l, H]) => ({ a: F(a), o: F(o), l: T(l), H }));
++
++// ============================================================ LOGO scene
++const LOGO = G(S);
++const lbg = el('rect', { x: 0, y: 0, width: 960, height: 540, fill: C.U }, LOGO);   // R2: the TL ultramarine quadrant grows into the lockup field
++const stemR = el('rect', { fill: C.CR }, LOGO);                                        // R2: the TL bar morphing into the stem of the i
++const DECO = [
++  { x: 190, y: 190, mk: g => el('circle', { cx: 0, cy: 0, r: 150, fill: 'none', stroke: C.UT, 'stroke-width': 38 }, g), t0: F(243), rs: 4 },
++  { x: 1770, y: 935, mk: g => el('rect', { x: -140, y: -46, width: 280, height: 92, rx: 46, fill: C.UT }, g), t0: F(245), rs: -3, r0: -28 },
++];   // R2: corner decor removed
++// wordmark
++const WORD = 'popwıse'; let WF = 250; { const w0 = meas(`700 ${WF}px Fredoka`, WORD).width; WF = WF * 900 / w0; }
++// v5 title 「扁平矢量」 (Resource Han Rounded Heavy, the film's own CJK family): the coral dot IS the 丶 of 扁 and the TL bar
++// morphs into 扁's top bar (the match cut of the wordmark, re-targeted). The 丶 and the bar are found by rasterising 扁 once.
++function title5() {
++  const chars = [...'扁平矢量'], fs = 260, font = `900 ${fs}px 'Resource Han Rounded'`, ls = 14;
++  const mm = chars.map(c => meas(font, c)), gw = mm.map(m => m.width), tot = gw.reduce((a, b) => a + b, 0) + ls * (chars.length - 1);
++  const asc = Math.max(...mm.map(m => m.actualBoundingBoxAscent)), des = Math.max(...mm.map(m => m.actualBoundingBoxDescent));
++  const base = Math.round(505 + (asc - des) / 2);                 // ink centred on y 505
++  let xx = 960 - tot / 2; const cx = gw.map(w => { const c = xx + w / 2; xx += w + ls; return c; });
++  const W2 = Math.ceil(gw[0]) + 40, H2 = fs + 60, ox = 20, oy = Math.round(fs * .95);
++  const c2 = document.createElement('canvas'); c2.width = W2; c2.height = H2; const x2 = c2.getContext('2d'); x2.font = font; x2.fillStyle = '#000'; x2.fillText(chars[0], ox, oy);
++  const d = x2.getImageData(0, 0, W2, H2).data, ink = (x, y) => d[(y * W2 + x) * 4 + 3] > 127;
++  const runs = y => { const r = []; let s = -1; for (let x = 0; x <= W2; x++) { const h = x < W2 && ink(x, y); if (h && s < 0) s = x; if (!h && s >= 0) { r.push([s, x - 1]); s = -1; } } return r; };
++  let y = 0; while (y < H2 && !runs(y).length) y++; const top = y; let dx0 = 1e9, dx1 = -1;
++  for (; y < H2; y++) { const r = runs(y); if (r.length === 1 && r[0][1] - r[0][0] > gw[0] * .45) break; r.forEach(([a, b]) => { dx0 = Math.min(dx0, a); dx1 = Math.max(dx1, b); }); }
++  const barTop = y; let bx0 = 1e9, bx1 = -1;
++  for (; y < H2; y++) { const r = runs(y); if (r.length !== 1) break; bx0 = Math.min(bx0, r[0][0]); bx1 = Math.max(bx1, r[0][1]); }
++  const barBot = y, PX = x => cx[0] - gw[0] / 2 + (x - ox), PY = y => base + (y - oy), lx = x => f3(x - ox - gw[0] / 2), ly = y => f3(y - oy);
++  const r = Math.round(fs * .125), bar = { x0: PX(bx0), x1: PX(bx1 + 1), y0: PY(barTop), y1: PY(barBot) };
++  const clip = el('clipPath', { id: 'v5cut' }, defs);   // everything except the 丶 (glyph-local: origin = glyph centre x, baseline)
++  el('path', { d: `M-600 -700 H600 V400 H-600 Z M${lx(dx0 - 4)} ${ly(top - 8)} H${lx(dx1 + 5)} V${f3(ly(barTop) + .5)} H${lx(dx0 - 4)} Z`, 'clip-rule': 'evenodd' }, clip);
++  const bl = { x: (bar.x0 + bar.x1) / 2 - cx[0], y: (bar.y0 + bar.y1) / 2 - base };
++  const inkB = { x0: cx[0] - gw[0] / 2 - mm[0].actualBoundingBoxLeft, x1: cx[3] - gw[3] / 2 + mm[3].actualBoundingBoxRight, y0: base - asc, y1: base + des };
++  const mk = parent => chars.map((ch, i) => { const g = G(parent), gi = G(g); const tx = el('text', { x: f3(-gw[i] / 2), y: 0, fill: C.CR, style: `font:${font}` }, gi); tx.textContent = ch;
++    if (i === 0) tx.setAttribute('clip-path', 'url(#v5cut)'); return { g, gi, cx: cx[i], t0: F(244 + i), i }; });
++  return { base, cx, r, dx: PX((dx0 + dx1 + 1) / 2), dy: bar.y0 - r - 2, bar, bl, ink: inkB, enB: Math.round(inkB.y1 + 96), mk, fs };
++}
++const T5 = V5 ? title5() : null;
++const wfont = `700 ${WF}px Fredoka`, WBASE = V5 ? T5.base : 548;
++const WTOT = meas(wfont, WORD).width, WX0 = 960 - WTOT / 2;
++const wmG = G(LOGO);
++const LET = V5 ? T5.mk(wmG) : [...WORD].map((ch, i) => { const pre = meas(wfont, WORD.slice(0, i)).width, w = meas(wfont, ch).width; const g = G(wmG);
++  const tx = el('text', { x: -w / 2, y: 0, fill: C.CR, style: `font:${wfont}` }, g); tx.textContent = ch; return { g, cx: WX0 + pre + w / 2, t0: T('letters') + F(Math.max(0, Math.abs(i - 4) - 1)), i }; });
++const mI = meas(wfont, 'ı'), mX = meas(wfont, 'x');
++const DOT_R = V5 ? T5.r : WF * 0.15;
++const TIT = V5 ? { x: T5.dx, y: T5.dy } : { x: WX0 + meas(wfont, 'popw').width + (mI.actualBoundingBoxRight - mI.actualBoundingBoxLeft) / 2, y: WBASE - mX.actualBoundingBoxAscent - WF * 0.07 - DOT_R };
++const END_RINGS = [T('beatBob2')].map(t0 => { const c = el('circle', { cx: TIT.x, cy: TIT.y, r: 0, fill: 'none', stroke: C.CO }, LOGO); LOGO.insertBefore(c, wmG); return { t0, c }; });
++// tagline
++const CN = '每天 聪明一点点', cnFont = "700 70px 'Resource Han Rounded'", CNB = 716, CNLS = 7;
++const cnW = [...CN].map(c => c === ' ' ? 36 : meas(cnFont, c).width); const cnTot = cnW.reduce((a, b) => a + b, 0) + CNLS * (CN.length - 1);
++const cpT = el('clipPath', { id: 'tagClip' }, defs); el('rect', { x: 0, y: CNB - 94, width: 1920, height: 116 }, cpT);
++const cpE = el('clipPath', { id: 'enClip' }, defs); el('rect', { x: 0, y: 752, width: 1920, height: 54 }, cpE);
++const tagG = G(LOGO, { 'clip-path': 'url(#tagClip)' }), enClipG = G(LOGO, { 'clip-path': 'url(#enClip)' });
++let xx = 960 - cnTot / 2;
++const CNCH = [...CN].map((c, i) => { const g = G(tagG); const tx = el('text', { x: 0, y: 0, fill: C.CR, style: `font:${cnFont}` }, g); tx.textContent = c; const o = { g, x: xx, t0: T('tagCN') + i * F(1.2) }; xx += cnW[i] + CNLS; return o; });
++const DOTBOX = (() => { const c2 = document.createElement('canvas'); c2.width = 100; c2.height = 110; const x2 = c2.getContext('2d'); x2.font = cnFont; x2.fillStyle = '#000'; x2.fillText('点', 10, 80);
++  const d = x2.getImageData(0, 0, 100, 110).data, ink = (x, y) => d[(y * 100 + x) * 4 + 3] > 90, row = y => { for (let x = 0; x < 100; x++) if (ink(x, y)) return true; return false; };
++  let yb = 109; while (yb > 0 && !row(yb)) yb--; const y1 = yb; while (yb > 0 && row(yb)) yb--; const y0 = yb + 1;
++  const boxes = []; let run = null; for (let x = 0; x <= 100; x++) { let h = false; if (x < 100) for (let y = y0; y <= y1; y++) if (ink(x, y)) { h = true; break; }
++    if (h && !run) run = { x0: x }; if (!h && run) { run.x1 = x - 1; boxes.push(run); run = null; } }
++  return boxes.map(b => { let a = 999, z = -1; for (let y = y0; y <= y1; y++) for (let x = b.x0; x <= b.x1; x++) if (ink(x, y)) { a = Math.min(a, y); z = Math.max(z, y); } return { x0: b.x0 - 10 - 2, x1: b.x1 - 10 + 2, y0: a - 80 - 2, y1: z - 80 + 2 }; }); })();
++const CNDOTS = []; CNCH.forEach((c, ci) => { if (CN[ci] !== '点') return; DOTBOX.forEach((b, bi) => { const id = `cnd${ci}_${bi}`; const cp = el('clipPath', { id }, defs); el('rect', { x: b.x0, y: b.y0, width: b.x1 - b.x0, height: b.y1 - b.y0 }, cp);
++  const g = G(c.g), inner = G(g); const tx = el('text', { x: 0, y: 0, fill: C.CO, stroke: C.CO, 'stroke-width': 1.4, 'clip-path': `url(#${id})`, style: `font:${cnFont}` }, inner); tx.textContent = '点';
++  CNDOTS.push({ g, inner, cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, sx: c.x + (b.x0 + b.x1) / 2, sy: CNB + (b.y0 + b.y1) / 2, t0: T('cnFlip') + F(CNDOTS.length) }); }); });
++const enG = G(enClipG); { const tx = el('text', { x: 960 + 4, y: 0, 'text-anchor': 'middle', fill: '#CFCFFF', style: "font:600 36px 'Fredoka'; letter-spacing:10px" }, enG); tx.textContent = 'EVERY DAY, A LITTLE WISER';
++  if (V5) { tx.setAttribute('x', 960 + 9); tx.setAttribute('style', "font:600 46px 'Fredoka'; letter-spacing:18px"); tx.textContent = 'FLAT VECTOR';   // v5: the EN style line replaces the tagline
++    const cr = cpE.firstChild; cr.setAttribute('y', T5.enB - 52); cr.setAttribute('height', 66); vis(tagG, false); } }
++const landRays = [-168, -128, -100, -80, -52, -12].map((d, i) => ({ a: d * Math.PI / 180, len: [76, 104, 88, 110, 92, 72][i], ln: el('line', { stroke: C.SU, 'stroke-width': 14, 'stroke-linecap': 'round' }, LOGO) }));
++const dotL = el('circle', { cx: 0, cy: 0, r: 46, fill: C.CO }, LOGO);
++const bigR = el('circle', { cx: TIT.x, cy: TIT.y, r: 0, fill: 'none', stroke: C.CO }, LOGO); LOGO.insertBefore(bigR, wmG);
++const SIG = [[C.CR, 0, 0], [C.MI, 1, 0], [C.SU, 1, 1], [C.CO, 0, 1]].map(([c, i, j], k) => ({ x: 1738 + i * 26, y: 930 + j * 26, t0: T('tagEN') + F(8 + k), c: el('circle', { cx: 0, cy: 0, r: 9, fill: c }, LOGO) }));
++const spark = el('circle', { cx: 0, cy: 0, r: 13, fill: C.CO }, LOGO), sparkRing = el('circle', { cx: CNDOTS[0].sx, cy: CNDOTS[0].sy, r: 0, fill: 'none', stroke: C.CO }, LOGO);
++const TOPL = G(S); zipD.forEach(z => TOPL.appendChild(z));
++// R2 MATCH CUT: the TL bar + its coral cap become the wordmark's dotless i + tittle
++const IB = V5 ? T5.bar : (() => { const L = LET[4], w = meas(wfont, 'ı').width; return { x0: L.cx - w / 2 - mI.actualBoundingBoxLeft, x1: L.cx - w / 2 + mI.actualBoundingBoxRight, y0: WBASE - mI.actualBoundingBoxAscent, y1: WBASE + mI.actualBoundingBoxDescent }; })();
++const CL = { ca: T('collapseAntic'), c1: F(236), zd: F(3), x0: F(237), x1: F(245) }, ZIP0 = [0, F(235), F(236), F(237)];
++const morphP = t => E.ioC(inv(CL.x0, CL.x1, t));
++const stemBox = p => ({ x0: lerp(558, IB.x0, p), x1: lerp(642, IB.x1, p), y0: lerp(170, IB.y0, p), y1: lerp(460, IB.y1, p), rx: lerp(24, V5 ? (IB.y1 - IB.y0) * .45 : (IB.x1 - IB.x0) * .3, p) });
++function capPos(t) { const p = morphP(t), b = stemBox(p), r = lerp(R_D, DOT_R, p); return { x: V5 ? lerp((b.x0 + b.x1) / 2, TIT.x, p) : (b.x0 + b.x1) / 2, y: b.y0 - r - 2, r }; }
++// v5: 扁 squashes on the dot's anticipation / landing (60 % of the ı stem squash, about the baseline); the resting dot rides its top bar
++const stem5 = t => { const dl = T('dotLand2'), lau = T('dotRise'), an = t < lau ? E.outQ(inv(CL.x1, lau, t)) : 0; return .6 * (.12 * kick(t, dl, 3.5, .4) + .07 * an - .05 * kick(t, lau, 4, .4)); };
++const STEM5_OFF = F(248);   // v5: the morphing bar is hidden once 扁 has popped past its first overshoot
++const coinTh = t => 2 * Math.PI * E.ioQ(inv(QD[3].t0, QD[3].t0 + F(8), t));
++
++// ============================================================ helpers for animated strokes
++function burstLine(ln, cx, cy, a, r0, r1, t, t0, dur = F(10)) {
++  const h = E.outC(inv(t0, t0 + dur * .7, t)), tl = E.outC(inv(t0 + dur * .3, t0 + dur, t));
++  if (t < t0 || tl >= 1) { vis(ln, false); return; } vis(ln, true);
++  const ra = lerp(r0, r1, tl), rb = lerp(r0, r1, h);
++  ln.setAttribute('x1', cx + Math.cos(a) * ra); ln.setAttribute('y1', cy + Math.sin(a) * ra); ln.setAttribute('x2', cx + Math.cos(a) * rb); ln.setAttribute('y2', cy + Math.sin(a) * rb);
++}
++function ring(c, t, t0, r0, r1, w0, dur = F(12)) { const u = inv(t0, t0 + dur, t); if (t < t0 || u >= 1) { vis(c, false); return; } vis(c, true); const w = w0 * (1 - u) ** 1.15; if (w < 1.5) { vis(c, false); return; } c.setAttribute('r', lerp(r0, r1, E.outQ(u))); c.setAttribute('stroke-width', w); }
++
++// ============================================================ the hero dot, act 1 (ball -> sun)
++function ballA(t) {
++  const ti1 = T('impact1'), ti2 = T('impact2'), ta = T('antic'), tl = T('launch'), yc = GY - R0;
++  let x = 960, y = yc, sx = 1, sy = 1, rot = 0, r = R0, sh = 1;
++  if (t < ti1) { const g = 2040, a = -0.12; y = yc - 0.5 * g * ((ti1 - a) ** 2 - (t - a) ** 2); const k = Math.min(g * (t - a) / 1500, 1) * .16; sy = 1 + k; sx = 1 / (1 + k); sh = clamp(1 - (yc - y) / 520); }
++  else if (t < ti2) { const c = F(3), hopT = ti2 - ti1 - c;
++    if (t < ti1 + c) { const q = Math.sin(Math.PI * (t - ti1) / c); sy = 1 - .4 * q; sx = 1 + .36 * q; y = GY - R0 * sy; }
++    else { const u = (t - ti1 - c) / hopT; y = yc - 78 * hump(u); const k = Math.abs(1 - 2 * u) * .09; sy = 1 + k; sx = 1 / (1 + k); sh = 1 - .35 * hump(u); } }
++  else if (t < tl) { const c = F(2.5);
++    if (t < ti2 + c) { const q = Math.sin(Math.PI * (t - ti2) / c); sy = 1 - .2 * q; sx = 1 + .18 * q; }
++    const a = E.outQ(inv(ta, tl, t)); sy *= 1 - .3 * a; sx *= 1 + .24 * a; y = GY - R0 * sy; }
++  else { const u = inv(tl, T('sunLand'), t); const p = E.outQt(u);
++    const bz = q => { const P0 = { x: 960, y: yc }, P1 = { x: 1060, y: 110 }, P2 = SUN; return { x: (1 - q) ** 2 * P0.x + 2 * (1 - q) * q * P1.x + q * q * P2.x, y: (1 - q) ** 2 * P0.y + 2 * (1 - q) * q * P1.y + q * q * P2.y }; };
++    const pp = bz(p); x = pp.x; y = pp.y;
++    const dt = 1 / 240, p2 = E.outQt(inv(tl, T('sunLand'), t + dt)), pq = bz(p2); const vx = (pq.x - x) / dt, vy = (pq.y - y) / dt, sp = Math.hypot(vx, vy);
++    const [s, k] = pop(t, tl, 1.9, .42, .1, 1.2); r = lerp(R0, SUN.r, s);
++    const st = clamp(sp / 5200) * .42; rot = Math.atan2(vy, vx) * 180 / Math.PI; sx = 1 + st; sy = 1 / (1 + st);
++    if (u >= 1) { rot = 0; sx = sy = 1; }
++    sh = clamp(1 - (t - tl) / F(5));
++    r *= 1 + 0.012 * Math.sin(2 * Math.PI * .5 * (t - tl)); }
++  return { x, y, sx, sy, rot, r, sh };
++}
++
++// ============================================================ render
++function updWorld(t, cam, tr = t) {
++  vis(world, t < T('coreDot') + F(4)); if (t >= T('coreDot') + F(4)) return;
++  world.setAttribute('transform', `translate(960 540) scale(${cam.s.toFixed(6)}) translate(${(-cam.cx).toFixed(4)} ${(-cam.cy).toFixed(4)})`);
++  const b = ballA(tr); dotW.setAttribute('r', b.r); tf(dotW, b.x, b.y, b.sx, b.sy, b.rot);
++  { const b2 = ballA(tr + 1 / 120); const vx = (b2.x - b.x) * 120, vy = (b2.y - b.y) * 120, sp = Math.hypot(vx, vy); const L = clamp((sp - 100) / 1300) * 190;
++    const ux = -vx / (sp || 1), uy = -vy / (sp || 1), nx = -uy, ny = ux;
++    speedL.forEach((ln, i) => { const o = [-.3, .3][i], li = L * [1, .78][i]; vis(ln, li > 6 && (t < T('impact1') - 0.004 || (t > T('launch') && t < T('sunLand'))));
++      const bx = b.x + nx * o * b.r + ux * (b.r * 1.3 + [0, 24][i]), by = b.y + ny * o * b.r + uy * (b.r * 1.3 + [0, 24][i]);
++      ln.setAttribute('x1', bx); ln.setAttribute('y1', by); ln.setAttribute('x2', bx + ux * li); ln.setAttribute('y2', by + uy * li); }); }
++  { const tg = crisp(t, .06), ge = lerp(0, 1900, E.outQ(inv(F(1.5), F(14), tg))), sm = .6 * 1900 * 2 * (1 - inv(F(1.5), F(14), tg)) / 12.5 * (ge > 0 ? 1 : 0);
++    groundR.setAttribute('width', ge >= 1899 ? 10000 : ge + 4000); road.setAttribute('width', ge >= 1899 ? 10000 : ge + 4000); lanes.forEach(l => vis(l.e, ge >= 1899 || l.x + 48 < ge)); vis(groundLead, ge > 0 && ge < 1890); groundLead.setAttribute('x', ge - sm); groundLead.setAttribute('width', 170 + sm); }
++  SKY.forEach(d => { const [s, k] = pop(t, d.t0, 2.4, .4, .22); const o = inv(d.out, d.out + F(6), t); const so = Math.max(s, 0) * (1 - E.inB(o, 2.2)); vis(d.g, t >= d.t0 && o < 1);
++    if (t >= d.t0 && o < 1) tf(d.g, d.x + 5 * Math.sin(1.3 * t + d.x), d.y + 5 * Math.cos(1.1 * t + d.y), Math.max(so, 0.001) * (1 + k), Math.max(so, 0.001) / (1 + k), (d.r0 || 0) + d.rs * (t - d.t0) * 10 - 40 * (1 - s)); });
++  IMP.forEach(im => { im.lines.forEach((l, i) => burstLine(l.ln, 960, GY - 6, l.a, 100 + 12 * (i % 2), 100 + [150, 100, 196, 196, 100, 150][i] * im.sc, t, im.t0, F(10)));
++    im.rips.forEach((rp, j) => { const t0 = im.t0 + F(3 * j), u = inv(t0, t0 + F(12), t); vis(rp, t >= t0 && u < 1); const rx = lerp(100, 100 + (300 - 60 * j) * im.sc, E.outC(u));
++      rp.setAttribute('rx', rx); rp.setAttribute('ry', rx * .13); rp.setAttribute('stroke-width', (15 - 5 * j) * im.sc * (1 - E.outQ(u))); }); });
++  const hgt = GY - R0 - b.y; vis(shadow, b.sh > 0.01 && t > F(3)); shadow.setAttribute('rx', 68 * b.sh * (1 - clamp(hgt / 900) * .5) * b.sx); shadow.setAttribute('ry', 9 * b.sh);
++  rays.forEach((ln, i) => { const a = i / 12 * Math.PI * 2 + t * .14; burstLine(ln, 0, 0, 0, 0, 0, -1, 0); const t0 = T('rays') + i * F(.6); const u = E.outB(inv(t0, t0 + F(9), t), 2.2);
++    if (t < t0) { vis(ln, false); return; } vis(ln, true); const r0 = SUN.r + 26, r1 = r0 + 40 * u;
++    ln.setAttribute('x1', SUN.x + Math.cos(a) * r0); ln.setAttribute('y1', SUN.y + Math.sin(a) * r0); ln.setAttribute('x2', SUN.x + Math.cos(a) * r1); ln.setAttribute('y2', SUN.y + Math.sin(a) * r1); });
++  far.forEach(f => { const [s, k] = pop(t, f.t0, 2.0, .5, .1); tf(f.g, f.x, GY + 2, 1 / (1 + k * .5), Math.max(s, 0) * (1 + k)); });
++  CLOUDS.forEach(c => { const u = E.outQt(inv(c.t0, c.t0 + F(26), t)); tf(c.g, lerp(c.from, c.x, u) + (t - c.t0) * 9 * (u > 0 ? 1 : 0), c.y, c.s * (1 + .04 * kick(t, c.t0 + F(20), 2, .5)), c.s); });
++  BIRDS.forEach(bd => { const t0 = T('birds') + bd.i * F(3); const u = inv(t0, t0 + F(60), t); vis(bd.g, false);
++    const x = lerp(-90 - bd.i * 80, 1250 - bd.i * 70, u), y = 250 + bd.i * 38 + 12 * Math.sin(2 * Math.PI * 1.1 * t + bd.i) - 60 * u;
++    const a = 32 * Math.sin(2 * Math.PI * 4.2 * t + bd.i * 1.7) - 6; tf(bd.g, x, y, bd.s); tf(bd.wl, 0, 0, 1, 1, a); tf(bd.wr, 0, 0, 1, 1, -a); });
++  BLD.forEach((bl, i) => { const [s, k] = pop(t, bl.t0, 2.3, .4, .22); tf(bl.g, bl.cx, GY, 1 / (1 + k), Math.max(s, 0) * (1 + k)); tf(slabs[i], bl.cx, GY, Math.max(s, 0) / (1 + k), Math.max(s, 0));
++    if (bl.tip) bl.tip.setAttribute('r', 9 * (0.75 + 0.25 * Math.abs(Math.sin(t * 3.2)))); });
++  { const u = inv(1.62, 2.85, t), e = u * u * (3 - 2 * u), x = lerp(-320, 2260, e), v = 6 * u * (1 - u) / 1.23 * 2580; vis(bus, u > 0 && u < 1);
++    tf(bus, x, 900); tf(busB, 0, -3 * Math.abs(Math.sin(2 * Math.PI * 5.5 * t)), 1 + .6 * (v / 3146) ** 12, 1 - .12 * (v / 3146) ** 12, -2.2 * (1 - 2 * u) * (u < .5 ? 1 : .5));
++    busW.forEach(w => tf(w.g, w.x, 0, 1, 1, (x / 17) * 180 / Math.PI)); }
++  lits.forEach(l => { const [s] = pop(t, l.t0, 3, .42); tf(l.g, l.x, l.y, Math.max(s, 0)); });
++  TREES.forEach(tr => { const [s, k] = pop(t, tr.t0, 2.8, .38, .2); tf(tr.g, tr.x, GY, Math.max(s, 0) / (1 + k), Math.max(s, 0) * (1 + k), 2.5 * Math.sin(2 * Math.PI * .7 * t + tr.x)); });
++  // hero window: blind snaps up, sill + sparks ping
++  const hw = T('heroWin'), bu = E.outC(inv(hw, hw + F(5), t)); blind.setAttribute('height', HW.h * (1 - bu)); vis(blind, bu < 1); blind.setAttribute('fill', t >= F(78) ? C.SU : C.INKW);
++  const [ss] = pop(t, hw, 3, .45); tf(sill, 0, 0, 1, 1); sill.setAttribute('width', (HW.w + 10) * Math.max(ss, 0)); sill.setAttribute('x', HL.x + HW.w / 2 - (HW.w + 10) * Math.max(ss, 0) / 2);
++  heroSparks.forEach((ln, i) => { const a = [-.75, -.25, .25, .75][i] * Math.PI + (i < 2 ? 0 : 0); const ang = [-2.4, -.75, .75, 2.4][i];
++    burstLine(ln, HL.x + HW.w / 2, HL.y + HW.h / 2, [-2.5, -.64, .64, 2.5][i] + (i > 1 ? 0 : 0), 44, 64, t, hw + F(1), F(9)); });
++}
++function updInterior(t, cam) {
++  if (t >= T('coreDot') + F(4)) return;
++  // lamp sway, steam
++  tf(lamp, 668, 0, 1, 1, 2.2 * Math.sin(2 * Math.PI * .6 * t) + 3 * kick(t, T('arrive'), 1.2, .25));
++  steam.forEach((p, i) => p.setAttribute('stroke-dashoffset', -((t * 150 + i * 150) % 306)));
++  plant.setAttribute('transform', `translate(1640 668) rotate(${1.5 * Math.sin(2 * Math.PI * .5 * t)})`);
++  const tp = T('ping'), ra = T('reactAntic'), rs = T('headSnap');
++  // character rig
++  const typing = 1 - inv(tp, tp + F(4), t);
++  const lean = 3.5 * pop(t, rs, 2, .4)[0];
++  const antic = E.outQ(inv(ra, rs, t)) * (1 - inv(rs, rs + F(2), t));
++  tf(CH, 860, 760 + 4 * antic, 1 + .02 * antic, 1 - .03 * antic, lean);
++  const nod = typing * 6 * Math.pow(1 - Math.abs(Math.sin(2 * Math.PI * t)), 4);
++  armL.sh.setAttribute('transform', `translate(-146 -150) rotate(${14 + 1.5 * Math.sin(2 * Math.PI * 5.5 * t) * typing - 6 * lean / 3.5})`);
++  armL.fo.setAttribute('transform', `translate(0 116) rotate(${-98 + 7 * Math.sin(2 * Math.PI * 5.5 * t) * typing})`);
++  // acting: after the "!" she reaches for the phone (anticipation tuck, overshooting reach) just before the bubble swells into the wipe
++  const rch = E.outB(inv(T('exclaim') + F(3), T('exclaim') + F(10), t), 1.8), tuck = hump(inv(T('exclaim'), T('exclaim') + F(4), t));
++  armR.sh.setAttribute('transform', `translate(146 -150) rotate(${lerp(-14 + 1.5 * Math.sin(2 * Math.PI * 5.5 * t + 2) * typing + 4 * lean / 3.5 + 8 * tuck, -84, rch)})`);
++  armR.fo.setAttribute('transform', `translate(0 116) rotate(${lerp(98 + 7 * Math.sin(2 * Math.PI * 5.5 * t + 2) * typing + 10 * tuck, 10, rch)})`);
++  const [hs] = pop(t, rs, 2.6, .35, 0, 1.4);
++  const hr = -4 * antic + 11 * Math.max(hs, 0) * (t > rs ? 1 : 0);
++  tf(neck, 8 * hs * (t > rs ? 1 : 0), -200 + nod * .4 + 6 * antic, 1, 1, hr * .35);
++  tf(head, 0, -86 + nod + 8 * antic, 1, 1, hr * .65);
++  const bl = T('blink'); const blink = Math.max(hump(inv(bl, bl + F(4), t)), hump(inv(F(160), F(164), t)));
++  const wide = t > rs ? 1 + .22 * Math.max(hs, 0) : 1, look = t > rs ? 9 * hs : 0;
++  eyes.forEach(e => tf(e.g, e.x + look, 10, wide, wide * (1 - .9 * blink) * (1 - .65 * antic)));
++  brows.forEach(b => tf(b, 0, -12 * (t > rs ? hs : 0) + 4 * antic));
++  const got = T('exclaim') + F(10), surprised = t > rs && t < got; vis(smile, !surprised); vis(oMouth, surprised); if (surprised) tf(oMouth, look * .5, 0, Math.max(hs, .01));
++  { const [gs] = pop(t, got, 3, .45, 0); tf(smile, look * .5, t >= got ? -6 * Math.max(gs, 0) : 0, t >= got ? 1 + .45 * Math.max(gs, 0) : 1, t >= got ? 1 + .6 * Math.max(gs, 0) : 1); }
++  bunG.setAttribute('transform', `rotate(${f3(-8 * kick(t, rs, 2.4, .3) + 3 * kick(t, T('reactAntic'), 2.6, .4))} 0 -95)`);
++  vis(glint, t >= T('exclaim') && t < T('exclaim') + F(2));
++  armL.fg.setAttribute('transform', 'translate(0 118) rotate(0)'); armR.fg.setAttribute('transform', `translate(8 118) rotate(${f3(-30 * E.outB(inv(got - F(1), got + F(3), t), 2))})`);
++  // phone + bubble
++  const vib = t > tp ? (1 - inv(tp, tp + F(12), t)) : 0;
++  const bz = t >= tp && t < tp + F(6) ? 3 * Math.cos(2 * Math.PI * 15 * (t - tp)) : 0; tf(phone, 1300 + bz, 740 - 4 * kick(t, T('exclaim') + F(10), 4, .4), 1, 1, 2 * bz / 3);
++  vis(screenLit, t >= tp); if (t >= tp) { const [s] = pop(t, tp, 4, .5); tf(screenLit, 0, -127 * (1 - s), 1, s); }
++  buzz.forEach((b, i) => { const on = t >= tp && t < tp + F(13); vis(b, on); if (on) { const [s] = pop(t, tp, 4, .4); tf(b, 1300, 740 - 10 * Math.sin(2 * Math.PI * 12 * t), Math.max(s, .01) * (1 - E.inB(inv(tp + F(9), tp + F(13), t)))); } });
++  const bt = tp + F(1), ba = T('bubbleAntic'), wt = T('wipe');
++  vis(bubble, t >= bt && t < wt);
++  if (t >= bt) { const [s, k] = pop(t, bt, 2.6, .38, .25); const an = E.ioQ(inv(ba, wt, t)); const grow = E.inC(inv(wt, wt + F(3), t));
++    tf(bubble, BUB.x, BUB.y + 6 * an - 34 * E.outQ(inv(T('exclaim') + F(10), wt, t)), Math.max(s, 0) / (1 + k) * (1 + .12 * an) * (1 + grow * .3), Math.max(s, 0) * (1 + k) * (1 - .18 * an) * (1 + grow * .3), 3 * Math.sin(2 * Math.PI * 1.2 * (t - bt)) * (1 - an));
++    tf(bell, 0, -84, 1 - E.inB(inv(wt, wt + F(3), t)), 1 - E.inB(inv(wt, wt + F(3), t)), 20 * kick(t, bt + F(3), 4.5, .22)); }
++  pingRings.forEach((c, i) => ring(c, t, bt + F(3 + i * 6), 64, 130, 12, F(12)));
++  { const [s, k] = pop(t, T('exclaim'), 3, .35, .3); vis(exclaim, t >= T('exclaim')); tf(exclaim, 1036, 262, Math.max(s, 0) / (1 + k), Math.max(s, 0) * (1 + k), 12 - 4 * s); }
++  // shape wipe: coral -> mint -> cream from the bubble
++  { const tc = crisp(t, 0), BC = { x: BUB.x, y: BUB.y - 84 };
++    const t1 = T('wipe'), u1 = inv(t1, t1 + F(10), tc); vis(W1, t >= t1);
++    if (t >= t1) { const k = Math.exp(lerp(Math.log(1.12), Math.log(34), E.ioQ(u1))), L = 84 + 120 * E.outQ(inv(t1, t1 + F(5), tc)), a0 = 62 * Math.PI / 180;
++      w1t.setAttribute('d', `M${f3(-58 * Math.cos(a0))} ${f3(58 * Math.sin(a0))} L0 ${f3(L)} L${f3(58 * Math.cos(a0))} ${f3(58 * Math.sin(a0))} Z`);
++      tf(W1, BC.x - 160 * E.ioQ(u1), BC.y + 60 * E.ioQ(u1), k, k, 175 * E.outC(u1)); }
++    const t2 = T('wipe2'), u2 = inv(t2, t2 + F(9), tc); vis(W2, t >= t2);
++    if (t >= t2) { const k = Math.exp(lerp(Math.log(.03), 0, E.ioQ(u2))); tf(W2, lerp(BC.x, 1060, E.outQ(u2)), lerp(BC.y, 500, E.outQ(u2)), k, k, 25 * (1 - E.outB(u2, 1.6))); }
++    const t3 = T('wipe3'), sl = T('slam'); vis(W3, t >= t3);
++    if (t >= t3) { const u3 = inv(t3, sl, tc), kk = kick(tc, sl, 3.5, .4); tf(W3, 1060, -110 - 2300 * (1 - E.inQ(u3)) + 40 * kk, 1, 1 - .06 * kk, 7 * (1 - u3)); } }
++
++}
++function arcP(P0, P1, H, q) { const cx = (P0.x + P1.x) / 2, cy = Math.min(P0.y, P1.y) - H; return { x: (1 - q) ** 2 * P0.x + 2 * (1 - q) * q * cx + q * q * P1.x, y: (1 - q) ** 2 * P0.y + 2 * (1 - q) * q * cy + q * q * P1.y }; }
++const barS = t => Math.max(pop(t, QD[0].t0 + F(1), 3.2, .42, 0)[0], 0);
++const capY = t => 440 - 270 * barS(t) - R_D - 2;
++function penP(t) { const p = E.ioQ(inv(QD[1].t0 + F(1), QD[1].t0 + F(6), t)); const l1 = Math.hypot(105, 105), l2 = Math.hypot(220, 230), d = p * (l1 + l2);
++  return d < l1 ? { x: 1280 + 105 * d / l1, y: 310 + 105 * d / l1, p } : { x: 1385 + 220 * (d - l1) / l2, y: 415 - 230 * (d - l1) / l2, p }; }
++const restPos = (k, t) => k === 0 ? CEN : k === 1 ? { x: 600, y: capY(t) } : k === 2 ? penP(t) : QD[2].K;
++function hero(t) {
++  const cd = T('coreDot'), tc0 = T('coreHit');
++  if (!(HOPS.some(h => t >= h.o && t < h.l - F(.5)) || (t >= cd && t < tc0 - F(.5)))) t = crisp(t, 0);   // R2: crisp except in flight
++  if (t < cd || t >= HOPS[3].l) return null;
++  let k = 0; while (k < 4 && t >= HOPS[k].o) k++;
++  if (k > 0 && t < HOPS[k - 1].l) { const h = HOPS[k - 1], P0 = restPos(k - 1, h.o), P1 = QD[k - 1].L;
++    const p = arcP(P0, P1, h.H, inv(h.o, h.l, t)), pq = arcP(P0, P1, h.H, inv(h.o, h.l, t + 1 / 240)); const vx = (pq.x - p.x) * 240, vy = (pq.y - p.y) * 240;
++    const st = 1 + clamp(Math.hypot(vx, vy) / 5000) * .22; return { x: p.x, y: p.y, sx: st, sy: 1 / st, rot: Math.atan2(vy, vx) * 180 / Math.PI }; }
++  if (k === 3) return null;                                   // inside the heart
++  if (k === 0) {   // R2: the dot SQUIRTS out of the slammed half-disc, rises 170 px, drops back onto the centre cross (contact cracks the grid open)
++    if (t < tc0) { const u = inv(cd, tc0, t), v = Math.abs(1 - 2 * u), st = 1 + .5 * v * v, e = Math.min(1, .3 + inv(cd, cd + F(2), t) * .7);
++      return { x: CEN.x, y: CEN.y - 170 * 4 * u * (1 - u), sx: e / st, sy: e * st, rot: 0 }; }
++    const an = E.outQ(inv(tc0, tc0 + F(1), t)), sy = 1 - .3 * an, sx = 1 + .24 * an; return { x: CEN.x, y: CEN.y + R_D * (1 - sy), sx, sy, rot: 0 }; }
++  const h = HOPS[k], p = restPos(k, t), s = k === 0 ? Math.max(pop(t, cd, 3, .45, 0)[0], 0) : 1;
++  const an = E.outQ(inv(h.a, h.o, t)), land = k > 0 ? kick(t, HOPS[k - 1].l, 3.5, .4) : 0;
++  const sy = (1 - .3 * an) * (1 - .22 * land), sx = (1 + .2 * an) * (1 + .2 * land);
++  return { x: p.x, y: p.y + R_D * (1 - sy), sx: s * sx, sy: s * sy, rot: 0 };
++}
++function updIcons(t, cam, tr = t) {
++  const on = t >= T('coreDot') && t <= CL.x1; vis(ICO, on);
++  // R2 critical fix: zip dots are handled FIRST and are hidden unless in flight (no early return can strand one at the origin)
++  zipD.forEach((z, i) => { const z0 = ZIP0[i], u = i ? inv(z0, z0 + CL.zd, tr) : 1, sh = i > 0 && tr >= z0 - F(.5) && u < 1; vis(z, sh); if (!sh) return;
++    const q = QD[i], cp = capPos(tr), e = u ** 1.8, e2 = Math.min(1, (u + .08) ** 1.8), x = lerp(q.K.x, cp.x, e), y = lerp(q.K.y, cp.y, e);
++    const vx = lerp(q.K.x, cp.x, e2) - x, vy = lerp(q.K.y, cp.y, e2) - y, st = 1 + clamp(Math.hypot(vx, vy) / 60) * .35;
++    z.setAttribute('r', f3(lerp(R_D, cp.r * .8, e))); tf(z, x, y, st, 1 / st, Math.atan2(vy, vx) * 180 / Math.PI); });
++  if (!on) return;
++  const tc0 = T('coreHit'), cu1 = E.inQ(inv(CL.ca, CL.c1, t));
++  // the dot's contact on the centre cross cracks the checker open (R2)
++  CHK.forEach((g, i) => { const s = Math.max(pop(t, tc0 + F(i * .5), 3.2, .5, 0)[0], 0); vis(g, s > .002); tf(g, 960, 540, s, s); });
++  QD.forEach((q, i) => { const [s] = pop(t, tc0 + F(1 + i * 1.2), 3, .45, 0), g = Math.max(s, 0) * (1 - cu1); vis(q.gh, g > .01); tf(q.gh, q.lx, q.ly, g, g); });
++  const hd = hero(tr); vis(heroD, !!hd); if (hd) tf(heroD, hd.x, hd.y, hd.sx, hd.sy, hd.rot);
++  QD.forEach((q, i) => {
++    const t0 = q.t0, live = t >= t0; vis(q.g, live); if (!live) return;
++    const c = i === 0 ? 0 : cu1;             // TL is NOT collapsed: its field becomes the lockup background (match cut)
++    if (c <= 0) { q.burst.setAttribute('cx', q.L.x); q.burst.setAttribute('cy', q.L.y); q.burst.setAttribute('r', Math.max(0, q.RL * spring(t - t0, 2.6, .55))); }
++    else { q.burst.setAttribute('cx', q.K.x); q.burst.setAttribute('cy', q.K.y); q.burst.setAttribute('r', q.RK * (1 - c)); }
++    const cs = 1 - c; vis(q.ic, cs > .002); q.ic.setAttribute('transform', `translate(${q.K.x} ${q.K.y}) scale(${Math.max(cs, 1e-4)}) translate(${-q.K.x} ${-q.K.y})`);
++    { const [s] = pop(t, t0 + F(2), 3, .45, 0); const ls = Math.max(s, 0) * (1 - cu1); vis(q.lab, ls > .01); tf(q.lab, q.lx, q.ly, ls, ls); }
++    q.dashes.forEach(d => burstLine(d.ln, q.L.x, q.L.y, d.a, q.dr0, q.dr0 + 96, t, t0, F(6)));
++    let kd = 0; if (q.k === 'bar' && t >= HOPS[1].o) kd = 1; if (q.k === 'check' && t >= HOPS[2].o) kd = 1;
++    if ((q.k === 'heart' || q.k === 'coin') && cu1 > 0) kd = Math.max(pop(t, CL.ca, 4, .5, 0)[0], 0);
++    const kEnd = i === 0 ? CL.x0 : ZIP0[i]; vis(q.keyD, kd > 0 && t < kEnd); if (kd > 0) { const ky = q.k === 'bar' ? capY(t) : q.K.y; q.keyD.setAttribute('cy', ky); q.keyD.setAttribute('r', R_D * kd); }
++    if (q.k === 'bar') { const b = barS(t), sk = 1 - cu1; q.bars.forEach((bg, j) => { const [bs, bk] = j === 2 ? [b, 0] : pop(t, t0 + F(3 + j * 2), 3, .4, .18); vis(bg.g, j === 2 || sk > .002); tf(bg.g, bg.x, 440, 1 / (1 + bk), Math.max(bs, 0) * (1 + bk) * (j === 2 ? 1 : sk)); });
++      const bsc = Math.max(pop(t, t0, 3.4, .5, 0)[0], 0) * sk; vis(q.base, bsc > .002); tf(q.base, 480, 0, bsc, 1); }
++    if (q.k === 'check') q.stroke.setAttribute('stroke-dashoffset', 1 - penP(t).p);
++    if (q.k === 'heart') { const [m] = pop(t, t0, 3, .45, 0), mm = Math.max(m, 0);
++      q.hc.forEach((c, j) => { c.setAttribute('cx', (j ? 78 : -78) * mm); c.setAttribute('cy', lerp(0, -62, mm)); c.setAttribute('r', lerp(R_D, 110, mm)); });
++      tf(q.hd, 0, lerp(0, 16, mm), lerp(60, 220, mm), lerp(60, 220, mm), 45);
++      const h3 = HOPS[3], an = E.outQ(inv(h3.a, h3.o, t)) * (t < h3.o ? 1 : 0), kb = .16 * kick(t, h3.o, 3.4, .32) + .08 * kick(t, t0 + F(7), 3.4, .32);
++      tf(q.hg, 1440, 810 + 14 * an, (1 + .1 * an) * (1 + kb), (1 - .14 * an) * (1 + kb * .8)); }
++    if (q.k === 'coin') { const [g] = pop(t, t0, 2.6, .48, 0), R = lerp(R_D, 180, Math.max(g, 0)), th = 2 * Math.PI * E.ioQ(inv(t0, t0 + F(8), t)), c = Math.cos(th);
++      const sxF = Math.max(Math.abs(c), .03) * R / 180; vis(q.fDot, th < Math.PI / 2); vis(q.fFront, th >= Math.PI / 2 && c >= 0); vis(q.fBack, th >= Math.PI / 2 && c < 0);
++      q.rimC.setAttribute('fill', th < Math.PI / 2 ? C.COD : C.SUE); vis(q.rim, Math.abs(c) < .985);
++      tf(q.face, 0, 0, sxF, R / 180); tf(q.rim, 20 * Math.sin(th) * R / 180, 0, sxF, R / 180); tf(q.cg, 480, 810); }
++  });
++}
++// LOGO camera zoom and the cap / tittle dot as pure functions of t (used by updLogo and by the v5 linkAt)
++function logoZ(t) { const dl = T('dotLand2'), push = t < dl ? .22 * E.inC(inv(T('dotDrop'), dl, t)) : .22 * (1 - spring(t - dl, 4.5, .48)); return (1 + push) * (1 + .045 * E.ioQ(inv(dl, 10.4, t))); }
++function logoDot(t, tr = t) {
++  const dl = T('dotLand2'), dA = T('dotApex'), dD = T('dotDrop'), lau = T('dotRise'), land = kick(t, dl, 3.2, .38);
++  // the cap: absorbs the three zip dots, squashes on the finished stem, snaps up, hangs, drops ON 8.50 (raw time only in flight)
++  const AP = { x: TIT.x, y: TIT.y - 210 }, cp1 = capPos(CL.x1), fly = tr >= lau - F(.5) && tr < dl - F(.5), td = fly ? tr : t;
++  let x = TIT.x, y = TIT.y, r = DOT_R, sx = 1, sy = 1, rot = 0;
++  if (td < CL.x1) { const cp = capPos(td); x = cp.x; r = cp.r; let sq = 0; for (let i = 1; i < 4; i++) sq += .26 * kick(td, ZIP0[i] + CL.zd, 4, .4); sy = 1 - sq; sx = 1 + sq; y = cp.y + r * (1 - sy); }
++  else if (td < lau) { const a2 = E.outQ(inv(CL.x1, lau, td)); x = cp1.x; r = cp1.r; sy = 1 - .3 * a2; sx = 1 + .24 * a2; y = cp1.y + r * (1 - sy); }
++  else if (td < dA) { const yy = q => lerp(cp1.y, AP.y, E.outQ(q)); x = AP.x; y = yy(inv(lau, dA, td)); const vy = (yy(inv(lau, dA, td + 1 / 240)) - y) * 240, st = 1 + clamp(Math.abs(vy) / 4000) * .25; sx = 1 / st; sy = st; }
++  else if (td < dD) { x = AP.x; y = AP.y + 4 * E.inQ(inv(dA, dD, td)); }
++  else if (td < dl) { const u = inv(dD, dl, td); x = AP.x; y = lerp(AP.y + 4, TIT.y, E.inQ(u)); const st = 1 + .15 * E.outQ(clamp(u * 2)); sx = 1 / st; sy = st; }
++  else { const bobs = [T('beatBob1'), T('beatBob2')]; let hop = 0, sq = land;
++    bobs.forEach(tb => { const u = inv(tb, tb + F(9), t); if (u > 0 && u < 1) hop += 16 * hump(E.outQ(u)); sq += .6 * kick(t, tb + F(9), 3.2, .4) - .35 * kick(t, tb - F(2), 5, .5) * (t < tb + F(1) ? 1 : 0); });
++    sy = 1 - .32 * sq; sx = 1 + .3 * sq; y = TIT.y - hop + r * (1 - sy); }
++  if (V5 && !fly && td >= CL.x1) y += (WBASE - IB.y0) * stem5(t);   // v5: the resting dot rides 扁's squashing top bar
++  return { x, y, r, sx, sy, rot };
++}
++function updLogo(t, tr = t) {
++  const on = t >= CL.x0; vis(LOGO, on); if (!on) return;
++  const dl = T('dotLand2'), dA = T('dotApex'), dD = T('dotDrop'), lau = T('dotRise'), PC = { x: TIT.x, y: (IB.y0 + IB.y1) / 2 };
++  // camera: push 1.22x onto the i during the drop, snap back on the landing with ~4 % overshoot, then the slow end push
++  { const z = logoZ(t);
++    LOGO.setAttribute('transform', `translate(${f3(PC.x)} ${f3(PC.y)}) scale(${z.toFixed(5)}) translate(${f3(-PC.x)} ${f3(-PC.y)})`); }
++  if (t < CL.x1) { const u = E.outQt(inv(CL.x0, CL.x1, t)); lbg.setAttribute('x', 0); lbg.setAttribute('y', 0); lbg.setAttribute('width', f3(lerp(960, 1920, u))); lbg.setAttribute('height', f3(lerp(540, 1080, u))); }
++  else { lbg.setAttribute('x', -400); lbg.setAttribute('y', -400); lbg.setAttribute('width', 2720); lbg.setAttribute('height', 1880); }
++  const stemEnd = V5 ? STEM5_OFF : CL.x1;
++  vis(stemR, t < stemEnd); if (t < stemEnd) { const b = stemBox(morphP(t)); stemR.setAttribute('x', f3(b.x0)); stemR.setAttribute('y', f3(b.y0)); stemR.setAttribute('width', f3(b.x1 - b.x0)); stemR.setAttribute('height', f3(b.y1 - b.y0)); stemR.setAttribute('rx', f3(b.rx)); }
++  const st5 = V5 ? stem5(t) : 0;
++  if (V5 && t < stemEnd) stemR.setAttribute('transform', `translate(${f3(LET[0].cx)} ${WBASE}) scale(${(1 + .5 * st5).toFixed(5)} ${(1 - st5).toFixed(5)}) translate(${f3(-LET[0].cx)} ${-WBASE})`);
++  const land = kick(t, dl, 3.2, .38), an = t < lau ? E.outQ(inv(CL.x1, lau, t)) : 0;
++  LET.forEach(L => {
++    if (V5 && L.i === 0) {   // 扁 grows out of the bar (pop anchored on the bar centre), then squashes about the baseline under the dot
++      const [s, k] = pop(t, L.t0, 5, .65, .1, .5), sc = Math.max(s, 0), px = sc / (1 + k * .5), py = sc * (1 + k); vis(L.g, t >= L.t0);
++      tf(L.g, L.cx, WBASE, 1 + .5 * st5, 1 - st5); tf(L.gi, T5.bl.x * (1 - px), T5.bl.y * (1 - py), px, py); return; }
++    if (L.i === 4) { vis(L.g, t >= CL.x1); const stem = .12 * kick(t, dl, 3.5, .4) + .07 * an - .05 * kick(t, lau, 4, .4); tf(L.g, L.cx, WBASE, 1 + .5 * stem, 1 - stem); return; }
++    const [s, k] = pop(t, L.t0, 5, .65, .1, .5); vis(L.g, t >= L.t0); const dip = 10 * kick(t, dl + F(Math.abs(L.i - (V5 ? 0 : 4))), 3.2, .4);
++    const sc = Math.max(s, 0); tf(L.g, L.cx, WBASE + dip, sc / (1 + k * .5), sc * (1 + k)); });
++  { const D = logoDot(t, tr); dotL.setAttribute('r', f3(D.r)); tf(dotL, D.x, D.y, D.sx, D.sy, D.rot); }
++  ring(bigR, t, dl, 60, 1100, 24, F(10));
++  END_RINGS.forEach(o => ring(o.c, t, o.t0, DOT_R + 14, DOT_R + 170, 18, F(12)));
++  landRays.forEach(lr => burstLine(lr.ln, TIT.x, TIT.y + DOT_R * .5, lr.a, DOT_R + 20, DOT_R + 20 + lr.len, t, dl, F(5)));
++  // 9.0: the tittle flicks a small coral dot into 点点; the 8 dots flip coral (1 f stagger, 115 % spring pop)
++  if (V5) { vis(spark, false); vis(sparkRing, false); }   // v5: no tagline, no spark
++  else { const s0 = T('beatBob1'), s1 = T('cnFlip'), P0 = { x: TIT.x, y: TIT.y - 24 }, P1 = { x: CNDOTS[0].sx, y: CNDOTS[0].sy }, ts = tr >= s0 && tr < s1 ? tr : t, fl = ts >= s0 && ts < s1; vis(spark, fl);
++    if (fl) { const u = inv(s0, s1, ts), p = arcP(P0, P1, 110, u), p2 = arcP(P0, P1, 110, Math.min(1, u + .06)), st = 1 + clamp(Math.hypot(p2.x - p.x, p2.y - p.y) / 40) * .4; tf(spark, p.x, p.y, st, 1 / st, Math.atan2(p2.y - p.y, p2.x - p.x) * 180 / Math.PI); }
++    ring(sparkRing, t, s1, 18, 84, 10, F(9)); }
++  CNDOTS.forEach(d => { const on = t >= d.t0; vis(d.g, on); if (!on) return; const sc = Math.max(spring(t - d.t0, 3.4, .5), 0);
++    tf(d.g, d.cx, d.cy - 5 * kick(t, d.t0, 3, .45), sc, sc); d.inner.setAttribute('transform', `translate(${-d.cx} ${-d.cy})`); });
++  CNCH.forEach(c => { const u = E.outB(inv(c.t0, c.t0 + F(11), t), 1.4); tf(c.g, c.x, CNB + 100 * (1 - u)); });
++  { const te = V5 ? T('tagCN') : T('tagEN'), u = E.outB(inv(te, te + F(12), t), 1.2); tf(enG, 0, (V5 ? T5.enB : 792) + 50 * (1 - u)); }
++  SIG.forEach(o => { const s = Math.max(pop(t, o.t0, 3.2, .45, 0)[0], 0); vis(o.c, s > .01); tf(o.c, o.x, o.y, s, s); });
++}
++// ============================================================ reel v5: link elements (pure functions of t, 1920x1080 px) + ?nolink
++// 'dot' = the film's one coral hero dot, whichever shape it currently is: ball -> sun -> notification bubble -> circle wipe ->
++// grid dot -> coral coin face -> TL bar cap -> the 丶 of 扁 (v5 title).
++function camFor(t) { const tq = crisp(t, 0), fr = Math.round(t * 30), cam = { ...camera(t > 3.2 && t < 3.66 ? crisp(t, .45) : tq) };   // = renderAt's camera
++  if (fr === 112) { cam.s *= 1.03; cam.cy -= 9 / cam.s; } else if (fr === 113) { cam.s *= .988; cam.cx += 7 / cam.s; } return cam; }
++const w2s = (cam, x, y) => ({ x: (x - cam.cx) * cam.s + 960, y: (y - cam.cy) * cam.s + 540 });
++const i2s = (cam, lx, ly) => localToScreen(cam, 860 + 1.15 * (lx - 860), -153 + 1.15 * (ly + 153));   // interior coords (INT group, incl. its 1.15 zoom)
++const lz = (t, x, y) => { const z = logoZ(t), P = { x: TIT.x, y: (IB.y0 + IB.y1) / 2 }; return { x: P.x + (x - P.x) * z, y: P.y + (y - P.y) * z, z }; };
++const R2 = v => Math.round(v * 100) / 100;
++const inFrame = (x, y, r) => r > .5 && x + r > 0 && x - r < 1920 && y + r > 0 && y - r < 1080;
++const circ = (id, x, y, rx, ry, rot, a, note, extra = {}) => ({ id, type: 'circle', x: R2(x), y: R2(y), r: R2(Math.sqrt(Math.abs(rx * ry))), rx: R2(Math.abs(rx)), ry: R2(Math.abs(ry)), rot: R2(rot),
++  a: a && inFrame(x, y, Math.max(Math.abs(rx), Math.abs(ry))) ? 1 : 0, look: 'flat', fill: C.CO, stroke: C.CO, sw: 0, note, ...extra });
++const rectL = (id, x0, y0, x1, y1, a, note, extra = {}) => ({ id, type: 'rect', x: R2((x0 + x1) / 2), y: R2((y0 + y1) / 2), w: R2(x1 - x0), h: R2(y1 - y0), rot: 0, a, note, ...extra });
++function dotAt(t) {
++  const tq = crisp(t, 0), bt = T('ping') + F(1), wt = T('wipe'), cd = T('coreDot');
++  if (tq < 3.9) { const cam = camFor(t), b = ballA(t), p = w2s(cam, b.x, b.y);
++    return circ('dot', p.x, p.y, b.r * b.sx * cam.s, b.r * b.sy * cam.s, b.rot, 1, t < T('launch') ? 'coral ball: falls in (already falling at f0), bounces 0.50 / 0.80, crouches' : t < T('sunLand') ? 'coral ball flying up, growing into the sun' : 'coral sun (12 coral rays round it)'); }
++  if (tq < cd) { const cam = camFor(t), k2 = cam.s * 1.15 / 30;
++    if (tq < bt) { const p = i2s(cam, BUB.x, BUB.y - 84); return circ('dot', p.x, p.y, 0, 0, 0, 0, 'none: interior before the notification pops'); }
++    if (tq < wt) { const [s, k] = pop(tq, bt, 2.6, .38, .25), an = E.ioQ(inv(T('bubbleAntic'), wt, tq)), grow = E.inC(inv(wt, wt + F(3), tq));
++      const sx = Math.max(s, 0) / (1 + k) * (1 + .12 * an) * (1 + grow * .3), sy = Math.max(s, 0) * (1 + k) * (1 - .18 * an) * (1 + grow * .3), rot = 3 * Math.sin(2 * Math.PI * 1.2 * (tq - bt)) * (1 - an);
++      const by = BUB.y + 6 * an - 34 * E.outQ(inv(T('exclaim') + F(10), wt, tq)), th = rot * Math.PI / 180, p = i2s(cam, BUB.x + 84 * sy * Math.sin(th), by - 84 * sy * Math.cos(th));
++      return circ('dot', p.x, p.y, 58 * sx * k2, 58 * sy * k2, rot, 1, 'coral notification bubble (cream bell, small tail below)'); }
++    if (tq < T('wipe2')) { const u1 = inv(wt, wt + F(10), tq), k = Math.exp(lerp(Math.log(1.12), Math.log(34), E.ioQ(u1))), p = i2s(cam, BUB.x - 160 * E.ioQ(u1), BUB.y - 84 + 60 * E.ioQ(u1));
++      return circ('dot', p.x, p.y, 58 * k * k2, 58 * k * k2, 0, 1, 'the bubble swells into a full-frame coral circle wipe'); }
++    return circ('dot', 960, 540, R_D, R_D, 0, 0, 'none: mint capsule + cream half-disc wipes; the dot squirts out of the centre at 5.50'); }
++  if (tq < HOPS[3].l) { const hd = hero(t);
++    if (hd) return circ('dot', hd.x, hd.y, R_D * hd.sx, R_D * hd.sy, hd.rot, 1, 'coral grid dot (squirts 5.50-5.70, hops onto the beats 6.0 / 6.5 / 7.0 / 7.5)');
++    return circ('dot', QD[2].K.x, QD[2].K.y, R_D, R_D, 0, 0, 'none: inside the coral heart (7.00-7.27)'); }
++  if (coinTh(tq) < Math.PI / 2) { const [g] = pop(tq, QD[3].t0, 2.6, .48, 0), R = lerp(R_D, 180, Math.max(g, 0));
++    return circ('dot', 480, 810, Math.max(Math.abs(Math.cos(coinTh(tq))), .03) * R, R, 0, 1, 'coral disc growing, about to flip edge-on into the gold coin'); }
++  if (tq < CL.x0) return circ('dot', 600, capY(tq), R_D, R_D, 0, 1, 'coral cap on the tall cream bar (top-left quadrant); the other key dots zip into it 7.83-8.00');
++  const D = logoDot(tq, t), p = lz(tq, D.x, D.y);
++  return circ('dot', p.x, p.y, D.r * D.sx * p.z, D.r * D.sy * p.z, D.rot, 1, V5 ? 'coral dot = the 丶 of 扁 (rides the bar as it morphs, hops up 8.23, lands ON 8.50, bobs 9.0 / 9.5)' : 'tittle of popwise');
++}
++function linkExtras(t) {
++  const tq = crisp(t, 0), out = [];
++  if (tq < 3.5) { const cam = camFor(t), ge = lerp(0, 1900, E.outQ(inv(F(1.5), F(14), tq))), y = (GY - cam.cy) * cam.s + 540, x1 = ge >= 1899 ? 1920 : Math.min(1920, (ge - cam.cx) * cam.s + 960);
++    if (y > 0 && y < 1080 && x1 > 0) out.push({ id: 'horizon', type: 'line', x0: 0, y0: R2(y), x1: R2(x1), y1: R2(y), w: 0, a: 1, fill: C.CR, note: 'top edge of the cream ground (flat fill below, ultramarine sky above); sweeps in L->R 0.05-0.47 behind a sunflower lead bar' }); }
++  if (tq >= QD[0].t0 + F(1) && tq < CL.x0) { const b = barS(tq); if (b > .02) out.push(rectL('bar', 558, 440 - 270 * b, 642, 440, 1, 'tall cream bar of the top-left bar chart (its cap = the dot); morphs into the title bar 7.90-8.17', { fill: C.CR, rx: 24 })); }
++  else if (tq >= CL.x0 && tq < (V5 ? STEM5_OFF : CL.x1)) { const bb = stemBox(morphP(tq)), a = lz(tq, bb.x0, bb.y0), c = lz(tq, bb.x1, bb.y1); out.push(rectL('bar', a.x, a.y, c.x, c.y, 1, V5 ? 'cream bar morphing into the top bar of 扁' : 'cream bar morphing into the stem of the i', { fill: C.CR })); }
++  if (tq >= HOPS[1].o && tq < CL.x0 && !(tq >= QD[3].t0 && coinTh(tq) >= Math.PI / 2)) out.push(circ('cap', 600, capY(tq), R_D, R_D, 0, 1, 'coral cap left on the tall cream bar (becomes the main dot from 7.60)'));
++  if (tq >= QD[3].t0 && coinTh(tq) >= Math.PI / 2 && tq < CL.c1) { const [g] = pop(tq, QD[3].t0, 2.6, .48, 0), R = lerp(R_D, 180, Math.max(g, 0)), cs = 1 - E.inQ(inv(CL.ca, CL.c1, tq));
++    out.push(circ('coin', 480, 810, Math.max(Math.abs(Math.cos(coinTh(tq))), .03) * R * cs, R * cs, 0, 1, 'gold ¥ coin (flips edge-on 7.50-7.77, shrinks into a coral dot 7.77-7.87)', { fill: C.SU, stroke: C.SUD, sw: 16 })); }
++  if (V5 && tq >= LET[0].t0) { const sc = Math.min(...LET.map(L => Math.max(pop(tq, L.t0, 5, .65, .1, .5)[0], 0))), a = lz(tq, T5.ink.x0, T5.ink.y0), c = lz(tq, T5.ink.x1, T5.ink.y1);
++    out.push(rectL('title', a.x, a.y, c.x, c.y, sc > .9 ? 1 : 0, 'title 「扁平矢量」 ink box (cream Resource Han Rounded 900 on ultramarine), without the dot', { fill: C.CR })); }
++  return out;
++}
++function hideLinks(tq) {   // ?nolink=dot[,cap,rays,coin]: remove that element (and the ball's shadow + speed lines), nothing else moves
++  const capIsDot = tq >= QD[3].t0 && coinTh(tq) >= Math.PI / 2;
++  if (NOLINK.has('dot')) { [dotW, shadow, ...speedL, bubble, W1, heroD, QD[3].fDot, dotL].forEach(e => vis(e, false)); if (capIsDot) vis(QD[0].keyD, false); }
++  if (NOLINK.has('cap') && !capIsDot) vis(QD[0].keyD, false);
++  if (NOLINK.has('rays')) rays.forEach(l => vis(l, false));
++  if (NOLINK.has('coin')) vis(QD[3].cg, false);
++}
++if (V5) window.linkAt = t => [dotAt(t), ...linkExtras(t)];
++const renderAt = async (t) => {
++  const tq = crisp(t, 0), fr = Math.round(t * 30);   // R2: everything is crisp (frame-quantised) except the camera push and the dot flights
++  const cam = { ...camera(t > 3.2 && t < 3.66 ? crisp(t, .45) : tq) };
++  if (fr === 112) { cam.s *= 1.03; cam.cy -= 9 / cam.s; } else if (fr === 113) { cam.s *= .988; cam.cx += 7 / cam.s; }   // 2-frame arrival shake
++  vis(FLASH, fr === 105); if (fr === 105) { const a = localToScreen(cam, 0, 0), b = localToScreen(cam, 1920, 1080); FLASH.setAttribute('x', f3(a.x)); FLASH.setAttribute('y', f3(a.y)); FLASH.setAttribute('width', f3(b.x - a.x)); FLASH.setAttribute('height', f3(b.y - a.y)); }
++  { const c = localToScreen(cam, 960, 540), tc = crisp(t, .3); STREAKS.forEach(k => { const u = (tc - F(k.f0)) / F(2); if (u < 0 || u >= 1) { vis(k.p, false); return; } vis(k.p, true);
++      const ra = k.r0 + 320 * u, rb = ra + k.len * (1 - .35 * u), w = k.w * (1 - .3 * u), wi = w * .3, dx = Math.cos(k.a), dy = Math.sin(k.a), nx = -dy, ny = dx;
++      const Q = (r, o) => `${f3(c.x + dx * r + nx * o)} ${f3(c.y + dy * r + ny * o)}`;
++      k.p.setAttribute('d', `M${Q(ra, wi / 2)} L${Q(rb, w / 2)} A${f3(w / 2)} ${f3(w / 2)} 0 0 0 ${Q(rb, -w / 2)} L${Q(ra, -wi / 2)} A${f3(wi / 2)} ${f3(wi / 2)} 0 0 0 ${Q(ra, wi / 2)} Z`); }); }
++  updWorld(tq, cam, t); updInterior(tq, cam); updIcons(tq, cam, t); updLogo(tq, t);
++  if (V5 && NOLINK.size) hideLinks(tq);
++};
++
++return { renderAt: renderAt, width: 1920, height: 1080 };
++};
+diff --git a/apps/desktop/shell/login-gate.js b/apps/desktop/shell/login-gate.js
+new file mode 100644
+index 0000000..e6fe9c2
+--- /dev/null
++++ b/apps/desktop/shell/login-gate.js
+@@ -0,0 +1,643 @@
++(function(){
++  if(globalThis.__no996ShellLogin)return;globalThis.__no996ShellLogin=1;
++  var BRAND_WHITE="<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-8.22 0 1039.44 983\" role=\"img\" aria-label=\"今天不加班AI 深色模式Logo\">\n<title>今天不加班AI 标志（dark 白橙）</title>\n  <path fill=\"#FFFFFF\" fill-rule=\"evenodd\" d=\"M 239 262 L 239 345 L 450 346 L 171 625 L 295 625 L 443 478 L 445 723 L 541 723 L 543 479 L 689 635 L 761 577 L 751 563 L 609 408 L 509 407 L 569 345 L 775 345 L 775 262 Z M 601 16 L 530 8 L 470 9 L 422 15 L 381 24 L 337 38 L 303 52 L 273 67 L 241 86 L 208 109 L 170 141 L 143 168 L 105 214 L 77 256 L 58 291 L 38 338 L 24 382 L 14 427 L 9 467 L 8 530 L 12 573 L 18 606 L 31 652 L 46 690 L 68 733 L 93 772 L 123 811 L 166 856 L 191 878 L 226 904 L 268 929 L 302 945 L 348 961 L 407 973 L 443 974 L 319 846 L 286 831 L 257 813 L 220 783 L 187 748 L 153 700 L 127 650 L 109 600 L 100 554 L 97 510 L 99 467 L 107 417 L 122 367 L 148 310 L 171 272 L 208 226 L 244 191 L 290 157 L 334 133 L 365 120 L 421 104 L 477 96 L 522 95 L 567 99 L 622 111 L 674 130 L 725 158 L 768 190 L 811 232 L 841 269 L 861 300 L 876 328 L 891 364 L 900 391 L 910 435 L 993 409 L 987 381 L 974 340 L 954 293 L 935 258 L 907 215 L 867 166 L 831 130 L 810 112 L 786 94 L 745 68 L 712 51 L 678 37 L 651 28 Z\"/>\n  <path fill=\"#FF7200\" fill-rule=\"evenodd\" d=\"M 1014 452 L 801 510 L 851 548 L 510 847 L 408 744 L 337 808 L 337 810 L 505 971 L 507 971 L 924 612 L 967 662 Z\"/>\n</svg>";
++  function rpc(channel,payload){
++    return fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:channel,payload:payload||{}})})
++      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();});
++  }
++  function auth(action,fields){
++    return rpc('auth:action',Object.assign({action:action},fields||{})).then(function(data){
++      if(data&&data.ok===false)throw new Error(data.message||data.error||'请求失败');
++      return data;
++    });
++  }
++  function emitAuth(loggedIn){
++    try{window.dispatchEvent(new CustomEvent('no996-auth-changed',{detail:{loggedIn:!!loggedIn}}));}catch(e){}
++  }
++  var CSS=".nof-lg{--night:#05060f;--panel:#0a1224;--text:#f3eee4;--dim:#8d90a6;--brand:#051D43;--orange:#FF6400;--orange-deep:#d45500;--paper:#f5f0e5;--paper-2:#ebe4d2;--ink:#18171c;--ink-dim:#6d6a62;--err:#a33a2a;--tlh:72px;--hand:\"Ma Shan Zheng\",\"STKaiti\",\"KaiTi\",cursive;--sans:\"Noto Sans SC\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;position:fixed;inset:0;z-index:2147482500;overflow:hidden;background:var(--night);color:var(--text);font-family:var(--sans);box-sizing:border-box}.nof-lg *,.nof-lg *::before,.nof-lg *::after{box-sizing:border-box}.nof-lg .sky,.nof-lg .sun,.nof-lg .grain{position:absolute;inset:0;pointer-events:none}.nof-lg .sky{background:linear-gradient(180deg,#051D43 0%,#0b1a33 48%,#3a2418 100%)}.nof-lg .sun{inset:auto;right:8%;bottom:calc(var(--tlh) - 40px);width:min(42vmin,280px);height:min(42vmin,280px)}.nof-lg .sun svg{width:100%;height:100%;overflow:visible;display:block}.nof-lg .grain{opacity:.08;mix-blend-mode:overlay;background:url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")}.nof-lg .brand{position:absolute;top:max(12px,env(safe-area-inset-top,0px));left:clamp(12px,2vw,24px);z-index:2;display:flex;align-items:center;gap:8px;font-weight:500;font-size:14px;letter-spacing:.04em}.nof-lg .brand .mark{width:26px;height:26px;display:block;flex:none}.nof-lg .brand .mark svg{width:100%;height:100%;display:block}.nof-lg .brand small{font-weight:400;font-size:12px;color:var(--dim)}.nof-lg main{position:relative;z-index:1;height:100%;display:flex;align-items:center;justify-content:center;padding:48px 16px calc(var(--tlh) + 20px);overflow:auto}.nof-lg .paper{width:min(100%,380px);position:relative;padding:22px 24px 16px;border-radius:3px;color:var(--ink);background:radial-gradient(circle,#d3cab3 1px,transparent 1.3px) 0 0/14px 14px,linear-gradient(160deg,var(--paper),var(--paper-2));box-shadow:0 0 0 1px rgba(255,100,0,.28),0 24px 56px rgba(0,0,0,.5)}.nof-lg .tape{position:absolute;top:-9px;left:-12px;width:72px;height:20px;transform:rotate(-8deg);background:repeating-linear-gradient(135deg,rgba(255,255,255,.3) 0 4px,transparent 4px 9px),rgba(255,100,0,.88);z-index:2}.nof-lg h1{margin:0;font:400 28px/1.2 var(--hand);letter-spacing:.02em;color:var(--brand)}.nof-lg .sub{margin:6px 0 14px;font-size:12px;color:var(--ink-dim);line-height:1.45}.nof-lg .fld{display:block;margin-bottom:12px}.nof-lg .fld>span{display:block;font-size:12px;color:var(--ink-dim);margin-bottom:1px}.nof-lg .inw{position:relative;display:flex;align-items:center}.nof-lg .inw>.ic{position:absolute;left:2px;width:16px;height:16px;color:var(--ink-dim);flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.nof-lg .inw:focus-within>.ic{color:var(--orange)}.nof-lg .fld input{width:100%;font:500 15px var(--sans);color:var(--ink);background:transparent;border:0;border-bottom:1px solid rgba(24,23,28,.35);border-radius:0;padding:7px 30px 7px 26px;outline:0;caret-color:var(--orange)}.nof-lg .fld input:focus-visible{border-bottom-color:var(--orange);box-shadow:0 1px 0 var(--orange)}.nof-lg .fld input::placeholder{color:#a8a291}.nof-lg .eye{position:absolute;right:0;display:grid;place-items:center;width:28px;height:28px;color:var(--ink-dim);background:none;border:0;border-radius:50%;cursor:pointer;padding:0;font-size:14px}.nof-lg .go{width:100%;margin-top:6px;font:500 15px var(--sans);letter-spacing:.06em;padding:.72em 1em;border-radius:2px;border:0;background:var(--brand);color:#fff;cursor:pointer;box-shadow:inset 0 -2px 0 rgba(255,100,0,.85)}.nof-lg .go:disabled{opacity:.55;cursor:default}.nof-lg .links{display:flex;justify-content:space-between;gap:10px;margin-top:10px;font-size:12px;flex-wrap:wrap}.nof-lg .lk{color:var(--orange-deep);background:none;border:0;font:inherit;padding:2px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}.nof-lg .aside{margin:10px 0 0;min-height:1.3em;font-size:12px;color:var(--ink-dim)}.nof-lg .aside.err{color:var(--err)}.nof-lg .row{display:flex;gap:8px;align-items:flex-end}.nof-lg .row .fld{flex:1;margin-bottom:12px}.nof-lg .otp{flex:none;margin-bottom:12px;font:500 12px var(--sans);padding:.55em .75em;border-radius:2px;border:1px solid rgba(5,29,67,.2);background:transparent;color:var(--orange-deep);cursor:pointer}.nof-lg .otp:disabled{opacity:.5}.nof-lg .tl{position:absolute;left:0;right:0;bottom:0;z-index:1;background:var(--panel);border-top:1px solid rgba(255,100,0,.22);padding-bottom:env(safe-area-inset-bottom,0px)}.nof-lg .clips{display:flex;gap:2px;padding:6px 8px 8px;height:var(--tlh);box-sizing:border-box}.nof-lg .clip{flex:1;min-width:0;border-radius:3px;overflow:hidden;display:flex;flex-direction:column;background:#000;outline:1px solid transparent;outline-offset:-1px}.nof-lg .clip.cur{outline-color:var(--orange)}.nof-lg .clip b{display:block;font:500 10px/16px var(--sans);padding:0 5px;background:#122038;color:#aeb0c4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.nof-lg .clip.cur b{color:var(--orange)}.nof-lg .clip i{flex:1;position:relative;background:linear-gradient(180deg,#1a2740,#12152b)}.nof-lg .clip i::before{content:\"\";position:absolute;left:55%;top:40%;width:8px;height:8px;margin:-4px;border-radius:50%;background:var(--orange);opacity:.7}.nof-lg .ph{position:absolute;top:0;bottom:0;width:1px;background:var(--orange);left:8%;box-shadow:0 0 10px rgba(255,100,0,.6)}.nof-lg .cap-mask{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,29,67,.55)}.nof-lg .cap{width:min(100%,400px);background:#fff;color:#18171c;border-radius:10px;box-shadow:0 20px 48px rgba(0,0,0,.4);padding:14px;font:13px/1.4 var(--sans)}.nof-lg .cap h2{margin:0 0 4px;font:600 15px/1.3 inherit;color:#051D43}.nof-lg .cap .hint{margin:0 0 8px;font-size:12px;color:#6d6a62}.nof-lg .cap .stage{position:relative;min-height:200px;border:1px solid #e5e1d8;border-radius:8px;background:#f7f5f0;overflow:hidden;cursor:pointer}.nof-lg .cap .stage svg{display:block;width:100%;height:100%;min-height:200px}.nof-lg .cap .pick{position:absolute;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;background:#FF6400;color:#fff;display:grid;place-items:center;font:700 10px/1 inherit;pointer-events:none;box-shadow:0 0 0 2px #fff}.nof-lg .cap .err{min-height:1.2em;margin:8px 0 0;font-size:12px;color:#a33a2a}.nof-lg .cap .acts{display:flex;gap:10px;margin-top:10px;align-items:center}.nof-lg .cap .acts button{font:inherit;cursor:pointer}.nof-lg .cap .cancel{background:none;border:0;color:#8a6a2c;text-decoration:underline;text-underline-offset:3px}.nof-lg .cap .refresh{padding:4px 10px;border:1px solid #e5e1d8;border-radius:6px;background:#fff;color:#051D43}@media (max-height:640px){.nof-lg{--tlh:56px}.nof-lg h1{font-size:24px}.nof-lg main{padding:40px 12px calc(var(--tlh) + 12px)}.nof-lg .paper{padding:16px 18px 12px}}@media (max-height:520px){.nof-lg{--tlh:0px}.nof-lg .tl{display:none}.nof-lg main{padding:36px 12px 16px}}";
++  var NAMES=['上班','开会','改稿','返工','收尾','关电脑','下班'];
++  var DUR=[1,1.5,1.5,2.2,1.2,.8,.8], TOTAL=9;
++  var GREET={login:'欢迎回来，准点下班。',register:'新同事，欢迎入职。',reset:'忘了也没关系。'};
++  var SUB={login:'登录后继续剪辑；会话保存在本机。',register:'注册需要邮箱验证码与邀请码。',reset:'用邮箱验证码设置新密码。'};
++  var ICON_LABEL={fish:'鱼',cake:'蛋糕',egg:'蛋',milk:'牛奶',chili:'辣椒',potato:'土豆',chocolate:'巧克力',garlic:'蒜',scallion:'葱',mint:'薄荷',snow_lotus:'雪莲',sweet_potato:'红薯',bean:'豆子'};
++
++  var root=document.createElement('div');
++  root.id='no996-shell-login';
++  root.className='nof-lg';
++  root.setAttribute('role','dialog');
++  root.setAttribute('aria-label','登录');
++  root.hidden=true;
++
++  var style=document.createElement('style');
++  style.textContent=CSS;
++  root.appendChild(style);
++
++  var font=document.createElement('link');
++  font.rel='stylesheet';
++  font.href='https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500;600&display=swap';
++  root.appendChild(font);
++
++  function el(tag,attrs,kids){
++    var node=document.createElement(tag);
++    if(attrs)Object.keys(attrs).forEach(function(k){
++      if(k==='text')node.textContent=attrs[k];
++      else if(k==='html')node.innerHTML=attrs[k];
++      else if(k==='hidden')node.hidden=!!attrs[k];
++      else node.setAttribute(k,attrs[k]);
++    });
++    (kids||[]).forEach(function(c){if(c)node.appendChild(c);});
++    return node;
++  }
++
++  // 视觉层是"登录首页"那版：纸张打卡卡 + 底部时间轴 + 城市背景。
++  // 旧 CSS 保留给验证码弹层；这里只追加 lg- 前缀的新样式，避免互相污染。
++  var NEW_CSS=[
++    '.nof-lg [hidden]{display:none!important}',
++    '.nof-lg{--paper:#f3ecdf;--paper2:#ece2d0;--line:#b9ad98;--mute:#6f675a;--sun:#ff6a00;--ink:#0a1d44;--tlh:76px;font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:#050f26}',
++    '.nof-lg .lg-scene{position:absolute;inset:0;z-index:0;transition:opacity .7s ease}',
++    '.nof-lg .lg-city{position:absolute;inset:0;background:#2B2BFF;overflow:hidden;contain:paint}',
++    // 半分辨率栅格化再放大：背景在纸卡后面，轻微软化换一半以上的绘制像素。
++    '.nof-lg .lg-city svg{display:block;width:50%;height:50%;transform:scale(2);transform-origin:0 0;will-change:transform}',
++    '.nof-lg .lg-sky{position:absolute;inset:0;pointer-events:none;z-index:1}',
++    '.nof-lg .lg-sky .stars{position:absolute;inset:0;display:block;opacity:0;background-image:radial-gradient(1.2px 1.2px at 20px 30px,rgba(255,255,255,.95),transparent 60%),radial-gradient(1px 1px at 96px 76px,rgba(255,255,255,.7),transparent 60%),radial-gradient(1.5px 1.5px at 154px 18px,rgba(255,255,255,.85),transparent 60%),radial-gradient(1px 1px at 60px 128px,rgba(255,255,255,.55),transparent 60%);background-size:220px 180px,260px 210px,300px 240px,340px 260px}',
++    '.nof-lg .lg-orb{position:absolute;left:0;top:0;width:clamp(90px,9vw,150px);height:clamp(90px,9vw,150px);border-radius:50%;opacity:0;pointer-events:none;z-index:2;will-change:transform,opacity}',
++    '.nof-lg .lg-orb.sun{background:radial-gradient(circle at 36% 32%,#FFE6B0 0 8%,#FFB25E 38%,#FF7A45 72%,#F2542D 100%);box-shadow:0 0 70px 18px rgba(255,150,80,.35)}',
++    '@media (max-width:600px){.nof-lg .lg-orb{width:64px;height:64px}}',
++    '.nof-lg .lg-orb.moon{background:radial-gradient(circle at 62% 38%,rgba(150,150,140,.35) 0 7%,transparent 8%),radial-gradient(circle at 42% 62%,rgba(150,150,140,.3) 0 9%,transparent 10%),radial-gradient(circle at 66% 66%,rgba(150,150,140,.25) 0 5%,transparent 6%),radial-gradient(circle at 38% 34%,#FFFDF4 0 12%,#EDE9D8 55%,#CFCBB8 100%);box-shadow:0 0 40px 10px rgba(220,230,255,.25)}',
++    '.nof-lg .lg-vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 120% 100% at 50% 42%,transparent 50%,rgba(3,8,22,.5)),linear-gradient(180deg,rgba(3,8,22,.35),transparent 26%,transparent 58%,rgba(3,8,22,.78))}',
++    '.nof-lg .lg-brand{position:absolute;top:max(18px,env(safe-area-inset-top,0px));left:clamp(16px,2vw,26px);z-index:4;display:flex;align-items:center;gap:10px;color:#fff;text-shadow:0 1px 10px rgba(0,0,0,.45)}',
++    '.nof-lg .lg-brand .lg-mark{width:32px;height:32px;flex:none;display:block}',
++    '.nof-lg .lg-brand .lg-mark svg{width:100%;height:100%;display:block}',
++    '.nof-lg .lg-brand b{font-weight:700;font-size:16px;letter-spacing:.02em}',
++    '.nof-lg .lg-brand span{font-size:13px;color:#c4d1ea}',
++    '.nof-lg .lg-main{position:relative;z-index:2;min-height:100%;display:grid;place-items:center;padding:84px 16px calc(var(--tlh) + 96px);overflow:auto}',
++    '.nof-lg .lg-card{position:relative;width:min(460px,100%);padding:26px 34px 22px;border-radius:4px;color:var(--ink);background:linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,0)),radial-gradient(rgba(10,29,68,.1) 1px,transparent 1.4px) 0 0/16px 16px,var(--paper);box-shadow:0 1px 0 #fff inset,0 2px 0 #e3d9c6,0 3px 0 #d2c6ae,0 34px 70px rgba(0,0,0,.5);transform:rotate(-.6deg)}',
++    '.nof-lg .lg-tape{position:absolute;top:-14px;left:-16px;width:96px;height:26px;background:repeating-linear-gradient(135deg,#ff7a1a 0 8px,#ff9a4d 8px 16px);transform:rotate(-8deg);box-shadow:0 2px 6px rgba(0,0,0,.3)}',
++    '.nof-lg .lg-punch{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:10px;border-bottom:2px dashed var(--line);margin-bottom:16px;color:var(--mute);font-size:13px}',
++    '.nof-lg .lg-punch time{font:700 28px/1 "Noto Sans SC",sans-serif;font-variant-numeric:tabular-nums;color:var(--sun)}',
++    '.nof-lg .lg-card h1{margin:0;font:400 36px/1.2 "Ma Shan Zheng","STKaiti","KaiTi",serif;letter-spacing:.04em}',
++    '.nof-lg .lg-sub{margin:4px 0 10px;color:var(--mute);font-size:14px}',
++    '.nof-lg .lg-field{display:block;margin-top:14px;color:var(--mute);font-size:14px}',
++    '.nof-lg .lg-lab{display:block;margin-bottom:2px}',
++    '.nof-lg .lg-f{position:relative;display:block;border-bottom:1.5px solid var(--line)}',
++    '.nof-lg .lg-f::after{content:"";position:absolute;left:0;bottom:-1.5px;height:3px;width:100%;background:var(--sun);transform:scaleX(0);transform-origin:left;transition:transform .3s}',
++    '.nof-lg .lg-f:focus-within::after{transform:scaleX(1)}',
++    '.nof-lg .lg-f input{width:100%;padding:8px 56px 8px 2px;border:0;background:none;font:500 17px/1.4 "Noto Sans SC",sans-serif;color:var(--ink);outline:none}',
++    '.nof-lg .lg-f input::placeholder{color:#a79d8a;font-weight:400}',
++    '.nof-lg .lg-eye{position:absolute;right:0;top:6px;border:0;background:none;color:var(--mute);font:400 13px "Noto Sans SC",sans-serif;cursor:pointer;padding:4px 2px}',
++    '.nof-lg .lg-eye:focus-visible,.nof-lg .lg-go:focus-visible,.nof-lg .lg-lk:focus-visible,.nof-lg .lg-tracks:focus-visible,.nof-lg .lg-play:focus-visible,.nof-lg .lg-remember input:focus-visible{outline:3px solid var(--sun);outline-offset:3px}',
++    '.nof-lg .lg-meta{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;margin-top:14px;flex-wrap:wrap}',
++    '.nof-lg .lg-remember{display:inline-flex;align-items:center;gap:7px;margin:0;color:var(--mute);font:400 13px/1.3 "Noto Sans SC",sans-serif;cursor:pointer;user-select:none;min-width:0}',
++    '.nof-lg .lg-remember input{width:14px;height:14px;margin:0;accent-color:var(--sun);cursor:pointer;flex:none}',
++    '.nof-lg .lg-remember span{white-space:nowrap}',
++    '.nof-lg .lg-remember[hidden]{display:none!important}',
++    '.nof-lg .lg-go{display:block;width:100%;margin-top:18px;padding:14px;border:0;border-radius:3px;background:var(--ink);color:#fff;font:700 17px "Noto Sans SC",sans-serif;letter-spacing:.08em;box-shadow:0 4px 0 var(--sun);cursor:pointer;transition:transform .15s,box-shadow .15s}',
++    '.nof-lg .lg-go:hover{transform:translateY(-1px);box-shadow:0 5px 0 var(--sun)}',
++    '.nof-lg .lg-go:active{transform:translateY(3px);box-shadow:0 1px 0 var(--sun)}',
++    '.nof-lg .lg-go:disabled{opacity:.6;cursor:default;transform:none}',
++    '.nof-lg .lg-links{display:inline-flex;align-items:center;gap:0;margin:0 0 0 auto;flex:none}',
++    '.nof-lg .lg-lk{border:0;background:none;padding:0;color:#d84700;font:400 13px/1.3 "Noto Sans SC",sans-serif;text-decoration:none;border-bottom:1px solid rgba(216,71,0,.4);cursor:pointer;white-space:nowrap}',
++    '.nof-lg .lg-lk+.lg-lk{margin-left:10px;padding-left:10px;border-left:1px solid var(--line)}',
++    '@media (max-width:420px){.nof-lg .lg-remember span{white-space:normal}.nof-lg .lg-meta{align-items:flex-start}}',
++    '.nof-lg .lg-msg{margin:12px 0 0;min-height:1.6em;color:var(--mute);font-size:13.5px}',
++    '.nof-lg .lg-msg.err{color:#c23a00;font-weight:500}',
++    '.nof-lg .lg-stamp{position:absolute;right:26px;top:70px;width:92px;height:92px;border:3px double #d84700;border-radius:50%;display:grid;place-items:center;color:#d84700;font:400 25px/1.1 "Ma Shan Zheng","STKaiti",serif;text-align:center;transform:rotate(-14deg) scale(1.9);opacity:0;pointer-events:none;mix-blend-mode:multiply}',
++    '.nof-lg .lg-done .lg-stamp{opacity:.88;transform:rotate(-14deg) scale(1);transition:transform .35s cubic-bezier(.5,0,.2,1.4),opacity .2s}',
++    '.nof-lg .lg-row{display:flex;gap:10px;align-items:flex-end}',
++    '.nof-lg .lg-row .lg-field{flex:1;min-width:0}',
++    '.nof-lg .lg-otp{flex:none;margin-bottom:2px;border:1px solid var(--line);background:rgba(255,255,255,.4);color:var(--ink);font:400 13px "Noto Sans SC",sans-serif;padding:8px 10px;border-radius:3px;cursor:pointer}',
++    '.nof-lg .lg-otp:disabled{opacity:.55;cursor:default}',
++    '.nof-lg .lg-tl{position:fixed;left:0;right:0;bottom:0;z-index:3;padding:34px 14px calc(14px + env(safe-area-inset-bottom,0px));background:linear-gradient(transparent,rgba(3,10,27,.9) 38%)}',
++    '.nof-lg .lg-ruler{position:relative;height:16px;font-size:10px;color:#7f91b6;font-variant-numeric:tabular-nums}',
++    '.nof-lg .lg-ruler i{position:absolute;bottom:0;height:7px;padding-left:3px;border-left:1px solid rgba(159,176,208,.5);font-style:normal;line-height:1}',
++    '.nof-lg .lg-ruler i b{position:absolute;bottom:9px;left:-1px;font-weight:400;transform:translateX(-50%)}',
++    '.nof-lg .lg-tracks{position:relative;display:flex;height:76px;cursor:ew-resize;touch-action:none;user-select:none;-webkit-user-select:none;border-radius:4px}',
++    '.nof-lg .lg-tracks.drag{cursor:grabbing}',
++    '.nof-lg .lg-clips{display:flex;flex:1;min-width:0}',
++    '.nof-lg .lg-clip{position:relative;overflow:hidden;min-width:0;border-top:2px solid #1d3466;border-left:1px solid rgba(5,12,30,.9);background:linear-gradient(#15294f,#0d1b3b);padding:5px 8px;color:#8ea0c4;font-size:12.5px;white-space:nowrap;transition:background .5s,color .5s,border-color .5s}',
++    '.nof-lg .lg-clip:first-child{border-radius:4px 0 0 4px;border-left:0}',
++    '.nof-lg .lg-clip:last-child{border-radius:0 4px 4px 0}',
++    '.nof-lg .lg-clip.on{background:linear-gradient(#5c2a12,#2a1a2a);border-top-color:var(--sun);color:#ffc28a}',
++    '.nof-lg .lg-playhead{position:absolute;top:-26px;bottom:0;left:0;width:0;z-index:2;pointer-events:none}',
++    '.nof-lg .lg-playhead::before{content:"";position:absolute;left:-1px;top:20px;bottom:0;width:2px;background:#fff;box-shadow:0 0 12px rgba(255,255,255,.7)}',
++    '.nof-lg .lg-grip{position:absolute;left:-10px;top:0;width:20px;height:24px;border-radius:6px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.4)}',
++    '.nof-lg .lg-grip::after{content:"";position:absolute;inset:6px;background:repeating-linear-gradient(90deg,var(--ink) 0 1.5px,transparent 1.5px 4px)}',
++    '.nof-lg .lg-tip{position:absolute;bottom:calc(100% + 6px);left:50%;padding:3px 9px;border-radius:12px;background:rgba(5,15,38,.85);color:#fff;font:500 12.5px/1.5 "Noto Sans SC",sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums;border:1px solid rgba(255,140,40,.5);transform:translateX(-50%)}',
++    '.nof-lg .lg-play{position:absolute;right:16px;bottom:calc(100% + 8px);z-index:4;width:38px;height:38px;display:grid;place-items:center;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(6,14,32,.78);color:#fff;cursor:pointer;transition:background .2s,border-color .2s}',
++    '.nof-lg .lg-play:hover{background:rgba(255,106,0,.9);border-color:rgba(255,106,0,.9)}',
++    '.nof-lg .lg-play svg{width:18px;height:18px;fill:currentColor;display:block}',
++    '@media (max-width:520px){.nof-lg .lg-card{padding:22px 22px 18px}.nof-lg .lg-card h1{font-size:30px}.nof-lg .lg-stamp{width:76px;height:76px;font-size:21px;top:64px;right:16px}.nof-lg .lg-clip{padding:5px 3px;font-size:10.5px}.nof-lg .lg-tracks{height:62px}.nof-lg .lg-main{padding-bottom:calc(var(--tlh) + 80px)}}',
++    '.nof-lg .cap-mask[hidden]{display:none!important}',
++  ].join('\n');
++  var style2=document.createElement('style');
++  style2.textContent=NEW_CSS;
++  root.appendChild(style2);
++
++  var scene=el('div',{class:'lg-scene','aria-hidden':'true'});
++  var city=el('div',{class:'lg-city'});
++  var citySvg=document.createElementNS('http://www.w3.org/2000/svg','svg');
++  citySvg.setAttribute('viewBox','0 0 1920 1080');
++  citySvg.setAttribute('preserveAspectRatio','xMidYMid slice');
++  citySvg.setAttribute('focusable','false');
++  city.appendChild(citySvg);
++  var sky=el('div',{class:'lg-sky'});
++  var skyStars=el('i',{class:'stars'});
++  sky.appendChild(skyStars);
++  scene.appendChild(city);scene.appendChild(sky);
++  var orbSun=el('div',{class:'lg-orb sun','aria-hidden':'true'});
++  var orbMoon=el('div',{class:'lg-orb moon','aria-hidden':'true'});
++  scene.appendChild(orbSun);scene.appendChild(orbMoon);
++
++  var brand=el('header',{class:'lg-brand'});
++  var mark=el('span',{class:'lg-mark','aria-hidden':'true'});
++  mark.innerHTML=BRAND_WHITE;
++  brand.appendChild(mark);
++  brand.appendChild(el('b',{text:'不加班'}));
++  brand.appendChild(el('span',{text:'AI 剪辑'}));
++
++  var title=el('h1',{id:'nof-title'});
++  var sub=el('p',{class:'lg-sub',id:'nof-sub'});
++  var tm=el('time',{id:'nof-tm',text:'09:00'});
++  var punch=el('div',{class:'lg-punch'},[el('span',{text:'今日考勤'}),tm]);
++  var tape=el('i',{class:'lg-tape','aria-hidden':'true'});
++
++  var accountLab=el('span',{class:'lg-lab',id:'nof-acc-lab',text:'账号'});
++  var account=el('input',{id:'nof-account',autocomplete:'username',autocapitalize:'none',spellcheck:'false',placeholder:'手机号或邮箱'});
++  var accountFld=el('label',{class:'lg-field'},[accountLab,el('span',{class:'lg-f'},[account])]);
++  var name=el('input',{id:'nof-name',autocomplete:'nickname',placeholder:'怎么称呼你'});
++  var nameWrap=el('label',{class:'lg-field',id:'nof-name-wrap',hidden:true},[el('span',{class:'lg-lab',text:'昵称（可选）'}),el('span',{class:'lg-f'},[name])]);
++  var code=el('input',{id:'nof-code',inputmode:'numeric',autocomplete:'one-time-code',placeholder:'6 位'});
++  var otpBtn=el('button',{type:'button',class:'lg-otp',id:'nof-otp',text:'发送验证码'});
++  var otpRow=el('div',{class:'lg-row',id:'nof-otp-row',hidden:true},[
++    el('label',{class:'lg-field'},[el('span',{class:'lg-lab',text:'邮箱验证码'}),el('span',{class:'lg-f'},[code])]),
++    otpBtn
++  ]);
++  var invite=el('input',{id:'nof-invite',autocomplete:'off',placeholder:'同事给你的邀请码'});
++  var inviteWrap=el('label',{class:'lg-field',id:'nof-invite-wrap',hidden:true},[el('span',{class:'lg-lab',text:'邀请码'}),el('span',{class:'lg-f'},[invite])]);
++  var pwLab=el('span',{class:'lg-lab',id:'nof-pw-lab',text:'密码'});
++  var password=el('input',{id:'nof-password',type:'password',autocomplete:'current-password',placeholder:'至少 6 位'});
++  var eye=el('button',{type:'button',class:'lg-eye',id:'nof-eye','aria-label':'显示密码','aria-pressed':'false',text:'显示'});
++  var pwFld=el('label',{class:'lg-field'},[pwLab,el('span',{class:'lg-f'},[password,eye])]);
++  var remember=el('input',{id:'nof-remember',type:'checkbox'});
++  remember.checked=true;
++  var rememberLab=el('label',{class:'lg-remember',id:'nof-remember-wrap',for:'nof-remember'},[
++    remember,
++    el('span',{text:'记住本机账号和密码'})
++  ]);
++  var go=el('button',{type:'submit',class:'lg-go',id:'nof-go',text:'登录并继续剪辑'});
++  var left=el('button',{type:'button',class:'lg-lk',id:'nof-left',text:'忘记密码'});
++  var right=el('button',{type:'button',class:'lg-lk',id:'nof-right',text:'注册新账号'});
++  var meta=el('div',{class:'lg-meta',id:'nof-meta'},[
++    rememberLab,
++    el('div',{class:'lg-links'},[left,right])
++  ]);
++  var aside=el('p',{class:'lg-msg',id:'nof-aside',role:'status','aria-live':'polite',text:'使用不加班账号登录。点登录后完成人机验证即可。'});
++  var stamp=el('div',{class:'lg-stamp','aria-hidden':'true'});
++  stamp.innerHTML='准点<br>下班';
++
++  var form=el('form',{id:'nof-form',class:'lg-card',novalidate:''},[tape,punch,title,sub,accountFld,nameWrap,otpRow,inviteWrap,pwFld,meta,go,aside,stamp]);
++  var main=el('main',{class:'lg-main'},[form]);
++
++  var ruler=el('div',{class:'lg-ruler',id:'nof-ruler','aria-hidden':'true'});
++  for(var hh=9;hh<=18;hh++){
++    var tick=el('i');
++    tick.style.left=((hh-9)/9*100)+'%';
++    tick.innerHTML='<b>'+hh+'</b>';
++    ruler.appendChild(tick);
++  }
++  var clipEls=[];
++  var clipsWrap=el('div',{class:'lg-clips'});
++  NAMES.forEach(function(n,i){
++    var c=el('div',{class:'lg-clip',text:n});
++    c.style.flex=String(DUR[i]);
++    clipEls.push(c);
++    clipsWrap.appendChild(c);
++  });
++  var tip=el('span',{class:'lg-tip',id:'nof-tip',text:'09:00 上班'});
++  var grip=el('div',{class:'lg-grip'},[tip]);
++  var playhead=el('div',{class:'lg-playhead',id:'nof-head'},[grip]);
++  var tracks=el('div',{class:'lg-tracks',id:'nof-tracks',role:'slider',tabindex:'0','aria-label':'时间轴：拖动查看一天从上班到下班','aria-valuemin':'540','aria-valuemax':'1080','aria-valuenow':'540','aria-valuetext':'09:00 上班'},[clipsWrap,playhead]);
++  var playBtn=el('button',{type:'button',class:'lg-play',id:'nof-play','aria-label':'暂停',title:'暂停'});
++  var tl=el('div',{class:'lg-tl'},[ruler,playBtn,tracks]);
++
++  var capMask=el('div',{class:'cap-mask',id:'nof-cap',hidden:true});
++  var capHint=el('p',{class:'hint',id:'nof-cap-hint',text:'请完成人机验证'});
++  var capStage=el('div',{class:'stage',id:'nof-cap-stage'});
++  var capErr=el('p',{class:'err',id:'nof-cap-err'});
++  var capRefresh=el('button',{type:'button',class:'refresh',id:'nof-cap-refresh',text:'换一张'});
++  var capCancel=el('button',{type:'button',class:'cancel',id:'nof-cap-cancel',text:'取消'});
++  capMask.appendChild(el('div',{class:'cap',role:'dialog','aria-modal':'true','aria-label':'人机验证'},[
++    el('h2',{text:'人机验证'}),capHint,capStage,capErr,el('div',{class:'acts'},[capRefresh,capCancel])
++  ]));
++
++  var vig=el('div',{class:'lg-vig','aria-hidden':'true'});
++  [scene,vig,brand,main,tl,capMask].forEach(function(n){root.appendChild(n);});
++  (document.documentElement||document.body).appendChild(root);
++
++  // ---- 时间轴 + 城市背景共用一条时钟：默认播放，可暂停 ----
++  var reduced=false;
++  try{reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){}
++  var DAY_SECONDS=150, CITY_START=1.9, CITY_END=2.86, CITY_SPEED=.2, CITY_INTERVAL=33;
++  var p=0, playing=!reduced, ct=2.35, cityApi=null, lastNow=0, lastCityAt=0, dragging=false, wasPlaying=false;
++  var lastMinute=-1, lastSeg=-1, lastTip='', trackWidth=0;
++  var PAUSE_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>';
++  var PLAY_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
++
++  function pad2(n){return n<10?'0'+n:''+n;}
++  function minuteAt(v){return 540+Math.round(v*540);}
++  function segAt(v){var a=0,st=0;for(var i=0;i<DUR.length;i++){if(v*TOTAL>=a-1e-6)st=i;a+=DUR[i];}return st;}
++  // 天色：早晨偏暗 → 白天亮 → 午后偏暖 → 傍晚橙紫 → 下班深蓝。
++  // 合成到一层渐变上，只在颜色变化时重绘；5 层全屏 opacity 合成在低端机上太贵。
++  function smooth(a,b,x){x=(x-a)/(b-a);x=x<0?0:x>1?1:x;return x*x*(3-2*x);}
++  function setOpacity(node,value){
++    var q=Math.round(value*100)/100;
++    if(node.__o!==q){node.__o=q;node.style.opacity=String(q);}
++  }
++  function mixLayers(layers){
++    var r=0,g=0,b=0,a=0;
++    for(var i=0;i<layers.length;i++){
++      var la=Math.round(layers[i][3]*50)/50;
++      if(la<=0)continue;
++      r=layers[i][0]*la+r*(1-la);
++      g=layers[i][1]*la+g*(1-la);
++      b=layers[i][2]*la+b*(1-la);
++      a=la+a*(1-la);
++    }
++    return 'rgba('+Math.round(r)+','+Math.round(g)+','+Math.round(b)+','+(Math.round(a*100)/100)+')';
++  }
++  var lastSky='';
++  function paintSky(v){
++    var morning=1-smooth(.04,.3,v);
++    var warm=smooth(.45,.72,v)*(1-smooth(.82,1,v));
++    var dusk=smooth(.62,.86,v)*(1-smooth(.95,1,v));
++    var night=smooth(.8,1,v);
++    var top=mixLayers([[6,18,48,morning*.6],[255,196,120,warm*.22],[255,104,56,dusk*.55],[8,12,40,night*.78]]);
++    var bot=mixLayers([[10,40,90,morning*.6],[255,150,80,warm*.22],[38,18,58,dusk*.55],[3,6,20,night*.78]]);
++    var css='linear-gradient(180deg,'+top+' 0%,'+bot+' 100%)';
++    if(css!==lastSky){lastSky=css;sky.style.background=css;}
++    setOpacity(skyStars,night*.85);
++  }
++  // 日/月沿同一条弧线东升西落；傍晚 .86→.96 交叉淡化成月亮。
++  function paintOrb(v){
++    var x=82-68*v;
++    // 窄屏纸卡几乎占满宽度，太阳从纸卡上方走，不钻到纸后面。
++    var y=window.innerWidth<600
++      ? 9+2*v-5*Math.sin(Math.PI*v)
++      : 27+4*v-21*Math.sin(Math.PI*v);
++    var tf='translate3d('+x.toFixed(2)+'vw,'+y.toFixed(2)+'vh,0) translate(-50%,-50%)';
++    orbSun.style.transform=tf+' scale(1)';
++    orbMoon.style.transform=tf+' scale(.72)';
++    // 先让太阳落下去，再让月亮亮起来；重叠会让太阳的橙色光晕糊在月亮上。
++    setOpacity(orbSun,1-smooth(.87,.93,v));
++    setOpacity(orbMoon,smooth(.93,.99,v));
++  }
++  function setP(v){
++    p=v<0?0:v>1?1:v;
++    var m=minuteAt(p), st=segAt(p);
++    var s=pad2(Math.floor(m/60))+':'+pad2(m%60);
++    if(!trackWidth)trackWidth=tracks.clientWidth;
++    playhead.style.transform='translateX('+(p*trackWidth)+'px)';
++    tip.style.transform=p<.08?'translateX(0)':p>.92?'translateX(-100%)':'translateX(-50%)';
++    var txt=s+' '+NAMES[st];
++    if(m!==lastMinute){
++      lastMinute=m;
++      tm.textContent=s;
++      tracks.setAttribute('aria-valuenow',String(m));
++      tracks.setAttribute('aria-valuetext',txt);
++    }
++    if(txt!==lastTip){lastTip=txt;tip.textContent=txt;}
++    if(st!==lastSeg){lastSeg=st;clipEls.forEach(function(c,i){c.classList.toggle('on',i<=st);});}
++    paintSky(p);
++    paintOrb(p);
++  }
++  function setPlaying(on){
++    playing=!!on;
++    playBtn.innerHTML=playing?PAUSE_ICON:PLAY_ICON;
++    playBtn.setAttribute('aria-label',playing?'暂停':'播放');
++    playBtn.title=playing?'暂停':'播放';
++  }
++  function seekTo(clientX){
++    var r=tracks.getBoundingClientRect();
++    if(!r.width)return;
++    setP((clientX-r.left)/r.width);
++  }
++  playBtn.addEventListener('click',function(){setPlaying(!playing);});
++  tracks.addEventListener('pointerdown',function(e){
++    dragging=true;wasPlaying=playing;setPlaying(false);tracks.classList.add('drag');
++    try{tracks.setPointerCapture(e.pointerId);}catch(err){}
++    seekTo(e.clientX);
++  });
++  tracks.addEventListener('pointermove',function(e){if(dragging)seekTo(e.clientX);});
++  ['pointerup','pointercancel'].forEach(function(n){
++    tracks.addEventListener(n,function(){
++      if(!dragging)return;
++      dragging=false;tracks.classList.remove('drag');
++      if(wasPlaying)setPlaying(true);
++    });
++  });
++  tracks.addEventListener('keydown',function(e){
++    var d={ArrowLeft:-.04,ArrowDown:-.04,ArrowRight:.04,ArrowUp:.04}[e.key];
++    if(d!=null)setP(p+d);
++    else if(e.key==='Home')setP(0);
++    else if(e.key==='End')setP(1);
++    else return;
++    e.preventDefault();
++  });
++  document.addEventListener('keydown',function(e){
++    if(root.hidden)return;
++    if(e.key!==' '||e.repeat)return;
++    var t=e.target;
++    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='BUTTON'||t.isContentEditable))return;
++    e.preventDefault();setPlaying(!playing);
++  });
++  // 走完一天：瞬间切黑再淡入，避免“傍晚直接跳回早晨”的硬切。
++  function wrapScene(){
++    scene.style.transition='none';
++    scene.style.opacity='0';
++    void scene.offsetWidth;
++    scene.style.transition='';
++    scene.style.opacity='1';
++  }
++  function frame(now){
++    if(root.hidden||document.hidden){lastNow=now;requestAnimationFrame(frame);return;}
++    var dt=lastNow?Math.min(.05,(now-lastNow)/1000):0;
++    lastNow=now;
++    if(playing){
++      p+=dt/DAY_SECONDS;
++      if(p>=1){p-=1;wrapScene();}
++      ct+=dt*CITY_SPEED;
++      if(ct>CITY_END)ct=CITY_START+((ct-CITY_END)%(CITY_END-CITY_START));
++      // 30fps 是样片原生节奏；半分辨率栅格化已经把整屏绘制像素降下来了。
++      if(cityApi&&now-lastCityAt>=CITY_INTERVAL){lastCityAt=now;cityApi.renderAt(ct);}
++      setP(p);
++    }
++    requestAnimationFrame(frame);
++  }
++  var cityTries=0;
++  function mountCity(){
++    if(typeof window.__NOF_MOUNT_CITY__!=='function'){
++      if(cityTries++<60)setTimeout(mountCity,80);
++      return;
++    }
++    window.__NOF_MOUNT_CITY__(citySvg).then(function(api){
++      cityApi=api;
++      // 样片内置的太阳固定在右上角；去掉它，改画会走的日/月。
++      var bakedSun=citySvg.querySelector('#nof-sun');
++      var bakedRays=citySvg.querySelector('#nof-rays');
++      if(bakedSun)bakedSun.remove();
++      if(bakedRays)bakedRays.remove();
++      api.renderAt(ct);
++    }).catch(function(){});
++  }
++  window.addEventListener('resize',function(){trackWidth=tracks.clientWidth;});
++  setP(0);
++  setPlaying(playing);
++  requestAnimationFrame(frame);
++  mountCity();
++
++  var mode='login',busy=false,otpWait=0,pending=null,captchaId='',captchaPrompt='',captchaSequence=[],captchaClicks=[],captchaWrong=0;
++
++  function problem(msg){aside.textContent=msg;aside.classList.add('err');}
++  function note(msg){aside.textContent=msg;aside.classList.remove('err');}
++  function paintMode(){
++    title.textContent=GREET[mode];
++    sub.textContent=SUB[mode];
++    accountLab.textContent=mode==='login'?'账号':'邮箱';
++    account.placeholder=mode==='login'?'手机号或邮箱':'name@example.com';
++    pwLab.textContent=mode==='reset'?'新密码':'密码';
++    password.autocomplete=mode==='login'?'current-password':'new-password';
++    nameWrap.hidden=mode!=='register';
++    otpRow.hidden=mode==='login';
++    inviteWrap.hidden=mode!=='register';
++    rememberLab.hidden=mode!=='login';
++    go.textContent=mode==='login'?'登录并继续剪辑':mode==='register'?'注册并继续剪辑':'更新密码';
++    left.textContent=mode==='login'?'忘记密码':'返回登录';
++    right.textContent=mode==='login'?'注册新账号':mode==='register'?'去登录':'去登录';
++    note(mode==='login'?'使用不加班账号登录。点登录后完成人机验证即可。':'');
++  }
++  function show(){root.hidden=false;paintMode();loadRemember();}
++  function hide(){root.hidden=true;capMask.hidden=true;pending=null;}
++  function loadRemember(){
++    rpc('auth:remember-get',{}).then(function(data){
++      if(!data||!data.enabled||!data.account)return;
++      if(!account.value)account.value=String(data.account).slice(0,160);
++      if(!password.value&&data.password)password.value=String(data.password).slice(0,128);
++      remember.checked=true;
++    }).catch(function(){});
++  }
++  function saveRemember(){
++    if(mode!=='login')return Promise.resolve();
++    if(!remember.checked)return rpc('auth:remember-clear',{}).catch(function(){});
++    return rpc('auth:remember-set',{
++      account:account.value.trim(),
++      password:password.value,
++      enabled:true
++    }).catch(function(){});
++  }
++
++  function fillCaptchaViewport(svg){
++    return String(svg||'').replace(/<svg\b([^>]*)>/,function(_t,attrs){
++      return /\spreserveAspectRatio\s*=/.test(attrs)
++        ? '<svg'+attrs.replace(/\spreserveAspectRatio\s*=\s*(["']).*?\1/,' preserveAspectRatio="none"')+'>'
++        : '<svg'+attrs+' preserveAspectRatio="none">';
++    });
++  }
++  function isSequencePrompt(prompt){
++    return prompt==='click_sequence'||prompt==='click_size_asc'||prompt==='click_size_desc';
++  }
++  function promptHint(prompt,iconTarget){
++    var icon=ICON_LABEL[iconTarget]||'图标';
++    if(prompt==='click_largest')return '请点击最大的'+icon;
++    if(prompt==='click_smallest')return '请点击最小的'+icon;
++    if(prompt==='click_second_smallest')return '请点击第二小的'+icon;
++    if(prompt==='click_icon')return '请点击图中的'+icon;
++    if(prompt==='click_sequence')return '请按提示顺序点击';
++    if(prompt==='click_size_asc')return '请按从小到大点击'+icon;
++    if(prompt==='click_size_desc')return '请按从大到小点击'+icon;
++    return '请完成人机验证';
++  }
++  function expectedSteps(){
++    if(captchaPrompt==='click_sequence')return captchaSequence.length||1;
++    if(captchaPrompt==='click_size_asc'||captchaPrompt==='click_size_desc')return 4;
++    return 1;
++  }
++  function clearCaptchaMarks(){
++    captchaClicks=[];captchaWrong=0;
++    Array.prototype.slice.call(capStage.querySelectorAll('.pick')).forEach(function(n){n.remove();});
++    Array.prototype.slice.call(capStage.querySelectorAll('.is-picked')).forEach(function(n){n.classList.remove('is-picked');});
++  }
++  function loadCaptcha(){
++    capErr.textContent='';
++    clearCaptchaMarks();
++    capStage.innerHTML='<div style="display:grid;place-items:center;min-height:200px;color:#8d90a6">加载中…</div>';
++    return auth('captcha',{type:'click'}).then(function(data){
++      if(!data||!data.id||!data.svg){capErr.textContent='验证码加载失败，请重试';return;}
++      captchaId=data.id;
++      captchaPrompt=data.prompt||'';
++      captchaSequence=Array.isArray(data.sequence)?data.sequence:[];
++      capHint.textContent=promptHint(captchaPrompt,data.icon_target);
++      var wrap=document.createElement('div');
++      wrap.style.cssText='position:absolute;inset:1px';
++      wrap.innerHTML=fillCaptchaViewport(data.svg);
++      capStage.innerHTML='';
++      capStage.appendChild(wrap);
++    }).catch(function(err){capErr.textContent=err.message||'验证码加载失败';});
++  }
++  function openCaptcha(kind){
++    pending=kind;capMask.hidden=false;loadCaptcha();
++  }
++  function closeCaptcha(){capMask.hidden=true;pending=null;captchaId='';clearCaptchaMarks();}
++
++  function afterLogin(){
++    setP(1);setPlaying(false);
++    form.classList.add('lg-done');
++    setTimeout(hide,380);
++    emitAuth(true);
++    try{
++      if(window.parent!==window)window.parent.postMessage({type:'no996-openfilm:auth',version:1,action:'logged-in'},'*');
++    }catch(e){}
++  }
++
++  function finishCaptcha(codeValue){
++    var kind=pending;
++    if(kind==='login')runLogin(captchaId,codeValue);
++    else if(kind==='otp')runOtp(captchaId,codeValue);
++    else closeCaptcha();
++  }
++  function runLogin(id,codeValue){
++    busy=true;go.disabled=true;
++    var acc=account.value.trim();
++    var pass=password.value;
++    return auth('login',{account:acc,password:pass,captchaId:id,captchaCode:codeValue})
++      .then(function(){ return saveRemember().then(afterLogin); })
++      .catch(function(err){problem(err.message||'登录失败');})
++      .finally(function(){busy=false;go.disabled=false;closeCaptcha();});
++  }
++  function runOtp(id,codeValue){
++    busy=true;otpBtn.disabled=true;
++    return auth('verification-code',{
++      account:account.value.trim(),
++      purpose:mode==='reset'?'reset_password':'register',
++      captchaId:id,captchaCode:codeValue
++    }).then(function(){
++      note('验证码已发送，请查收邮箱');
++      otpWait=60;otpBtn.textContent=otpWait+'s';
++      var timer=setInterval(function(){
++        otpWait-=1;
++        if(otpWait<=0){clearInterval(timer);otpBtn.disabled=false;otpBtn.textContent='发送验证码';}
++        else otpBtn.textContent=otpWait+'s';
++      },1000);
++    }).catch(function(err){problem(err.message||'验证码发送失败');otpBtn.disabled=false;})
++      .finally(function(){busy=false;closeCaptcha();});
++  }
++
++  capStage.addEventListener('click',function(ev){
++    if(!captchaId||capMask.hidden)return;
++    var target=ev.target&&ev.target.closest?ev.target.closest('[data-captcha-id]'):null;
++    if(!target)return;
++    var id=target.getAttribute('data-captcha-id');
++    var kind=target.getAttribute('data-captcha-kind')||'';
++    if(!id)return;
++    var sr=capStage.getBoundingClientRect();
++    var tr=target.getBoundingClientRect();
++    function addMark(order){
++      var mark=el('span',{class:'pick',text:String(order)});
++      mark.style.left=(tr.left-sr.left+tr.width/2)+'px';
++      mark.style.top=(tr.top-sr.top+tr.height/2)+'px';
++      capStage.appendChild(mark);
++      target.classList.add('is-picked');
++    }
++    if(!isSequencePrompt(captchaPrompt)){
++      addMark(1);
++      setTimeout(function(){finishCaptcha(id);},180);
++      return;
++    }
++    if(captchaClicks.indexOf(id)!==-1)return;
++    if(captchaPrompt==='click_sequence'){
++      var expected=captchaSequence[captchaClicks.length];
++      if(expected&&kind!==expected){
++        captchaWrong+=1;
++        captchaClicks=[];
++        Array.prototype.slice.call(capStage.querySelectorAll('.pick')).forEach(function(n){n.remove();});
++        Array.prototype.slice.call(capStage.querySelectorAll('.is-picked')).forEach(function(n){n.classList.remove('is-picked');});
++        if(captchaWrong>=2){capErr.textContent='点错太多次，已刷新题目';loadCaptcha();}
++        else capErr.textContent='顺序不对，请重试';
++        return;
++      }
++    }
++    captchaClicks.push(id);
++    addMark(captchaClicks.length);
++    capErr.textContent='';
++    if(captchaClicks.length>=expectedSteps()){
++      setTimeout(function(){finishCaptcha(captchaClicks.join(','));},220);
++    }
++  });
++  capRefresh.addEventListener('click',function(){loadCaptcha();});
++  capCancel.addEventListener('click',function(){closeCaptcha();});
++
++  eye.addEventListener('click',function(){
++    var show=password.type==='password';
++    password.type=show?'text':'password';
++    eye.setAttribute('aria-pressed',show?'true':'false');
++    eye.textContent=show?'隐藏':'显示';
++    eye.setAttribute('aria-label',show?'隐藏密码':'显示密码');
++  });
++  left.addEventListener('click',function(){
++    if(mode==='login'){mode='reset';paintMode();}
++    else{mode='login';paintMode();}
++  });
++  right.addEventListener('click',function(){
++    mode=mode==='login'?'register':'login';
++    paintMode();
++  });
++  otpBtn.addEventListener('click',function(){
++    if(busy||otpWait>0)return;
++    if(account.value.trim().indexOf('@')===-1)return problem('请先填写邮箱');
++    openCaptcha('otp');
++  });
++  form.addEventListener('submit',function(ev){
++    ev.preventDefault();
++    if(busy||!capMask.hidden)return;
++    var acc=account.value.trim();
++    if(!acc)return problem(mode==='login'?'请输入账号：手机号或邮箱。':'请输入邮箱。');
++    if(mode==='login'){
++      if(password.value.length<6)return problem('密码至少 6 位，请重新输入。');
++      openCaptcha('login');
++      return;
++    }
++    if(mode==='register'){
++      if(acc.indexOf('@')===-1)return problem('注册请使用邮箱。');
++      if(password.value.length<6)return problem('密码至少 6 位。');
++      if(!code.value.trim())return problem('请输入邮箱验证码。');
++      if(!invite.value.trim())return problem('请输入邀请码。');
++      busy=true;go.disabled=true;
++      auth('register',{account:acc,password:password.value,code:code.value.trim(),inviteCode:invite.value.trim(),displayName:name.value.trim()||undefined})
++        .then(afterLogin)
++        .catch(function(err){problem(err.message||'注册失败');})
++        .finally(function(){busy=false;go.disabled=false;});
++      return;
++    }
++    if(acc.indexOf('@')===-1)return problem('请使用邮箱重置密码。');
++    if(!code.value.trim())return problem('请输入邮箱验证码。');
++    if(password.value.length<6)return problem('新密码至少 6 位。');
++    busy=true;go.disabled=true;
++    auth('reset-password',{account:acc,code:code.value.trim(),newPassword:password.value})
++      .then(function(){mode='login';paintMode();note('密码已更新，请登录。');code.value='';})
++      .catch(function(err){problem(err.message||'重置失败');})
++      .finally(function(){busy=false;go.disabled=false;});
++  });
++
++  function syncFromStatus(){
++    rpc('auth:status',{}).then(function(data){
++      if(data&&data.loggedIn===true)hide();
++      else show();
++    }).catch(function(){show();});
++  }
++  window.addEventListener('no996-auth-changed',function(ev){
++    if(ev&&ev.detail&&ev.detail.loggedIn)hide();
++    else show();
++  });
++  paintMode();
++  loadRemember();
++  syncFromStatus();
++})();
 diff --git a/apps/desktop/shell/main.tsx b/apps/desktop/shell/main.tsx
-index bb5a8ea..818a6fb 100644
+index bb5a8ea..e0f7e10 100644
 --- a/apps/desktop/shell/main.tsx
 +++ b/apps/desktop/shell/main.tsx
-@@ -10,10 +10,12 @@ import { FocusNav } from 'openfilm/studio-ui/components/FocusNav.tsx';
+@@ -10,10 +10,17 @@ import { FocusNav } from 'openfilm/studio-ui/components/FocusNav.tsx';
  import { applyStudioHost } from 'openfilm/studio-ui/lib/host.ts';
  import { mountChat } from '../chat/src/mount';
  import { CanvasModelPicker, canvasWritingModel } from '../chat/src/components/ModelPopover';
 +import { RecoveryGate } from './RecoveryGate';
 +import { EnvironmentNotice } from './EnvironmentNotice';
++// The pre-auth gate and its city backdrop: shipped in this bundle instead of
++// injected per page. They mount on documentElement, so nothing React renders can
++// wipe them.
++import './login-city';
++import './login-gate';
  import './shell.css';
  import '../chat/src/chat.css';
  

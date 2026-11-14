@@ -156,6 +156,7 @@ test('the injected blocks are balanced script tags', async () => {
   assert.equal(typeof injection, 'string');
   assert.match(injection, /^<script>/);
   assert.match(injection, /<\/script>$/);
-  assert.equal(injection.split('</script').length, 4);
-  assert.match(injection, /__NOF_MOUNT_CITY__/);
+  // One block: the UI overlay. The login gate and its city ship in the bundle.
+  assert.equal(injection.split('</script').length, 2);
+  assert.doesNotMatch(injection, /__NOF_MOUNT_CITY__/);
 });

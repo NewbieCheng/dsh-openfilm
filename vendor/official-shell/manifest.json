@@ -64,6 +64,7 @@
       "apps/desktop/chat/src/components/ModelPopover.tsx",
       "apps/desktop/chat/src/components/OnboardingGate.tsx",
       "apps/desktop/chat/src/components/ProjectStarters.tsx",
+      "apps/desktop/chat/src/components/TemplatePicker.tsx",
       "apps/desktop/chat/src/i18n/locales/en-US.ts",
       "apps/desktop/chat/src/i18n/locales/es.ts",
       "apps/desktop/chat/src/i18n/locales/ja.ts",
@@ -81,7 +82,8 @@
       "packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx",
       "packages/shared/src/contract.ts",
       "packages/shared/src/markdown-blocks.ts",
-      "apps/desktop/chat/src/components/TemplatePicker.tsx"
+      "apps/desktop/shell/login-city.js",
+      "apps/desktop/shell/login-gate.js"
     ],
     "diff": "patch.diff"
   },
@@ -92,9 +94,9 @@
     "source/package.json": "5e2d01f0720784a5af2350a00b77477c3d00acb4404f874810fd9dc48583907a",
     "source/pnpm-lock.yaml": "3fe58d8c7e4d51afff7debb50b35cfd3d6c8c961b1214bf782a68d3b6c5c4b4a",
     "source/pnpm-workspace.yaml": "af261372097773546d4000a74b771c8c09c4114ca5e9dd715c95018b44e1fbe3",
+    "ui/assets/CanvasView-B0FyWCbx.js": "6a5e2ed92a64eeacde6ec427638adabf9d37bd997e1486e7efb33a70b3624ffe",
     "ui/assets/CanvasView-D_Y2VtPX.css": "738392246b7fcccf3b45c490c3ecc7b7107623505cc835d3ccf44730f107a77d",
-    "ui/assets/CanvasView-MZ6JbkJ7.js": "540add260b5f54b7205218295ad45c37ad7926bc578c9b2c17d93ee7ba3b96a4",
-    "ui/assets/index-C5tgyuN_.js": "0056a305bddaf93158704380d7764c7f7213630235c4bdf6d65ca6d08a748a59",
+    "ui/assets/index-CgEMt51C.js": "2c66618a5db1953683105023ea4eefc3664b86e9dee50150dc2f342eb4be44d9",
     "ui/assets/index-FP1IQojs.css": "83153a3d8d281843dc6d97da5df42a0342604adacba10a8ab52f826aba09289d",
     "ui/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2": "ca157063339ac4ad418f214f3abfed119b0798ab4d377386ce5c9e5a7a435ebd",
     "ui/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2": "71d5ee93cc1e9f1d520a3a8b66456de18c7879d8df09d57fcd2eaff75fef0075",
@@ -103,7 +105,7 @@
     "ui/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2": "34b9c504cab7a73e37b746343a449132e56cf7b5481af2cb81dc74dcff25c956",
     "ui/assets/inter-latin-wght-normal-Dx4kXJAl.woff2": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
     "ui/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2": "5c66f9e07e90c6d4ac4922cc68d60de26c17b1858e677fb5e603fce3952b3ff2",
-    "ui/index.html": "f7246b1d979681f984f705ae605108a9f261693cb7a09a12303dca77c972444a",
+    "ui/index.html": "29f762d4f88ecb721d1871dd970cfc3bcd81ac36f04631b787239e05b80261bb",
     "ui/assets/no996-theme.css": "4a51337709214925c437940401e861eb574d16779732b4d2217a9c1f7f2ffb9b"
   },
   "overrides": {

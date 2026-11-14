@@ -41,6 +41,13 @@ test('the template picker is in the shell source, and the injection yields to it
   assert.match(injection, /data-no996-template-react/);
 });
 
+test('the login gate ships in the bundle, not as a page script', () => {
+  assert.doesNotMatch(injection, /no996-shell-login/);
+  assert.doesNotMatch(injection, /__NOF_MOUNT_CITY__/);
+  assert.match(bundle, /no996-shell-login/);
+  assert.match(bundle, /__NOF_MOUNT_CITY__/);
+});
+
 test('both components are mounted by the shell entry', () => {
   // The entry is upstream source; the patch series is what carries it. Find the
   // patch through series.json rather than guessing its number.

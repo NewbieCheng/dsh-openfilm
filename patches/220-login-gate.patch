@@ -1,0 +1,649 @@
+diff --git a/apps/desktop/shell/login-gate.js b/apps/desktop/shell/login-gate.js
+new file mode 100644
+index 0000000..e6fe9c2
+--- /dev/null
++++ b/apps/desktop/shell/login-gate.js
+@@ -0,0 +1,643 @@
++(function(){
++  if(globalThis.__no996ShellLogin)return;globalThis.__no996ShellLogin=1;
++  var BRAND_WHITE="<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-8.22 0 1039.44 983\" role=\"img\" aria-label=\"今天不加班AI 深色模式Logo\">\n<title>今天不加班AI 标志（dark 白橙）</title>\n  <path fill=\"#FFFFFF\" fill-rule=\"evenodd\" d=\"M 239 262 L 239 345 L 450 346 L 171 625 L 295 625 L 443 478 L 445 723 L 541 723 L 543 479 L 689 635 L 761 577 L 751 563 L 609 408 L 509 407 L 569 345 L 775 345 L 775 262 Z M 601 16 L 530 8 L 470 9 L 422 15 L 381 24 L 337 38 L 303 52 L 273 67 L 241 86 L 208 109 L 170 141 L 143 168 L 105 214 L 77 256 L 58 291 L 38 338 L 24 382 L 14 427 L 9 467 L 8 530 L 12 573 L 18 606 L 31 652 L 46 690 L 68 733 L 93 772 L 123 811 L 166 856 L 191 878 L 226 904 L 268 929 L 302 945 L 348 961 L 407 973 L 443 974 L 319 846 L 286 831 L 257 813 L 220 783 L 187 748 L 153 700 L 127 650 L 109 600 L 100 554 L 97 510 L 99 467 L 107 417 L 122 367 L 148 310 L 171 272 L 208 226 L 244 191 L 290 157 L 334 133 L 365 120 L 421 104 L 477 96 L 522 95 L 567 99 L 622 111 L 674 130 L 725 158 L 768 190 L 811 232 L 841 269 L 861 300 L 876 328 L 891 364 L 900 391 L 910 435 L 993 409 L 987 381 L 974 340 L 954 293 L 935 258 L 907 215 L 867 166 L 831 130 L 810 112 L 786 94 L 745 68 L 712 51 L 678 37 L 651 28 Z\"/>\n  <path fill=\"#FF7200\" fill-rule=\"evenodd\" d=\"M 1014 452 L 801 510 L 851 548 L 510 847 L 408 744 L 337 808 L 337 810 L 505 971 L 507 971 L 924 612 L 967 662 Z\"/>\n</svg>";
++  function rpc(channel,payload){
++    return fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:channel,payload:payload||{}})})
++      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();});
++  }
++  function auth(action,fields){
++    return rpc('auth:action',Object.assign({action:action},fields||{})).then(function(data){
++      if(data&&data.ok===false)throw new Error(data.message||data.error||'请求失败');
++      return data;
++    });
++  }
++  function emitAuth(loggedIn){
++    try{window.dispatchEvent(new CustomEvent('no996-auth-changed',{detail:{loggedIn:!!loggedIn}}));}catch(e){}
++  }
++  var CSS=".nof-lg{--night:#05060f;--panel:#0a1224;--text:#f3eee4;--dim:#8d90a6;--brand:#051D43;--orange:#FF6400;--orange-deep:#d45500;--paper:#f5f0e5;--paper-2:#ebe4d2;--ink:#18171c;--ink-dim:#6d6a62;--err:#a33a2a;--tlh:72px;--hand:\"Ma Shan Zheng\",\"STKaiti\",\"KaiTi\",cursive;--sans:\"Noto Sans SC\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;position:fixed;inset:0;z-index:2147482500;overflow:hidden;background:var(--night);color:var(--text);font-family:var(--sans);box-sizing:border-box}.nof-lg *,.nof-lg *::before,.nof-lg *::after{box-sizing:border-box}.nof-lg .sky,.nof-lg .sun,.nof-lg .grain{position:absolute;inset:0;pointer-events:none}.nof-lg .sky{background:linear-gradient(180deg,#051D43 0%,#0b1a33 48%,#3a2418 100%)}.nof-lg .sun{inset:auto;right:8%;bottom:calc(var(--tlh) - 40px);width:min(42vmin,280px);height:min(42vmin,280px)}.nof-lg .sun svg{width:100%;height:100%;overflow:visible;display:block}.nof-lg .grain{opacity:.08;mix-blend-mode:overlay;background:url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")}.nof-lg .brand{position:absolute;top:max(12px,env(safe-area-inset-top,0px));left:clamp(12px,2vw,24px);z-index:2;display:flex;align-items:center;gap:8px;font-weight:500;font-size:14px;letter-spacing:.04em}.nof-lg .brand .mark{width:26px;height:26px;display:block;flex:none}.nof-lg .brand .mark svg{width:100%;height:100%;display:block}.nof-lg .brand small{font-weight:400;font-size:12px;color:var(--dim)}.nof-lg main{position:relative;z-index:1;height:100%;display:flex;align-items:center;justify-content:center;padding:48px 16px calc(var(--tlh) + 20px);overflow:auto}.nof-lg .paper{width:min(100%,380px);position:relative;padding:22px 24px 16px;border-radius:3px;color:var(--ink);background:radial-gradient(circle,#d3cab3 1px,transparent 1.3px) 0 0/14px 14px,linear-gradient(160deg,var(--paper),var(--paper-2));box-shadow:0 0 0 1px rgba(255,100,0,.28),0 24px 56px rgba(0,0,0,.5)}.nof-lg .tape{position:absolute;top:-9px;left:-12px;width:72px;height:20px;transform:rotate(-8deg);background:repeating-linear-gradient(135deg,rgba(255,255,255,.3) 0 4px,transparent 4px 9px),rgba(255,100,0,.88);z-index:2}.nof-lg h1{margin:0;font:400 28px/1.2 var(--hand);letter-spacing:.02em;color:var(--brand)}.nof-lg .sub{margin:6px 0 14px;font-size:12px;color:var(--ink-dim);line-height:1.45}.nof-lg .fld{display:block;margin-bottom:12px}.nof-lg .fld>span{display:block;font-size:12px;color:var(--ink-dim);margin-bottom:1px}.nof-lg .inw{position:relative;display:flex;align-items:center}.nof-lg .inw>.ic{position:absolute;left:2px;width:16px;height:16px;color:var(--ink-dim);flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.nof-lg .inw:focus-within>.ic{color:var(--orange)}.nof-lg .fld input{width:100%;font:500 15px var(--sans);color:var(--ink);background:transparent;border:0;border-bottom:1px solid rgba(24,23,28,.35);border-radius:0;padding:7px 30px 7px 26px;outline:0;caret-color:var(--orange)}.nof-lg .fld input:focus-visible{border-bottom-color:var(--orange);box-shadow:0 1px 0 var(--orange)}.nof-lg .fld input::placeholder{color:#a8a291}.nof-lg .eye{position:absolute;right:0;display:grid;place-items:center;width:28px;height:28px;color:var(--ink-dim);background:none;border:0;border-radius:50%;cursor:pointer;padding:0;font-size:14px}.nof-lg .go{width:100%;margin-top:6px;font:500 15px var(--sans);letter-spacing:.06em;padding:.72em 1em;border-radius:2px;border:0;background:var(--brand);color:#fff;cursor:pointer;box-shadow:inset 0 -2px 0 rgba(255,100,0,.85)}.nof-lg .go:disabled{opacity:.55;cursor:default}.nof-lg .links{display:flex;justify-content:space-between;gap:10px;margin-top:10px;font-size:12px;flex-wrap:wrap}.nof-lg .lk{color:var(--orange-deep);background:none;border:0;font:inherit;padding:2px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}.nof-lg .aside{margin:10px 0 0;min-height:1.3em;font-size:12px;color:var(--ink-dim)}.nof-lg .aside.err{color:var(--err)}.nof-lg .row{display:flex;gap:8px;align-items:flex-end}.nof-lg .row .fld{flex:1;margin-bottom:12px}.nof-lg .otp{flex:none;margin-bottom:12px;font:500 12px var(--sans);padding:.55em .75em;border-radius:2px;border:1px solid rgba(5,29,67,.2);background:transparent;color:var(--orange-deep);cursor:pointer}.nof-lg .otp:disabled{opacity:.5}.nof-lg .tl{position:absolute;left:0;right:0;bottom:0;z-index:1;background:var(--panel);border-top:1px solid rgba(255,100,0,.22);padding-bottom:env(safe-area-inset-bottom,0px)}.nof-lg .clips{display:flex;gap:2px;padding:6px 8px 8px;height:var(--tlh);box-sizing:border-box}.nof-lg .clip{flex:1;min-width:0;border-radius:3px;overflow:hidden;display:flex;flex-direction:column;background:#000;outline:1px solid transparent;outline-offset:-1px}.nof-lg .clip.cur{outline-color:var(--orange)}.nof-lg .clip b{display:block;font:500 10px/16px var(--sans);padding:0 5px;background:#122038;color:#aeb0c4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.nof-lg .clip.cur b{color:var(--orange)}.nof-lg .clip i{flex:1;position:relative;background:linear-gradient(180deg,#1a2740,#12152b)}.nof-lg .clip i::before{content:\"\";position:absolute;left:55%;top:40%;width:8px;height:8px;margin:-4px;border-radius:50%;background:var(--orange);opacity:.7}.nof-lg .ph{position:absolute;top:0;bottom:0;width:1px;background:var(--orange);left:8%;box-shadow:0 0 10px rgba(255,100,0,.6)}.nof-lg .cap-mask{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,29,67,.55)}.nof-lg .cap{width:min(100%,400px);background:#fff;color:#18171c;border-radius:10px;box-shadow:0 20px 48px rgba(0,0,0,.4);padding:14px;font:13px/1.4 var(--sans)}.nof-lg .cap h2{margin:0 0 4px;font:600 15px/1.3 inherit;color:#051D43}.nof-lg .cap .hint{margin:0 0 8px;font-size:12px;color:#6d6a62}.nof-lg .cap .stage{position:relative;min-height:200px;border:1px solid #e5e1d8;border-radius:8px;background:#f7f5f0;overflow:hidden;cursor:pointer}.nof-lg .cap .stage svg{display:block;width:100%;height:100%;min-height:200px}.nof-lg .cap .pick{position:absolute;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;background:#FF6400;color:#fff;display:grid;place-items:center;font:700 10px/1 inherit;pointer-events:none;box-shadow:0 0 0 2px #fff}.nof-lg .cap .err{min-height:1.2em;margin:8px 0 0;font-size:12px;color:#a33a2a}.nof-lg .cap .acts{display:flex;gap:10px;margin-top:10px;align-items:center}.nof-lg .cap .acts button{font:inherit;cursor:pointer}.nof-lg .cap .cancel{background:none;border:0;color:#8a6a2c;text-decoration:underline;text-underline-offset:3px}.nof-lg .cap .refresh{padding:4px 10px;border:1px solid #e5e1d8;border-radius:6px;background:#fff;color:#051D43}@media (max-height:640px){.nof-lg{--tlh:56px}.nof-lg h1{font-size:24px}.nof-lg main{padding:40px 12px calc(var(--tlh) + 12px)}.nof-lg .paper{padding:16px 18px 12px}}@media (max-height:520px){.nof-lg{--tlh:0px}.nof-lg .tl{display:none}.nof-lg main{padding:36px 12px 16px}}";
++  var NAMES=['上班','开会','改稿','返工','收尾','关电脑','下班'];
++  var DUR=[1,1.5,1.5,2.2,1.2,.8,.8], TOTAL=9;
++  var GREET={login:'欢迎回来，准点下班。',register:'新同事，欢迎入职。',reset:'忘了也没关系。'};
++  var SUB={login:'登录后继续剪辑；会话保存在本机。',register:'注册需要邮箱验证码与邀请码。',reset:'用邮箱验证码设置新密码。'};
++  var ICON_LABEL={fish:'鱼',cake:'蛋糕',egg:'蛋',milk:'牛奶',chili:'辣椒',potato:'土豆',chocolate:'巧克力',garlic:'蒜',scallion:'葱',mint:'薄荷',snow_lotus:'雪莲',sweet_potato:'红薯',bean:'豆子'};
++
++  var root=document.createElement('div');
++  root.id='no996-shell-login';
++  root.className='nof-lg';
++  root.setAttribute('role','dialog');
++  root.setAttribute('aria-label','登录');
++  root.hidden=true;
++
++  var style=document.createElement('style');
++  style.textContent=CSS;
++  root.appendChild(style);
++
++  var font=document.createElement('link');
++  font.rel='stylesheet';
++  font.href='https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500;600&display=swap';
++  root.appendChild(font);
++
++  function el(tag,attrs,kids){
++    var node=document.createElement(tag);
++    if(attrs)Object.keys(attrs).forEach(function(k){
++      if(k==='text')node.textContent=attrs[k];
++      else if(k==='html')node.innerHTML=attrs[k];
++      else if(k==='hidden')node.hidden=!!attrs[k];
++      else node.setAttribute(k,attrs[k]);
++    });
++    (kids||[]).forEach(function(c){if(c)node.appendChild(c);});
++    return node;
++  }
++
++  // 视觉层是"登录首页"那版：纸张打卡卡 + 底部时间轴 + 城市背景。
++  // 旧 CSS 保留给验证码弹层；这里只追加 lg- 前缀的新样式，避免互相污染。
++  var NEW_CSS=[
++    '.nof-lg [hidden]{display:none!important}',
++    '.nof-lg{--paper:#f3ecdf;--paper2:#ece2d0;--line:#b9ad98;--mute:#6f675a;--sun:#ff6a00;--ink:#0a1d44;--tlh:76px;font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:#050f26}',
++    '.nof-lg .lg-scene{position:absolute;inset:0;z-index:0;transition:opacity .7s ease}',
++    '.nof-lg .lg-city{position:absolute;inset:0;background:#2B2BFF;overflow:hidden;contain:paint}',
++    // 半分辨率栅格化再放大：背景在纸卡后面，轻微软化换一半以上的绘制像素。
++    '.nof-lg .lg-city svg{display:block;width:50%;height:50%;transform:scale(2);transform-origin:0 0;will-change:transform}',
++    '.nof-lg .lg-sky{position:absolute;inset:0;pointer-events:none;z-index:1}',
++    '.nof-lg .lg-sky .stars{position:absolute;inset:0;display:block;opacity:0;background-image:radial-gradient(1.2px 1.2px at 20px 30px,rgba(255,255,255,.95),transparent 60%),radial-gradient(1px 1px at 96px 76px,rgba(255,255,255,.7),transparent 60%),radial-gradient(1.5px 1.5px at 154px 18px,rgba(255,255,255,.85),transparent 60%),radial-gradient(1px 1px at 60px 128px,rgba(255,255,255,.55),transparent 60%);background-size:220px 180px,260px 210px,300px 240px,340px 260px}',
++    '.nof-lg .lg-orb{position:absolute;left:0;top:0;width:clamp(90px,9vw,150px);height:clamp(90px,9vw,150px);border-radius:50%;opacity:0;pointer-events:none;z-index:2;will-change:transform,opacity}',
++    '.nof-lg .lg-orb.sun{background:radial-gradient(circle at 36% 32%,#FFE6B0 0 8%,#FFB25E 38%,#FF7A45 72%,#F2542D 100%);box-shadow:0 0 70px 18px rgba(255,150,80,.35)}',
++    '@media (max-width:600px){.nof-lg .lg-orb{width:64px;height:64px}}',
++    '.nof-lg .lg-orb.moon{background:radial-gradient(circle at 62% 38%,rgba(150,150,140,.35) 0 7%,transparent 8%),radial-gradient(circle at 42% 62%,rgba(150,150,140,.3) 0 9%,transparent 10%),radial-gradient(circle at 66% 66%,rgba(150,150,140,.25) 0 5%,transparent 6%),radial-gradient(circle at 38% 34%,#FFFDF4 0 12%,#EDE9D8 55%,#CFCBB8 100%);box-shadow:0 0 40px 10px rgba(220,230,255,.25)}',
++    '.nof-lg .lg-vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 120% 100% at 50% 42%,transparent 50%,rgba(3,8,22,.5)),linear-gradient(180deg,rgba(3,8,22,.35),transparent 26%,transparent 58%,rgba(3,8,22,.78))}',
++    '.nof-lg .lg-brand{position:absolute;top:max(18px,env(safe-area-inset-top,0px));left:clamp(16px,2vw,26px);z-index:4;display:flex;align-items:center;gap:10px;color:#fff;text-shadow:0 1px 10px rgba(0,0,0,.45)}',
++    '.nof-lg .lg-brand .lg-mark{width:32px;height:32px;flex:none;display:block}',
++    '.nof-lg .lg-brand .lg-mark svg{width:100%;height:100%;display:block}',
++    '.nof-lg .lg-brand b{font-weight:700;font-size:16px;letter-spacing:.02em}',
++    '.nof-lg .lg-brand span{font-size:13px;color:#c4d1ea}',
++    '.nof-lg .lg-main{position:relative;z-index:2;min-height:100%;display:grid;place-items:center;padding:84px 16px calc(var(--tlh) + 96px);overflow:auto}',
++    '.nof-lg .lg-card{position:relative;width:min(460px,100%);padding:26px 34px 22px;border-radius:4px;color:var(--ink);background:linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,0)),radial-gradient(rgba(10,29,68,.1) 1px,transparent 1.4px) 0 0/16px 16px,var(--paper);box-shadow:0 1px 0 #fff inset,0 2px 0 #e3d9c6,0 3px 0 #d2c6ae,0 34px 70px rgba(0,0,0,.5);transform:rotate(-.6deg)}',
++    '.nof-lg .lg-tape{position:absolute;top:-14px;left:-16px;width:96px;height:26px;background:repeating-linear-gradient(135deg,#ff7a1a 0 8px,#ff9a4d 8px 16px);transform:rotate(-8deg);box-shadow:0 2px 6px rgba(0,0,0,.3)}',
++    '.nof-lg .lg-punch{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:10px;border-bottom:2px dashed var(--line);margin-bottom:16px;color:var(--mute);font-size:13px}',
++    '.nof-lg .lg-punch time{font:700 28px/1 "Noto Sans SC",sans-serif;font-variant-numeric:tabular-nums;color:var(--sun)}',
++    '.nof-lg .lg-card h1{margin:0;font:400 36px/1.2 "Ma Shan Zheng","STKaiti","KaiTi",serif;letter-spacing:.04em}',
++    '.nof-lg .lg-sub{margin:4px 0 10px;color:var(--mute);font-size:14px}',
++    '.nof-lg .lg-field{display:block;margin-top:14px;color:var(--mute);font-size:14px}',
++    '.nof-lg .lg-lab{display:block;margin-bottom:2px}',
++    '.nof-lg .lg-f{position:relative;display:block;border-bottom:1.5px solid var(--line)}',
++    '.nof-lg .lg-f::after{content:"";position:absolute;left:0;bottom:-1.5px;height:3px;width:100%;background:var(--sun);transform:scaleX(0);transform-origin:left;transition:transform .3s}',
++    '.nof-lg .lg-f:focus-within::after{transform:scaleX(1)}',
++    '.nof-lg .lg-f input{width:100%;padding:8px 56px 8px 2px;border:0;background:none;font:500 17px/1.4 "Noto Sans SC",sans-serif;color:var(--ink);outline:none}',
++    '.nof-lg .lg-f input::placeholder{color:#a79d8a;font-weight:400}',
++    '.nof-lg .lg-eye{position:absolute;right:0;top:6px;border:0;background:none;color:var(--mute);font:400 13px "Noto Sans SC",sans-serif;cursor:pointer;padding:4px 2px}',
++    '.nof-lg .lg-eye:focus-visible,.nof-lg .lg-go:focus-visible,.nof-lg .lg-lk:focus-visible,.nof-lg .lg-tracks:focus-visible,.nof-lg .lg-play:focus-visible,.nof-lg .lg-remember input:focus-visible{outline:3px solid var(--sun);outline-offset:3px}',
++    '.nof-lg .lg-meta{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;margin-top:14px;flex-wrap:wrap}',
++    '.nof-lg .lg-remember{display:inline-flex;align-items:center;gap:7px;margin:0;color:var(--mute);font:400 13px/1.3 "Noto Sans SC",sans-serif;cursor:pointer;user-select:none;min-width:0}',
++    '.nof-lg .lg-remember input{width:14px;height:14px;margin:0;accent-color:var(--sun);cursor:pointer;flex:none}',
++    '.nof-lg .lg-remember span{white-space:nowrap}',
++    '.nof-lg .lg-remember[hidden]{display:none!important}',
++    '.nof-lg .lg-go{display:block;width:100%;margin-top:18px;padding:14px;border:0;border-radius:3px;background:var(--ink);color:#fff;font:700 17px "Noto Sans SC",sans-serif;letter-spacing:.08em;box-shadow:0 4px 0 var(--sun);cursor:pointer;transition:transform .15s,box-shadow .15s}',
++    '.nof-lg .lg-go:hover{transform:translateY(-1px);box-shadow:0 5px 0 var(--sun)}',
++    '.nof-lg .lg-go:active{transform:translateY(3px);box-shadow:0 1px 0 var(--sun)}',
++    '.nof-lg .lg-go:disabled{opacity:.6;cursor:default;transform:none}',
++    '.nof-lg .lg-links{display:inline-flex;align-items:center;gap:0;margin:0 0 0 auto;flex:none}',
++    '.nof-lg .lg-lk{border:0;background:none;padding:0;color:#d84700;font:400 13px/1.3 "Noto Sans SC",sans-serif;text-decoration:none;border-bottom:1px solid rgba(216,71,0,.4);cursor:pointer;white-space:nowrap}',
++    '.nof-lg .lg-lk+.lg-lk{margin-left:10px;padding-left:10px;border-left:1px solid var(--line)}',
++    '@media (max-width:420px){.nof-lg .lg-remember span{white-space:normal}.nof-lg .lg-meta{align-items:flex-start}}',
++    '.nof-lg .lg-msg{margin:12px 0 0;min-height:1.6em;color:var(--mute);font-size:13.5px}',
++    '.nof-lg .lg-msg.err{color:#c23a00;font-weight:500}',
++    '.nof-lg .lg-stamp{position:absolute;right:26px;top:70px;width:92px;height:92px;border:3px double #d84700;border-radius:50%;display:grid;place-items:center;color:#d84700;font:400 25px/1.1 "Ma Shan Zheng","STKaiti",serif;text-align:center;transform:rotate(-14deg) scale(1.9);opacity:0;pointer-events:none;mix-blend-mode:multiply}',
++    '.nof-lg .lg-done .lg-stamp{opacity:.88;transform:rotate(-14deg) scale(1);transition:transform .35s cubic-bezier(.5,0,.2,1.4),opacity .2s}',
++    '.nof-lg .lg-row{display:flex;gap:10px;align-items:flex-end}',
++    '.nof-lg .lg-row .lg-field{flex:1;min-width:0}',
++    '.nof-lg .lg-otp{flex:none;margin-bottom:2px;border:1px solid var(--line);background:rgba(255,255,255,.4);color:var(--ink);font:400 13px "Noto Sans SC",sans-serif;padding:8px 10px;border-radius:3px;cursor:pointer}',
++    '.nof-lg .lg-otp:disabled{opacity:.55;cursor:default}',
++    '.nof-lg .lg-tl{position:fixed;left:0;right:0;bottom:0;z-index:3;padding:34px 14px calc(14px + env(safe-area-inset-bottom,0px));background:linear-gradient(transparent,rgba(3,10,27,.9) 38%)}',
++    '.nof-lg .lg-ruler{position:relative;height:16px;font-size:10px;color:#7f91b6;font-variant-numeric:tabular-nums}',
++    '.nof-lg .lg-ruler i{position:absolute;bottom:0;height:7px;padding-left:3px;border-left:1px solid rgba(159,176,208,.5);font-style:normal;line-height:1}',
++    '.nof-lg .lg-ruler i b{position:absolute;bottom:9px;left:-1px;font-weight:400;transform:translateX(-50%)}',
++    '.nof-lg .lg-tracks{position:relative;display:flex;height:76px;cursor:ew-resize;touch-action:none;user-select:none;-webkit-user-select:none;border-radius:4px}',
++    '.nof-lg .lg-tracks.drag{cursor:grabbing}',
++    '.nof-lg .lg-clips{display:flex;flex:1;min-width:0}',
++    '.nof-lg .lg-clip{position:relative;overflow:hidden;min-width:0;border-top:2px solid #1d3466;border-left:1px solid rgba(5,12,30,.9);background:linear-gradient(#15294f,#0d1b3b);padding:5px 8px;color:#8ea0c4;font-size:12.5px;white-space:nowrap;transition:background .5s,color .5s,border-color .5s}',
++    '.nof-lg .lg-clip:first-child{border-radius:4px 0 0 4px;border-left:0}',
++    '.nof-lg .lg-clip:last-child{border-radius:0 4px 4px 0}',
++    '.nof-lg .lg-clip.on{background:linear-gradient(#5c2a12,#2a1a2a);border-top-color:var(--sun);color:#ffc28a}',
++    '.nof-lg .lg-playhead{position:absolute;top:-26px;bottom:0;left:0;width:0;z-index:2;pointer-events:none}',
++    '.nof-lg .lg-playhead::before{content:"";position:absolute;left:-1px;top:20px;bottom:0;width:2px;background:#fff;box-shadow:0 0 12px rgba(255,255,255,.7)}',
++    '.nof-lg .lg-grip{position:absolute;left:-10px;top:0;width:20px;height:24px;border-radius:6px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.4)}',
++    '.nof-lg .lg-grip::after{content:"";position:absolute;inset:6px;background:repeating-linear-gradient(90deg,var(--ink) 0 1.5px,transparent 1.5px 4px)}',
++    '.nof-lg .lg-tip{position:absolute;bottom:calc(100% + 6px);left:50%;padding:3px 9px;border-radius:12px;background:rgba(5,15,38,.85);color:#fff;font:500 12.5px/1.5 "Noto Sans SC",sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums;border:1px solid rgba(255,140,40,.5);transform:translateX(-50%)}',
++    '.nof-lg .lg-play{position:absolute;right:16px;bottom:calc(100% + 8px);z-index:4;width:38px;height:38px;display:grid;place-items:center;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(6,14,32,.78);color:#fff;cursor:pointer;transition:background .2s,border-color .2s}',
++    '.nof-lg .lg-play:hover{background:rgba(255,106,0,.9);border-color:rgba(255,106,0,.9)}',
++    '.nof-lg .lg-play svg{width:18px;height:18px;fill:currentColor;display:block}',
++    '@media (max-width:520px){.nof-lg .lg-card{padding:22px 22px 18px}.nof-lg .lg-card h1{font-size:30px}.nof-lg .lg-stamp{width:76px;height:76px;font-size:21px;top:64px;right:16px}.nof-lg .lg-clip{padding:5px 3px;font-size:10.5px}.nof-lg .lg-tracks{height:62px}.nof-lg .lg-main{padding-bottom:calc(var(--tlh) + 80px)}}',
++    '.nof-lg .cap-mask[hidden]{display:none!important}',
++  ].join('\n');
++  var style2=document.createElement('style');
++  style2.textContent=NEW_CSS;
++  root.appendChild(style2);
++
++  var scene=el('div',{class:'lg-scene','aria-hidden':'true'});
++  var city=el('div',{class:'lg-city'});
++  var citySvg=document.createElementNS('http://www.w3.org/2000/svg','svg');
++  citySvg.setAttribute('viewBox','0 0 1920 1080');
++  citySvg.setAttribute('preserveAspectRatio','xMidYMid slice');
++  citySvg.setAttribute('focusable','false');
++  city.appendChild(citySvg);
++  var sky=el('div',{class:'lg-sky'});
++  var skyStars=el('i',{class:'stars'});
++  sky.appendChild(skyStars);
++  scene.appendChild(city);scene.appendChild(sky);
++  var orbSun=el('div',{class:'lg-orb sun','aria-hidden':'true'});
++  var orbMoon=el('div',{class:'lg-orb moon','aria-hidden':'true'});
++  scene.appendChild(orbSun);scene.appendChild(orbMoon);
++
++  var brand=el('header',{class:'lg-brand'});
++  var mark=el('span',{class:'lg-mark','aria-hidden':'true'});
++  mark.innerHTML=BRAND_WHITE;
++  brand.appendChild(mark);
++  brand.appendChild(el('b',{text:'不加班'}));
++  brand.appendChild(el('span',{text:'AI 剪辑'}));
++
++  var title=el('h1',{id:'nof-title'});
++  var sub=el('p',{class:'lg-sub',id:'nof-sub'});
++  var tm=el('time',{id:'nof-tm',text:'09:00'});
++  var punch=el('div',{class:'lg-punch'},[el('span',{text:'今日考勤'}),tm]);
++  var tape=el('i',{class:'lg-tape','aria-hidden':'true'});
++
++  var accountLab=el('span',{class:'lg-lab',id:'nof-acc-lab',text:'账号'});
++  var account=el('input',{id:'nof-account',autocomplete:'username',autocapitalize:'none',spellcheck:'false',placeholder:'手机号或邮箱'});
++  var accountFld=el('label',{class:'lg-field'},[accountLab,el('span',{class:'lg-f'},[account])]);
++  var name=el('input',{id:'nof-name',autocomplete:'nickname',placeholder:'怎么称呼你'});
++  var nameWrap=el('label',{class:'lg-field',id:'nof-name-wrap',hidden:true},[el('span',{class:'lg-lab',text:'昵称（可选）'}),el('span',{class:'lg-f'},[name])]);
++  var code=el('input',{id:'nof-code',inputmode:'numeric',autocomplete:'one-time-code',placeholder:'6 位'});
++  var otpBtn=el('button',{type:'button',class:'lg-otp',id:'nof-otp',text:'发送验证码'});
++  var otpRow=el('div',{class:'lg-row',id:'nof-otp-row',hidden:true},[
++    el('label',{class:'lg-field'},[el('span',{class:'lg-lab',text:'邮箱验证码'}),el('span',{class:'lg-f'},[code])]),
++    otpBtn
++  ]);
++  var invite=el('input',{id:'nof-invite',autocomplete:'off',placeholder:'同事给你的邀请码'});
++  var inviteWrap=el('label',{class:'lg-field',id:'nof-invite-wrap',hidden:true},[el('span',{class:'lg-lab',text:'邀请码'}),el('span',{class:'lg-f'},[invite])]);
++  var pwLab=el('span',{class:'lg-lab',id:'nof-pw-lab',text:'密码'});
++  var password=el('input',{id:'nof-password',type:'password',autocomplete:'current-password',placeholder:'至少 6 位'});
++  var eye=el('button',{type:'button',class:'lg-eye',id:'nof-eye','aria-label':'显示密码','aria-pressed':'false',text:'显示'});
++  var pwFld=el('label',{class:'lg-field'},[pwLab,el('span',{class:'lg-f'},[password,eye])]);
++  var remember=el('input',{id:'nof-remember',type:'checkbox'});
++  remember.checked=true;
++  var rememberLab=el('label',{class:'lg-remember',id:'nof-remember-wrap',for:'nof-remember'},[
++    remember,
++    el('span',{text:'记住本机账号和密码'})
++  ]);
++  var go=el('button',{type:'submit',class:'lg-go',id:'nof-go',text:'登录并继续剪辑'});
++  var left=el('button',{type:'button',class:'lg-lk',id:'nof-left',text:'忘记密码'});
++  var right=el('button',{type:'button',class:'lg-lk',id:'nof-right',text:'注册新账号'});
++  var meta=el('div',{class:'lg-meta',id:'nof-meta'},[
++    rememberLab,
++    el('div',{class:'lg-links'},[left,right])
++  ]);
++  var aside=el('p',{class:'lg-msg',id:'nof-aside',role:'status','aria-live':'polite',text:'使用不加班账号登录。点登录后完成人机验证即可。'});
++  var stamp=el('div',{class:'lg-stamp','aria-hidden':'true'});
++  stamp.innerHTML='准点<br>下班';
++
++  var form=el('form',{id:'nof-form',class:'lg-card',novalidate:''},[tape,punch,title,sub,accountFld,nameWrap,otpRow,inviteWrap,pwFld,meta,go,aside,stamp]);
++  var main=el('main',{class:'lg-main'},[form]);
++
++  var ruler=el('div',{class:'lg-ruler',id:'nof-ruler','aria-hidden':'true'});
++  for(var hh=9;hh<=18;hh++){
++    var tick=el('i');
++    tick.style.left=((hh-9)/9*100)+'%';
++    tick.innerHTML='<b>'+hh+'</b>';
++    ruler.appendChild(tick);
++  }
++  var clipEls=[];
++  var clipsWrap=el('div',{class:'lg-clips'});
++  NAMES.forEach(function(n,i){
++    var c=el('div',{class:'lg-clip',text:n});
++    c.style.flex=String(DUR[i]);
++    clipEls.push(c);
++    clipsWrap.appendChild(c);
++  });
++  var tip=el('span',{class:'lg-tip',id:'nof-tip',text:'09:00 上班'});
++  var grip=el('div',{class:'lg-grip'},[tip]);
++  var playhead=el('div',{class:'lg-playhead',id:'nof-head'},[grip]);
++  var tracks=el('div',{class:'lg-tracks',id:'nof-tracks',role:'slider',tabindex:'0','aria-label':'时间轴：拖动查看一天从上班到下班','aria-valuemin':'540','aria-valuemax':'1080','aria-valuenow':'540','aria-valuetext':'09:00 上班'},[clipsWrap,playhead]);
++  var playBtn=el('button',{type:'button',class:'lg-play',id:'nof-play','aria-label':'暂停',title:'暂停'});
++  var tl=el('div',{class:'lg-tl'},[ruler,playBtn,tracks]);
++
++  var capMask=el('div',{class:'cap-mask',id:'nof-cap',hidden:true});
++  var capHint=el('p',{class:'hint',id:'nof-cap-hint',text:'请完成人机验证'});
++  var capStage=el('div',{class:'stage',id:'nof-cap-stage'});
++  var capErr=el('p',{class:'err',id:'nof-cap-err'});
++  var capRefresh=el('button',{type:'button',class:'refresh',id:'nof-cap-refresh',text:'换一张'});
++  var capCancel=el('button',{type:'button',class:'cancel',id:'nof-cap-cancel',text:'取消'});
++  capMask.appendChild(el('div',{class:'cap',role:'dialog','aria-modal':'true','aria-label':'人机验证'},[
++    el('h2',{text:'人机验证'}),capHint,capStage,capErr,el('div',{class:'acts'},[capRefresh,capCancel])
++  ]));
++
++  var vig=el('div',{class:'lg-vig','aria-hidden':'true'});
++  [scene,vig,brand,main,tl,capMask].forEach(function(n){root.appendChild(n);});
++  (document.documentElement||document.body).appendChild(root);
++
++  // ---- 时间轴 + 城市背景共用一条时钟：默认播放，可暂停 ----
++  var reduced=false;
++  try{reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){}
++  var DAY_SECONDS=150, CITY_START=1.9, CITY_END=2.86, CITY_SPEED=.2, CITY_INTERVAL=33;
++  var p=0, playing=!reduced, ct=2.35, cityApi=null, lastNow=0, lastCityAt=0, dragging=false, wasPlaying=false;
++  var lastMinute=-1, lastSeg=-1, lastTip='', trackWidth=0;
++  var PAUSE_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>';
++  var PLAY_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
++
++  function pad2(n){return n<10?'0'+n:''+n;}
++  function minuteAt(v){return 540+Math.round(v*540);}
++  function segAt(v){var a=0,st=0;for(var i=0;i<DUR.length;i++){if(v*TOTAL>=a-1e-6)st=i;a+=DUR[i];}return st;}
++  // 天色：早晨偏暗 → 白天亮 → 午后偏暖 → 傍晚橙紫 → 下班深蓝。
++  // 合成到一层渐变上，只在颜色变化时重绘；5 层全屏 opacity 合成在低端机上太贵。
++  function smooth(a,b,x){x=(x-a)/(b-a);x=x<0?0:x>1?1:x;return x*x*(3-2*x);}
++  function setOpacity(node,value){
++    var q=Math.round(value*100)/100;
++    if(node.__o!==q){node.__o=q;node.style.opacity=String(q);}
++  }
++  function mixLayers(layers){
++    var r=0,g=0,b=0,a=0;
++    for(var i=0;i<layers.length;i++){
++      var la=Math.round(layers[i][3]*50)/50;
++      if(la<=0)continue;
++      r=layers[i][0]*la+r*(1-la);
++      g=layers[i][1]*la+g*(1-la);
++      b=layers[i][2]*la+b*(1-la);
++      a=la+a*(1-la);
++    }
++    return 'rgba('+Math.round(r)+','+Math.round(g)+','+Math.round(b)+','+(Math.round(a*100)/100)+')';
++  }
++  var lastSky='';
++  function paintSky(v){
++    var morning=1-smooth(.04,.3,v);
++    var warm=smooth(.45,.72,v)*(1-smooth(.82,1,v));
++    var dusk=smooth(.62,.86,v)*(1-smooth(.95,1,v));
++    var night=smooth(.8,1,v);
++    var top=mixLayers([[6,18,48,morning*.6],[255,196,120,warm*.22],[255,104,56,dusk*.55],[8,12,40,night*.78]]);
++    var bot=mixLayers([[10,40,90,morning*.6],[255,150,80,warm*.22],[38,18,58,dusk*.55],[3,6,20,night*.78]]);
++    var css='linear-gradient(180deg,'+top+' 0%,'+bot+' 100%)';
++    if(css!==lastSky){lastSky=css;sky.style.background=css;}
++    setOpacity(skyStars,night*.85);
++  }
++  // 日/月沿同一条弧线东升西落；傍晚 .86→.96 交叉淡化成月亮。
++  function paintOrb(v){
++    var x=82-68*v;
++    // 窄屏纸卡几乎占满宽度，太阳从纸卡上方走，不钻到纸后面。
++    var y=window.innerWidth<600
++      ? 9+2*v-5*Math.sin(Math.PI*v)
++      : 27+4*v-21*Math.sin(Math.PI*v);
++    var tf='translate3d('+x.toFixed(2)+'vw,'+y.toFixed(2)+'vh,0) translate(-50%,-50%)';
++    orbSun.style.transform=tf+' scale(1)';
++    orbMoon.style.transform=tf+' scale(.72)';
++    // 先让太阳落下去，再让月亮亮起来；重叠会让太阳的橙色光晕糊在月亮上。
++    setOpacity(orbSun,1-smooth(.87,.93,v));
++    setOpacity(orbMoon,smooth(.93,.99,v));
++  }
++  function setP(v){
++    p=v<0?0:v>1?1:v;
++    var m=minuteAt(p), st=segAt(p);
++    var s=pad2(Math.floor(m/60))+':'+pad2(m%60);
++    if(!trackWidth)trackWidth=tracks.clientWidth;
++    playhead.style.transform='translateX('+(p*trackWidth)+'px)';
++    tip.style.transform=p<.08?'translateX(0)':p>.92?'translateX(-100%)':'translateX(-50%)';
++    var txt=s+' '+NAMES[st];
++    if(m!==lastMinute){
++      lastMinute=m;
++      tm.textContent=s;
++      tracks.setAttribute('aria-valuenow',String(m));
++      tracks.setAttribute('aria-valuetext',txt);
++    }
++    if(txt!==lastTip){lastTip=txt;tip.textContent=txt;}
++    if(st!==lastSeg){lastSeg=st;clipEls.forEach(function(c,i){c.classList.toggle('on',i<=st);});}
++    paintSky(p);
++    paintOrb(p);
++  }
++  function setPlaying(on){
++    playing=!!on;
++    playBtn.innerHTML=playing?PAUSE_ICON:PLAY_ICON;
++    playBtn.setAttribute('aria-label',playing?'暂停':'播放');
++    playBtn.title=playing?'暂停':'播放';
++  }
++  function seekTo(clientX){
++    var r=tracks.getBoundingClientRect();
++    if(!r.width)return;
++    setP((clientX-r.left)/r.width);
++  }
++  playBtn.addEventListener('click',function(){setPlaying(!playing);});
++  tracks.addEventListener('pointerdown',function(e){
++    dragging=true;wasPlaying=playing;setPlaying(false);tracks.classList.add('drag');
++    try{tracks.setPointerCapture(e.pointerId);}catch(err){}
++    seekTo(e.clientX);
++  });
++  tracks.addEventListener('pointermove',function(e){if(dragging)seekTo(e.clientX);});
++  ['pointerup','pointercancel'].forEach(function(n){
++    tracks.addEventListener(n,function(){
++      if(!dragging)return;
++      dragging=false;tracks.classList.remove('drag');
++      if(wasPlaying)setPlaying(true);
++    });
++  });
++  tracks.addEventListener('keydown',function(e){
++    var d={ArrowLeft:-.04,ArrowDown:-.04,ArrowRight:.04,ArrowUp:.04}[e.key];
++    if(d!=null)setP(p+d);
++    else if(e.key==='Home')setP(0);
++    else if(e.key==='End')setP(1);
++    else return;
++    e.preventDefault();
++  });
++  document.addEventListener('keydown',function(e){
++    if(root.hidden)return;
++    if(e.key!==' '||e.repeat)return;
++    var t=e.target;
++    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='BUTTON'||t.isContentEditable))return;
++    e.preventDefault();setPlaying(!playing);
++  });
++  // 走完一天：瞬间切黑再淡入，避免“傍晚直接跳回早晨”的硬切。
++  function wrapScene(){
++    scene.style.transition='none';
++    scene.style.opacity='0';
++    void scene.offsetWidth;
++    scene.style.transition='';
++    scene.style.opacity='1';
++  }
++  function frame(now){
++    if(root.hidden||document.hidden){lastNow=now;requestAnimationFrame(frame);return;}
++    var dt=lastNow?Math.min(.05,(now-lastNow)/1000):0;
++    lastNow=now;
++    if(playing){
++      p+=dt/DAY_SECONDS;
++      if(p>=1){p-=1;wrapScene();}
++      ct+=dt*CITY_SPEED;
++      if(ct>CITY_END)ct=CITY_START+((ct-CITY_END)%(CITY_END-CITY_START));
++      // 30fps 是样片原生节奏；半分辨率栅格化已经把整屏绘制像素降下来了。
++      if(cityApi&&now-lastCityAt>=CITY_INTERVAL){lastCityAt=now;cityApi.renderAt(ct);}
++      setP(p);
++    }
++    requestAnimationFrame(frame);
++  }
++  var cityTries=0;
++  function mountCity(){
++    if(typeof window.__NOF_MOUNT_CITY__!=='function'){
++      if(cityTries++<60)setTimeout(mountCity,80);
++      return;
++    }
++    window.__NOF_MOUNT_CITY__(citySvg).then(function(api){
++      cityApi=api;
++      // 样片内置的太阳固定在右上角；去掉它，改画会走的日/月。
++      var bakedSun=citySvg.querySelector('#nof-sun');
++      var bakedRays=citySvg.querySelector('#nof-rays');
++      if(bakedSun)bakedSun.remove();
++      if(bakedRays)bakedRays.remove();
++      api.renderAt(ct);
++    }).catch(function(){});
++  }
++  window.addEventListener('resize',function(){trackWidth=tracks.clientWidth;});
++  setP(0);
++  setPlaying(playing);
++  requestAnimationFrame(frame);
++  mountCity();
++
++  var mode='login',busy=false,otpWait=0,pending=null,captchaId='',captchaPrompt='',captchaSequence=[],captchaClicks=[],captchaWrong=0;
++
++  function problem(msg){aside.textContent=msg;aside.classList.add('err');}
++  function note(msg){aside.textContent=msg;aside.classList.remove('err');}
++  function paintMode(){
++    title.textContent=GREET[mode];
++    sub.textContent=SUB[mode];
++    accountLab.textContent=mode==='login'?'账号':'邮箱';
++    account.placeholder=mode==='login'?'手机号或邮箱':'name@example.com';
++    pwLab.textContent=mode==='reset'?'新密码':'密码';
++    password.autocomplete=mode==='login'?'current-password':'new-password';
++    nameWrap.hidden=mode!=='register';
++    otpRow.hidden=mode==='login';
++    inviteWrap.hidden=mode!=='register';
++    rememberLab.hidden=mode!=='login';
++    go.textContent=mode==='login'?'登录并继续剪辑':mode==='register'?'注册并继续剪辑':'更新密码';
++    left.textContent=mode==='login'?'忘记密码':'返回登录';
++    right.textContent=mode==='login'?'注册新账号':mode==='register'?'去登录':'去登录';
++    note(mode==='login'?'使用不加班账号登录。点登录后完成人机验证即可。':'');
++  }
++  function show(){root.hidden=false;paintMode();loadRemember();}
++  function hide(){root.hidden=true;capMask.hidden=true;pending=null;}
++  function loadRemember(){
++    rpc('auth:remember-get',{}).then(function(data){
++      if(!data||!data.enabled||!data.account)return;
++      if(!account.value)account.value=String(data.account).slice(0,160);
++      if(!password.value&&data.password)password.value=String(data.password).slice(0,128);
++      remember.checked=true;
++    }).catch(function(){});
++  }
++  function saveRemember(){
++    if(mode!=='login')return Promise.resolve();
++    if(!remember.checked)return rpc('auth:remember-clear',{}).catch(function(){});
++    return rpc('auth:remember-set',{
++      account:account.value.trim(),
++      password:password.value,
++      enabled:true
++    }).catch(function(){});
++  }
++
++  function fillCaptchaViewport(svg){
++    return String(svg||'').replace(/<svg\b([^>]*)>/,function(_t,attrs){
++      return /\spreserveAspectRatio\s*=/.test(attrs)
++        ? '<svg'+attrs.replace(/\spreserveAspectRatio\s*=\s*(["']).*?\1/,' preserveAspectRatio="none"')+'>'
++        : '<svg'+attrs+' preserveAspectRatio="none">';
++    });
++  }
++  function isSequencePrompt(prompt){
++    return prompt==='click_sequence'||prompt==='click_size_asc'||prompt==='click_size_desc';
++  }
++  function promptHint(prompt,iconTarget){
++    var icon=ICON_LABEL[iconTarget]||'图标';
++    if(prompt==='click_largest')return '请点击最大的'+icon;
++    if(prompt==='click_smallest')return '请点击最小的'+icon;
++    if(prompt==='click_second_smallest')return '请点击第二小的'+icon;
++    if(prompt==='click_icon')return '请点击图中的'+icon;
++    if(prompt==='click_sequence')return '请按提示顺序点击';
++    if(prompt==='click_size_asc')return '请按从小到大点击'+icon;
++    if(prompt==='click_size_desc')return '请按从大到小点击'+icon;
++    return '请完成人机验证';
++  }
++  function expectedSteps(){
++    if(captchaPrompt==='click_sequence')return captchaSequence.length||1;
++    if(captchaPrompt==='click_size_asc'||captchaPrompt==='click_size_desc')return 4;
++    return 1;
++  }
++  function clearCaptchaMarks(){
++    captchaClicks=[];captchaWrong=0;
++    Array.prototype.slice.call(capStage.querySelectorAll('.pick')).forEach(function(n){n.remove();});
++    Array.prototype.slice.call(capStage.querySelectorAll('.is-picked')).forEach(function(n){n.classList.remove('is-picked');});
++  }
++  function loadCaptcha(){
++    capErr.textContent='';
++    clearCaptchaMarks();
++    capStage.innerHTML='<div style="display:grid;place-items:center;min-height:200px;color:#8d90a6">加载中…</div>';
++    return auth('captcha',{type:'click'}).then(function(data){
++      if(!data||!data.id||!data.svg){capErr.textContent='验证码加载失败，请重试';return;}
++      captchaId=data.id;
++      captchaPrompt=data.prompt||'';
++      captchaSequence=Array.isArray(data.sequence)?data.sequence:[];
++      capHint.textContent=promptHint(captchaPrompt,data.icon_target);
++      var wrap=document.createElement('div');
++      wrap.style.cssText='position:absolute;inset:1px';
++      wrap.innerHTML=fillCaptchaViewport(data.svg);
++      capStage.innerHTML='';
++      capStage.appendChild(wrap);
++    }).catch(function(err){capErr.textContent=err.message||'验证码加载失败';});
++  }
++  function openCaptcha(kind){
++    pending=kind;capMask.hidden=false;loadCaptcha();
++  }
++  function closeCaptcha(){capMask.hidden=true;pending=null;captchaId='';clearCaptchaMarks();}
++
++  function afterLogin(){
++    setP(1);setPlaying(false);
++    form.classList.add('lg-done');
++    setTimeout(hide,380);
++    emitAuth(true);
++    try{
++      if(window.parent!==window)window.parent.postMessage({type:'no996-openfilm:auth',version:1,action:'logged-in'},'*');
++    }catch(e){}
++  }
++
++  function finishCaptcha(codeValue){
++    var kind=pending;
++    if(kind==='login')runLogin(captchaId,codeValue);
++    else if(kind==='otp')runOtp(captchaId,codeValue);
++    else closeCaptcha();
++  }
++  function runLogin(id,codeValue){
++    busy=true;go.disabled=true;
++    var acc=account.value.trim();
++    var pass=password.value;
++    return auth('login',{account:acc,password:pass,captchaId:id,captchaCode:codeValue})
++      .then(function(){ return saveRemember().then(afterLogin); })
++      .catch(function(err){problem(err.message||'登录失败');})
++      .finally(function(){busy=false;go.disabled=false;closeCaptcha();});
++  }
++  function runOtp(id,codeValue){
++    busy=true;otpBtn.disabled=true;
++    return auth('verification-code',{
++      account:account.value.trim(),
++      purpose:mode==='reset'?'reset_password':'register',
++      captchaId:id,captchaCode:codeValue
++    }).then(function(){
++      note('验证码已发送，请查收邮箱');
++      otpWait=60;otpBtn.textContent=otpWait+'s';
++      var timer=setInterval(function(){
++        otpWait-=1;
++        if(otpWait<=0){clearInterval(timer);otpBtn.disabled=false;otpBtn.textContent='发送验证码';}
++        else otpBtn.textContent=otpWait+'s';
++      },1000);
++    }).catch(function(err){problem(err.message||'验证码发送失败');otpBtn.disabled=false;})
++      .finally(function(){busy=false;closeCaptcha();});
++  }
++
++  capStage.addEventListener('click',function(ev){
++    if(!captchaId||capMask.hidden)return;
++    var target=ev.target&&ev.target.closest?ev.target.closest('[data-captcha-id]'):null;
++    if(!target)return;
++    var id=target.getAttribute('data-captcha-id');
++    var kind=target.getAttribute('data-captcha-kind')||'';
++    if(!id)return;
++    var sr=capStage.getBoundingClientRect();
++    var tr=target.getBoundingClientRect();
++    function addMark(order){
++      var mark=el('span',{class:'pick',text:String(order)});
++      mark.style.left=(tr.left-sr.left+tr.width/2)+'px';
++      mark.style.top=(tr.top-sr.top+tr.height/2)+'px';
++      capStage.appendChild(mark);
++      target.classList.add('is-picked');
++    }
++    if(!isSequencePrompt(captchaPrompt)){
++      addMark(1);
++      setTimeout(function(){finishCaptcha(id);},180);
++      return;
++    }
++    if(captchaClicks.indexOf(id)!==-1)return;
++    if(captchaPrompt==='click_sequence'){
++      var expected=captchaSequence[captchaClicks.length];
++      if(expected&&kind!==expected){
++        captchaWrong+=1;
++        captchaClicks=[];
++        Array.prototype.slice.call(capStage.querySelectorAll('.pick')).forEach(function(n){n.remove();});
++        Array.prototype.slice.call(capStage.querySelectorAll('.is-picked')).forEach(function(n){n.classList.remove('is-picked');});
++        if(captchaWrong>=2){capErr.textContent='点错太多次，已刷新题目';loadCaptcha();}
++        else capErr.textContent='顺序不对，请重试';
++        return;
++      }
++    }
++    captchaClicks.push(id);
++    addMark(captchaClicks.length);
++    capErr.textContent='';
++    if(captchaClicks.length>=expectedSteps()){
++      setTimeout(function(){finishCaptcha(captchaClicks.join(','));},220);
++    }
++  });
++  capRefresh.addEventListener('click',function(){loadCaptcha();});
++  capCancel.addEventListener('click',function(){closeCaptcha();});
++
++  eye.addEventListener('click',function(){
++    var show=password.type==='password';
++    password.type=show?'text':'password';
++    eye.setAttribute('aria-pressed',show?'true':'false');
++    eye.textContent=show?'隐藏':'显示';
++    eye.setAttribute('aria-label',show?'隐藏密码':'显示密码');
++  });
++  left.addEventListener('click',function(){
++    if(mode==='login'){mode='reset';paintMode();}
++    else{mode='login';paintMode();}
++  });
++  right.addEventListener('click',function(){
++    mode=mode==='login'?'register':'login';
++    paintMode();
++  });
++  otpBtn.addEventListener('click',function(){
++    if(busy||otpWait>0)return;
++    if(account.value.trim().indexOf('@')===-1)return problem('请先填写邮箱');
++    openCaptcha('otp');
++  });
++  form.addEventListener('submit',function(ev){
++    ev.preventDefault();
++    if(busy||!capMask.hidden)return;
++    var acc=account.value.trim();
++    if(!acc)return problem(mode==='login'?'请输入账号：手机号或邮箱。':'请输入邮箱。');
++    if(mode==='login'){
++      if(password.value.length<6)return problem('密码至少 6 位，请重新输入。');
++      openCaptcha('login');
++      return;
++    }
++    if(mode==='register'){
++      if(acc.indexOf('@')===-1)return problem('注册请使用邮箱。');
++      if(password.value.length<6)return problem('密码至少 6 位。');
++      if(!code.value.trim())return problem('请输入邮箱验证码。');
++      if(!invite.value.trim())return problem('请输入邀请码。');
++      busy=true;go.disabled=true;
++      auth('register',{account:acc,password:password.value,code:code.value.trim(),inviteCode:invite.value.trim(),displayName:name.value.trim()||undefined})
++        .then(afterLogin)
++        .catch(function(err){problem(err.message||'注册失败');})
++        .finally(function(){busy=false;go.disabled=false;});
++      return;
++    }
++    if(acc.indexOf('@')===-1)return problem('请使用邮箱重置密码。');
++    if(!code.value.trim())return problem('请输入邮箱验证码。');
++    if(password.value.length<6)return problem('新密码至少 6 位。');
++    busy=true;go.disabled=true;
++    auth('reset-password',{account:acc,code:code.value.trim(),newPassword:password.value})
++      .then(function(){mode='login';paintMode();note('密码已更新，请登录。');code.value='';})
++      .catch(function(err){problem(err.message||'重置失败');})
++      .finally(function(){busy=false;go.disabled=false;});
++  });
++
++  function syncFromStatus(){
++    rpc('auth:status',{}).then(function(data){
++      if(data&&data.loggedIn===true)hide();
++      else show();
++    }).catch(function(){show();});
++  }
++  window.addEventListener('no996-auth-changed',function(ev){
++    if(ev&&ev.detail&&ev.detail.loggedIn)hide();
++    else show();
++  });
++  paintMode();
++  loadRemember();
++  syncFromStatus();
++})();

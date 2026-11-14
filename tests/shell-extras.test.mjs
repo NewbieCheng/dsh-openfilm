@@ -14,18 +14,16 @@ test('the injected shell UI is balanced scripts that parse as JavaScript', () =>
   // would break the whole page rather than just the overlays.
   assert.match(html, /^<script>/);
   assert.match(html, /<\/script>$/);
-  assert.equal((html.match(/<\/script>/g) || []).length, 3);
-  assert.equal(scripts.length, 3);
+  // Only the UI overlay is still injected; the login gate ships in the bundle.
+  assert.equal((html.match(/<\/script>/g) || []).length, 1);
+  assert.equal(scripts.length, 1);
   assert.match(body, /no996-template-picker/);
   assert.match(body, /\/__dsh\/official-rpc/);
   assert.match(body, /__dsh\/shell-version/);
   assert.match(body, /function watchVersion\(\)/);
-  assert.match(body, /no996-shell-login/);
-  assert.match(body, /auth:action/);
-  assert.match(body, /__NOF_MOUNT_CITY__/);
-  // The city block is generated upstream code and legitimately uses template literals;
-  // the hand-written blocks must not contain unresolved placeholders.
-  assert.doesNotMatch(scripts.filter(script => !script.includes('__NOF_MOUNT_CITY__')).join('\n'), /\$\{/);
+  assert.match(body, /auth:status/);
+  // The hand-written block must not contain unresolved placeholders.
+  assert.doesNotMatch(body, /\$\{/);
   for (const script of scripts) new Function(script);
 });
 
@@ -84,10 +82,6 @@ test('the overlays only talk over the fixed bridge channels', () => {
   const channels = [...body.matchAll(/rpc\('([^']+)'/g)].map(match => match[1]);
   assert.deepEqual([...new Set(channels)].sort(), [
     'asr:install',
-    'auth:action',
-    'auth:remember-clear',
-    'auth:remember-get',
-    'auth:remember-set',
     'auth:status',
     'environment:check',
     'prefs:get',
@@ -97,13 +91,11 @@ test('the overlays only talk over the fixed bridge channels', () => {
     'template:create',
     'template:list',
   ]);
-  // Account chip lives in OpenFilm React; login overlay still talks auth over the bridge.
+  // Account chip lives in OpenFilm React; the login gate now ships in the bundle.
   assert.doesNotMatch(body, /id='no996-account'/);
   assert.match(body, /auth:status/);
-  assert.match(body, /no996-openfilm:auth/);
-  assert.match(body, /no996-auth-changed/);
-  // Compact login uses the white brand mark, not a floating panel chip.
-  assert.match(body, /logo-symbol-white|今天不加班AI 深色模式Logo|dark 白橙/);
+  assert.doesNotMatch(body, /no996-shell-login/);
+  assert.doesNotMatch(body, /__NOF_MOUNT_CITY__/);
   assert.doesNotMatch(body, /sessionId|projectPath|\/api\/no996-openfilm/);
 });
 

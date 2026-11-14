@@ -18,7 +18,6 @@ rot-if: 新增/撤掉任何一处没走源码的改动
 |---|---|---|---|
 | 模板选择弹窗 | `assets/shell-ui.js` | 历史上先做的注入；上游有模板入口 | 模板主路径迁进 A1 后删除 |
 | 视频工具环境检查卡 | `assets/shell-ui.js` | 需要 Host 能力，上游没有这个界面 | 上游有环境检查或迁进 A1 |
-| 全屏登录首页 | `assets/shell-login.js` | 上游登录页不适用 | 迁成壳的首屏分支 |
 | 工作区下拉开关 | `src/sidebar-editing.mjs` | 侧栏标题行没有官方插槽；`sidebar.workspaces` 是 single 槽 | DSH 开出标题行插槽后删除 |
 
 ## 1.1 已经不在注入里的（别再加回来）
@@ -28,6 +27,7 @@ rot-if: 新增/撤掉任何一处没走源码的改动
 | 账号条 / 登录态 | `packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx`（React 源码，补丁） |
 | 故障恢复卡（工作台已停止运行） | `apps/desktop/shell/RecoveryGate.tsx`（React 源码，补丁；2026-11 从 `assets/shell-ui.js` 迁出） |
 | 主题 token + 覆盖 | 发布产物在构建期由 `npm run shell:bake` 烘进 `vendor/official-shell/ui/assets/no996-theme.css`；运行时那份只是开发热更 |
+| 全屏登录门 + 城市背景 | 构建期由 `npm run login:sync` 把 `assets/shell-login.js`、`assets/login-city.js` 复制进上游壳并打包；界面代码仍是原来的 DOM 实现，只是不再按页注入 |
 | 视频工具环境检查卡 | 仍是注入，见上表 |
 
 ## 2. 侧栏那一处为什么是"窄注入"

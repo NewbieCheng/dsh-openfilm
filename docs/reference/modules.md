@@ -8,7 +8,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 # 模块清单（自动生成）
 
-> 生成命令：`npm run docs:gen`。111 个模块、15492 行。
+> 生成命令：`npm run docs:gen`。111 个模块、15486 行。
 > 没有测试直接 import 的模块：23 个（待补清单，不是失败项）；另有 1 个已登记排除。
 > "测试"列 = 直接 import 该模块的测试文件，来自 `tests/**` 的实际 import 语句，不做名字猜测。
 > 排除项写在 `scripts/test-exclusions.json`，每条必须带理由。
@@ -95,11 +95,11 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/editing-filter.mjs` | 60 | SESSION_FALLBACK, filterEditing, matchRange, normalizeQuery, projectDisplayTitle, sessionDisplayTitle | `editing-filter.test.mjs` |
 | `src/archive-bridge.mjs` | 59 | registerArchiveBridge | **无** |
 | `src/area-bus.mjs` | 59 | areaBus, createAreaBus | **无** |
-| `src/shell-extras.mjs` | 58 | shellUiInjection, shellUiVersion | `shell-extras.test.mjs`、`shell-ui-asi.test.mjs` |
 | `src/studio-controller/routes/debug-url.mjs` | 58 | createDebugUrlRoute | `debug-url-route.test.mjs` |
 | `src/studio-proxy/websocket.mjs` | 58 | MAX_FRAME, WS_GUID, frames, wsFrame | **无** |
 | `src/project-instructions.mjs` | 57 | INSTRUCTIONS, ensureProjectInstructions | `project-instructions.test.mjs` |
 | `src/workspace-create.mjs` | 57 | createWorkspaceFlow | **无** |
+| `src/shell-extras.mjs` | 52 | shellUiInjection, shellUiVersion | `shell-extras.test.mjs`、`shell-ui-asi.test.mjs` |
 | `src/openfilm-prompt.mjs` | 51 | apply, inject | `pinned-scope-integration.test.mjs` |
 | `src/template-bridge.mjs` | 50 | registerTemplateBridge | `template-bridge.test.mjs` |
 | `src/studio-controller/router.mjs` | 47 | createRouter | `route-registration-order.test.mjs` |

@@ -16,7 +16,7 @@
     "lint": "node scripts/lint.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:fast": "node --test --experimental-test-isolation=none tests/*.test.mjs",
-    "check": "npm run lint -- --strict && npm run status:check && npm test && npm run docs:check && npm run brand:check && npm run templates:check && npm run patches:check",
+    "check": "npm run lint -- --strict && npm run status:check && npm run login:sync -- --check && npm test && npm run docs:check && npm run brand:check && npm run templates:check && npm run patches:check",
     "dev": "node scripts/dev.mjs",
     "templates:build": "node scripts/templates-build.mjs",
     "templates:check": "node scripts/templates-build.mjs --check",
@@ -39,7 +39,8 @@
     "upstream:verify": "node scripts/upstream.mjs verify",
     "shell:dev": "node scripts/upstream.mjs shell:dev",
     "shell:bake": "node scripts/theme-bake.mjs",
-    "release:check": "node scripts/release-check.mjs"
+    "release:check": "node scripts/release-check.mjs",
+    "login:sync": "node scripts/sync-shell-login.mjs"
   },
   "devDependencies": {
     "esbuild": "0.24.2"
