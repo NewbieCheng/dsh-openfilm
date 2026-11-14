@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.15.5 —— 把「这轮到底跑在哪个模型上」写进日志
+
+- `agent-trace` 的 `kinds` 之前是嵌套对象，日志脱敏把它变成了 `"[object]"`——等于没记。现在是一行
+  `agent_thought_chunk=7 agent_message_chunk=9 …`。
+- 新增 `acp-session-model`：session 建立/复用时记下子进程实际在跑的模型与思考强度。
+  这一条能直接回答"为什么没有思考"：**resume 的会话沿用旧模型**，不重新套默认值。
+- 结论不变：`opencode-go/deepseek-v4.1-flash` 实测 0 个 `agent_thought_chunk`；要看到思考，
+  面板模型选 **DeepSeek-V4.1-Flash（官方）**。渲染层不需要改 openfilm 源码。
+
 ## 0.15.4 —— 「一直在处理中」的子进程模型 + 思考过程看不见的实测结论
 
 - **对话卡在「仍在处理」**：子进程 session 打开后，若 DSH 侧没交出当前模型，它留在自己退役的默认

@@ -336,7 +336,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       // The page's counts, in the log too: "no thinking shown" is answered by
       // whether `agent_thought_chunk` appears here, without a live panel.
       const kinds = payload?.kinds && typeof payload.kinds === 'object' ? payload.kinds : {};
-      const summary = Object.fromEntries(Object.entries(kinds).slice(0, 8).map(([key, value]) => [String(key).slice(0, 32), Number(value) || 0]));
+      // One flat string: the log sanitizer turns a nested object into "[object]".
+      const summary = Object.entries(kinds).slice(0, 10).map(([key, value]) => `${String(key).slice(0, 32)}=${Number(value) || 0}`).join(' ').slice(0, 240);
       log.info('agent-trace', { projectId, seen: Number(payload?.seen) || 0, kinds: summary });
       return { ok: bridgeTrace.panel(projectId, { seen: payload?.seen, kinds: payload?.kinds }) };
     }

@@ -2,7 +2,7 @@
 id: injection-registry
 reader: 改界面的人、reviewer
 fact-source: assets/shell-ui.js、assets/shell-login.js、assets/theme/*.css、src/sidebar-editing.mjs
-checked: 0.15.4
+checked: 0.15.5
 rot-if: 新增/撤掉任何一处没走源码的改动
 -->
 

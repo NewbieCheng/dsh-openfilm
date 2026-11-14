@@ -2,7 +2,7 @@
 id: ADR-0006-narrow-sidebar-injection
 reader: 维护者、改界面的人
 fact-source: src/sidebar-editing.mjs、tests/sidebar-untouched.test.mjs
-checked: 0.15.4
+checked: 0.15.5
 rot-if: DSH 为侧栏标题行开出官方插槽
 -->
 

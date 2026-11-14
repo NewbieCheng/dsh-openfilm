@@ -254,6 +254,7 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
         entry.sessionId = opened.sessionId;
         entry.reopened = true;
         entry.configOptions = opened.resumed?.configOptions ?? [];
+        logSessionModel(log, entry, 'resumed');
         // No default on resume: ACP keeps the model the person chose for this
         // Session, and re-applying the DSH default would silently undo it.
         return entry;
@@ -263,6 +264,7 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       entry.sessionId = created.sessionId;
       entry.reopened = false;
       entry.configOptions = created.configOptions ?? [];
+      logSessionModel(log, entry, 'created');
       store.set(projectId, { sessionId: created.sessionId, cwd: project.path });
       void log?.('acp-session', { projectId, created: true });
       await adoptDefaultSelection(entry);
@@ -295,6 +297,17 @@ export function createAcpAgentService({ verifier, store, emit, approvals, log, c
       if (matches.length > 0) void log?.('acp-folder-has-sessions', { projectId: entry.projectId, count: matches.length });
       return undefined;
     } catch { return undefined; }
+  }
+
+  /**
+   * What the child actually runs. Without it "no thinking shown" is undecidable:
+   * a resumed Session keeps the model it was created with, and providers differ
+   * in whether they return reasoning content at all.
+   */
+  function logSessionModel(logger, entry, how) {
+    const pick = (category, id) => entry.configOptions.find(item => item && (item.category === category || item.id === id));
+    const value = option => { try { const parsed = JSON.parse(option?.currentValue ?? '""'); return Array.isArray(parsed) ? parsed.join('/') : String(parsed ?? ''); } catch { return String(option?.currentValue ?? ''); } };
+    void logger?.('acp-session-model', { projectId: entry.projectId, how, model: value(pick('model', 'model')).slice(0, 60), effort: value(pick('thought_level', 'reasoning_effort')).slice(0, 20) });
   }
 
   /**

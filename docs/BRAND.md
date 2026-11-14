@@ -2,7 +2,7 @@
 id: brand
 reader: 产品 / 设计 / 维护者
 fact-source: brand/brand.json、assets/theme/*.css
-checked: 0.15.4
+checked: 0.15.5
 rot-if: 品牌字段、法务要求或替换流程变化
 -->
 
