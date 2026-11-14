@@ -2,7 +2,7 @@
 id: features-editing-delete
 reader: 维护剪辑区的人
 fact-source: src/editing-project-delete.mjs、src/project-trash.mjs、src/studio-controller.mjs
-checked: 0.15.7
+checked: 0.15.8
 rot-if: 删除作用域、回收站位置或守卫条件变化
 -->
 

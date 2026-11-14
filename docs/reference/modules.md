@@ -8,15 +8,15 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 # 模块清单（自动生成）
 
-> 生成命令：`npm run docs:gen`。112 个模块、15707 行。
-> 没有测试直接 import 的模块：23 个（待补清单，不是失败项）；另有 1 个已登记排除。
+> 生成命令：`npm run docs:gen`。112 个模块、15796 行。
+> 没有测试直接 import 的模块：22 个（待补清单，不是失败项）；另有 1 个已登记排除。
 > "测试"列 = 直接 import 该模块的测试文件，来自 `tests/**` 的实际 import 语句，不做名字猜测。
 > 排除项写在 `scripts/test-exclusions.json`，每条必须带理由。
 
 | 模块 | 行数 | 导出 | 同名测试 |
 |---|---|---|---|
-| `src/studio-controller.mjs` | 1092 | createStudioController | 读源码：`acp-profile-models.test.mjs`、`declaration-order.test.mjs`、`mcp-endpoint-path.test.mjs`、`route-registration-order.test.mjs`、`sidebar-untouched.test.mjs`、`system-routes.test.mjs` |
-| `src/sidebar-editing.mjs` | 970 | EDITING_LABEL, installWorkspaceSwitch | `sidebar-editing-rows.test.mjs` |
+| `src/studio-controller.mjs` | 1095 | createStudioController | 读源码：`acp-profile-models.test.mjs`、`declaration-order.test.mjs`、`mcp-endpoint-path.test.mjs`、`route-registration-order.test.mjs`、`sidebar-untouched.test.mjs`、`system-routes.test.mjs` |
+| `src/sidebar-editing.mjs` | 1051 | EDITING_LABEL, installWorkspaceSwitch | `sidebar-editing-rows.test.mjs` |
 | `src/studio-proxy.mjs` | 852 | startStudioProxy | `panel-sse-e2e.test.mjs`、`proxy-error-sanitize.test.mjs`、`studio-proxy-files.test.mjs`、`theme-injection.test.mjs` |
 | `src/acp-agent-service.mjs` | 574 | catalogFromConfigOptions, createAcpAgentService | `acp-agent-service.test.mjs`、`acp-catalog.test.mjs`、`acp-rpc-round-trip.test.mjs`、`panel-sse-e2e.test.mjs` |
 | `src/official-facade.mjs` | 506 | officialFacadeSource | `facade-page.test.mjs`、`official-attachment.test.mjs`、`official-facade-events.test.mjs` |
@@ -107,10 +107,10 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/editing-project-delete.mjs` | 44 | createEditingProjectDelete | `editing-project-delete.test.mjs` |
 | `src/studio-controller/routes/chat.mjs` | 44 | createChatRoutes | `chat-route.test.mjs` |
 | `src/official-event-hub.mjs` | 43 | createOfficialEventHub | `official-event-stream.test.mjs`、`panel-sse-e2e.test.mjs` |
+| `src/studio-controller/routes/diagnostics.mjs` | 43 | createDiagnosticsRoutes | `client-log-route.test.mjs` |
 | `src/project-markers.mjs` | 41 | OPENED_MARKER, markProjectOpened | `project-markers.test.mjs` |
 | `src/official-shell.mjs` | 40 | resolveOfficialShell | **无** |
 | `src/draft-tool.mjs` | 38 | createDraftTool | `draft-tool.test.mjs`、`tool-schema.test.mjs` |
-| `src/studio-controller/routes/diagnostics.mjs` | 38 | createDiagnosticsRoutes | **无** |
 | `src/studio-controller/routes/assets.mjs` | 37 | createAssetRoutes | **无** |
 | `src/panel-keepalive.mjs` | 36 | createActivationStore | `panel-keepalive.test.mjs` |
 | `src/style-lab.mjs` | 36 | styleLabInjection, styleLabVersion | `style-lab.test.mjs` |
@@ -144,7 +144,6 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 - `src/studio-proxy/websocket.mjs`（58 行）
 - `src/workspace-create.mjs`（57 行）
 - `src/official-shell.mjs`（40 行）
-- `src/studio-controller/routes/diagnostics.mjs`（38 行）
 - `src/studio-controller/routes/assets.mjs`（37 行）
 - `src/studio-controller/turns.mjs`（35 行）
 - `src/official-model-catalog.mjs`（34 行）

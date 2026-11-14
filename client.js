@@ -571,13 +571,19 @@
     clapper: '<path d="M20.2 6 3 11l-.9-2.4a2 2 0 0 1 1.3-2.5l13.5-4a2 2 0 0 1 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>'
   };
   function findHeader(doc) {
+    const labelOk = (span) => LABELS.has(text(span.textContent));
+    const usable = (header) => Boolean(header && header.querySelector("input") && header.querySelectorAll("button").length >= 2);
+    const actionsOf = (header) => [...header.children].filter((element) => element.tagName === "DIV" && !element.querySelector("input")).pop() ?? null;
+    for (const header of doc.querySelectorAll(`[${SWITCH_HOST}]`)) {
+      if (!usable(header)) continue;
+      const span = [...header.querySelectorAll("span")].find(labelOk) ?? null;
+      return { span, header, input: header.querySelector("input"), actions: actionsOf(header) };
+    }
     for (const span of doc.querySelectorAll("span")) {
-      if (!LABELS.has(text(span.textContent))) continue;
+      if (!labelOk(span)) continue;
       const header = span.parentElement;
-      if (!header || !header.querySelector("input")) continue;
-      if (header.querySelectorAll("button").length < 2) continue;
-      const actions = [...header.children].filter((element) => element.tagName === "DIV" && !element.querySelector("input")).pop() ?? null;
-      return { span, header, input: header.querySelector("input"), actions };
+      if (!usable(header)) continue;
+      return { span, header, input: header.querySelector("input"), actions: actionsOf(header) };
     }
     return null;
   }
@@ -646,6 +652,18 @@
       }
       return response.json().catch(() => ({}));
     };
+    const pageLog = (event, detail) => {
+      try {
+        void fetch("/api/no996-openfilm/client-log", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ event, ...typeof detail === "string" && detail ? { detail: detail.slice(0, 40) } : {} })
+        }).catch(() => {
+        });
+      } catch {
+      }
+    };
     const restoreHidden = () => {
       for (const node of hidden) {
         try {
@@ -667,6 +685,9 @@
       for (const node of doc.querySelectorAll(`[${VIEW_MENU}], [${ROW_MENU}], [${MODAL}]`)) node.remove();
     };
     const cleanup = () => {
+      stopRetry();
+      lostReason = "";
+      lostTicks = 0;
       if (pollTimer !== null) {
         doc.defaultView?.clearInterval?.(pollTimer);
         doc.defaultView?.removeEventListener?.("focus", refresh);
@@ -1327,7 +1348,7 @@
       trigger.style.padding = "2px 6px";
       trigger.style.borderRadius = "6px";
       trigger.style.background = mode === "editing" ? "var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.16))" : "none";
-      span.style.display = "none";
+      if (span) span.style.display = "none";
       if (mode === "editing") header.setAttribute("data-no996-editing", "");
       else header.removeAttribute("data-no996-editing");
       const measure = () => {
@@ -1413,11 +1434,55 @@
       };
       doc.addEventListener("pointerdown", dismiss, true);
     };
+    let lostReason = "";
+    let lostTicks = 0;
+    let retryTimer = null;
+    const stopRetry = () => {
+      if (retryTimer === null) return;
+      doc.defaultView?.clearInterval?.(retryTimer);
+      doc.defaultView?.removeEventListener?.("resize", mount);
+      retryTimer = null;
+    };
+    const startRetry = () => {
+      if (retryTimer !== null) return;
+      const view2 = doc.defaultView;
+      if (!view2?.setInterval) return;
+      retryTimer = view2.setInterval(() => {
+        if (doc.visibilityState === "hidden") return;
+        mount();
+      }, 1e3);
+      view2.addEventListener?.("resize", mount);
+    };
+    const noteLoss = (reason) => {
+      if (!lostReason) {
+        lostReason = reason;
+        pageLog("switch-lost", reason);
+      }
+      lostTicks += 1;
+      restoreHidden();
+      if (list) list.style.display = "none";
+      if (lostTicks === 3 && mode === "editing") {
+        mode = "workspaces";
+        try {
+          doc.defaultView?.localStorage?.setItem(MODE_KEY, mode);
+        } catch {
+        }
+        if (mounted?.header) mounted.header.removeAttribute("data-no996-editing");
+        pageLog("switch-lost", "reverted-workspaces");
+      }
+      startRetry();
+    };
     const mount = () => {
       const found = findHeader(doc);
       if (!found) {
-        cleanup();
+        noteLoss("no-header");
         return;
+      }
+      if (lostReason) {
+        pageLog("switch-remounted", lostReason);
+        lostReason = "";
+        lostTicks = 0;
+        stopRetry();
       }
       if (mounted && mounted.header === found.header && mounted.span === found.span && trigger?.isConnected && list?.isConnected) {
         syncHeaderActions();
@@ -1443,9 +1508,10 @@
       trigger.addEventListener("mouseleave", () => {
         trigger.style.background = mode === "editing" ? "var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.16))" : "none";
       });
-      span.parentElement?.insertBefore(trigger, span);
-      span.style.display = "none";
-      mounted = { span, header, actions };
+      if (span && span.isConnected && span.parentElement) span.parentElement.insertBefore(trigger, span);
+      else header.insertBefore(trigger, header.firstChild);
+      if (span) span.style.display = "none";
+      mounted = { span: span ?? null, header, actions };
       listContainer(header);
       onSearch = (event) => {
         if (mode !== "editing") return;
@@ -1456,8 +1522,11 @@
       };
       header.addEventListener("input", onSearch, true);
       onDocumentClick = (event) => {
+        if (mode === "editing") return;
+        const entry = findPanelEntry(doc);
         const target = event.target?.closest?.('button, [role="button"], a');
-        if (target && PANEL_LABELS.has(text(target.textContent)) && mode !== "editing") setMode("editing");
+        if (!entry || !target) return;
+        if (target === entry || entry.contains(target)) setMode("editing");
       };
       doc.addEventListener("click", onDocumentClick, true);
       applyMode();

@@ -70,15 +70,24 @@ const ICONS = {
 /** The Workspace header: a label whose parent also holds the search input and the
  *  filter/add buttons. Matching on structure keeps us off hashed CSS classes. */
 function findHeader(doc) {
+  const labelOk = span => LABELS.has(text(span.textContent));
+  const usable = header => Boolean(header && header.querySelector('input') && header.querySelectorAll('button').length >= 2);
+  const actionsOf = header => [...header.children].filter(element => element.tagName === 'DIV' && !element.querySelector('input')).pop() ?? null;
+
+  // Pass 1: a header this script already occupied. The label is the fragile part —
+  // it changes with the section, and React may replace the span — so the marker has
+  // to outlive it. Kept while the header is lost; removed only on a real uninstall.
+  for (const header of doc.querySelectorAll(`[${SWITCH_HOST}]`)) {
+    if (!usable(header)) continue;
+    const span = [...header.querySelectorAll('span')].find(labelOk) ?? null;
+    return { span, header, input: header.querySelector('input'), actions: actionsOf(header) };
+  }
+  // Pass 2: the shipped section label (first install, or a header rebuilt from scratch).
   for (const span of doc.querySelectorAll('span')) {
-    if (!LABELS.has(text(span.textContent))) continue;
+    if (!labelOk(span)) continue;
     const header = span.parentElement;
-    if (!header || !header.querySelector('input')) continue;
-    if (header.querySelectorAll('button').length < 2) continue;
-    // The header actions (view options + add folder) are the last div child that
-    // does not hold the search input.
-    const actions = [...header.children].filter(element => element.tagName === 'DIV' && !element.querySelector('input')).pop() ?? null;
-    return { span, header, input: header.querySelector('input'), actions };
+    if (!usable(header)) continue;
+    return { span, header, input: header.querySelector('input'), actions: actionsOf(header) };
   }
   return null;
 }
@@ -150,6 +159,19 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     return response.json().catch(() => ({}));
   };
 
+  // Page-side diagnostics go through the enum-only client-log route: a lost switch
+  // must leave evidence, and the next occurrence should not need another guess.
+  const pageLog = (event, detail) => {
+    try {
+      void fetch('/api/no996-openfilm/client-log', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ event, ...(typeof detail === 'string' && detail ? { detail: detail.slice(0, 40) } : {}) }),
+      }).catch(() => {});
+    } catch { /* logging never breaks the list */ }
+  };
+
   const restoreHidden = () => {
     for (const node of hidden) { try { node.style.display = ''; } catch { /* gone */ } }
     hidden = [];
@@ -167,6 +189,8 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
 
   /** Remove every injected node and undo every hide. Idempotent and cheap. */
   const cleanup = () => {
+    stopRetry();
+    lostReason = ''; lostTicks = 0;
     if (pollTimer !== null) {
       doc.defaultView?.clearInterval?.(pollTimer);
       doc.defaultView?.removeEventListener?.('focus', refresh);
@@ -810,7 +834,7 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     trigger.style.borderRadius = '6px';
     trigger.style.background = mode === 'editing' ? 'var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.16))' : 'none';
     // Our button carries the name in both modes; the shipped label stays hidden.
-    span.style.display = 'none';
+    if (span) span.style.display = 'none';
     if (mode === 'editing') header.setAttribute('data-no996-editing', '');
     else header.removeAttribute('data-no996-editing');
     // Reserve the chip's slot no matter whether the search is closed. Measure
@@ -897,9 +921,57 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     doc.addEventListener('pointerdown', dismiss, true);
   };
 
+  // A lost header used to mean a dead switch: mount() called cleanup() and only a
+  // later DOM mutation could bring it back, which some transitions never produce
+  // (a collapse, a CSS-only change, a section whose header keeps its nodes). Keep
+  // the chip instead, retry, and if it stays gone hand the sidebar back to the
+  // shipped list so the user is never stranded in an area they cannot leave.
+  let lostReason = '';
+  let lostTicks = 0;
+  let retryTimer = null;
+
+  const stopRetry = () => {
+    if (retryTimer === null) return;
+    doc.defaultView?.clearInterval?.(retryTimer);
+    doc.defaultView?.removeEventListener?.('resize', mount);
+    retryTimer = null;
+  };
+
+  const startRetry = () => {
+    if (retryTimer !== null) return;
+    const view = doc.defaultView;
+    if (!view?.setInterval) return;
+    retryTimer = view.setInterval(() => {
+      if (doc.visibilityState === 'hidden') return;
+      mount();
+    }, 1000);
+    view.addEventListener?.('resize', mount);
+  };
+
+  const noteLoss = reason => {
+    if (!lostReason) { lostReason = reason; pageLog('switch-lost', reason); }
+    lostTicks += 1;
+    // No header owns the list right now: show the shipped one rather than leaving a
+    // hidden list with nothing to switch back with.
+    restoreHidden();
+    if (list) list.style.display = 'none';
+    if (lostTicks === 3 && mode === 'editing') {
+      mode = 'workspaces';
+      try { doc.defaultView?.localStorage?.setItem(MODE_KEY, mode); } catch { /* private mode */ }
+      if (mounted?.header) mounted.header.removeAttribute('data-no996-editing');
+      pageLog('switch-lost', 'reverted-workspaces');
+    }
+    startRetry();
+  };
+
   const mount = () => {
     const found = findHeader(doc);
-    if (!found) { cleanup(); return; }
+    if (!found) { noteLoss('no-header'); return; }
+    if (lostReason) {
+      pageLog('switch-remounted', lostReason);
+      lostReason = ''; lostTicks = 0;
+      stopRetry();
+    }
     if (mounted && mounted.header === found.header && mounted.span === found.span
       && trigger?.isConnected && list?.isConnected) {
       // A re-render may recreate a header button; keep the editing header trimmed.
@@ -929,9 +1001,13 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     trigger.addEventListener('mouseleave', () => {
       trigger.style.background = mode === 'editing' ? 'var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,.16))' : 'none';
     });
-    span.parentElement?.insertBefore(trigger, span);
-    span.style.display = 'none';
-    mounted = { span, header, actions };
+    // The label span may be gone (React replaced it): fall back to the header's
+    // start rather than silently failing to insert, which is how the switch used to
+    // vanish while the header itself was still there.
+    if (span && span.isConnected && span.parentElement) span.parentElement.insertBefore(trigger, span);
+    else header.insertBefore(trigger, header.firstChild);
+    if (span) span.style.display = 'none';
+    mounted = { span: span ?? null, header, actions };
     listContainer(header);
     // The shipped search filters our list while the editing area is showing.
     onSearch = event => {
@@ -944,8 +1020,13 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     header.addEventListener('input', onSearch, true);
     // Choosing the video tab is the same intent as choosing the editing area.
     onDocumentClick = event => {
+      // Only the navigation entry for the studio counts. Matching any button whose
+      // text happens to be "视频创作" made unrelated clicks jump the sidebar.
+      if (mode === 'editing') return;
+      const entry = findPanelEntry(doc);
       const target = event.target?.closest?.('button, [role="button"], a');
-      if (target && PANEL_LABELS.has(text(target.textContent)) && mode !== 'editing') setMode('editing');
+      if (!entry || !target) return;
+      if (target === entry || entry.contains(target)) setMode('editing');
     };
     doc.addEventListener('click', onDocumentClick, true);
     applyMode();

@@ -2,7 +2,7 @@
 id: ADR-0002-panel-overlay
 reader: 维护者、改界面的人
 fact-source: src/studio-entry.js、src/studio-panel.mjs、src/panel-keepalive.mjs
-checked: 0.15.7
+checked: 0.15.8
 rot-if: DSH 提供"常驻页面"官方能力，或面板改为独立窗口
 -->
 

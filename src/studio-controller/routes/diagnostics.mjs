@@ -27,8 +27,13 @@ export function createDiagnosticsRoutes({ ctx, log, clientEvents, register, trac
         let value;
         try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return finish(400); }
         const event = typeof value?.event === 'string' ? value.event : '';
-        if (!CLIENT_EVENTS.has(event)) return finish(400);
-        log.info(`page-${event}`, { anchor: typeof value.anchor === 'string' ? value.anchor.slice(0, 16) : undefined });
+        // This module is created with the allowlist; the bare constant was never in
+        // scope here, so every client-log request threw instead of logging.
+        if (!clientEvents.has(event)) return finish(400);
+        log.info(`page-${event}`, {
+          anchor: typeof value.anchor === 'string' ? value.anchor.slice(0, 16) : undefined,
+          detail: typeof value.detail === 'string' ? value.detail.slice(0, 40) : undefined,
+        });
         finish(204);
       });
     },

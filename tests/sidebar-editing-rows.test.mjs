@@ -81,3 +81,25 @@ test('the list re-reads itself, so a delete on the other side shows up without a
   // Cleanup stops the poll; a removed list must not keep a timer alive.
   assert.ok(source.includes('doc.defaultView?.clearInterval?.(pollTimer);'));
 });
+
+test('a missing header must not leave the switch dead', () => {
+  // mount() used to call cleanup() when findHeader() missed even once, and only a
+  // later DOM mutation could bring the chip back.
+  assert.ok(source.includes("if (!found) { noteLoss('no-header'); return; }"));
+  assert.ok(source.includes("pageLog('switch-remounted', lostReason)"));
+  assert.ok(source.includes("pageLog('switch-lost', reason)"));
+  assert.ok(source.includes('}, 1000);'));
+  // After three misses in the editing area, hand the sidebar back instead of trapping it.
+  assert.ok(source.includes("pageLog('switch-lost', 'reverted-workspaces')"));
+  assert.ok(source.includes("if (lostTicks === 3 && mode === 'editing')"));
+});
+
+test('only the navigation entry switches the sidebar, not any button with that text', () => {
+  assert.equal(source.includes("if (target && PANEL_LABELS.has(text(target.textContent)) && mode !== 'editing') setMode('editing');"), false);
+  assert.ok(source.includes('if (target === entry || entry.contains(target)) setMode(\'editing\');'));
+});
+
+test('a replaced label span still gets the switch, and a lost header stays findable', () => {
+  assert.ok(source.includes('else header.insertBefore(trigger, header.firstChild);'));
+  assert.ok(source.includes('for (const header of doc.querySelectorAll(`[${SWITCH_HOST}]`))'));
+});

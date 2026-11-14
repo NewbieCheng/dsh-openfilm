@@ -2,7 +2,7 @@
 id: playbooks-incident
 reader: 值班的人、排查 bug 的人
 fact-source: 真实故障记录（2026-11）、%TEMP%/dsh-openfilm/plugin.log、docs/architecture
-checked: 0.15.7
+checked: 0.15.8
 rot-if: 出现新的故障类别，或某个根因被结构性消除
 -->
 
@@ -24,6 +24,25 @@ rot-if: 出现新的故障类别，或某个根因被结构性消除
 判据：**重载后 `plugin.log` 的 `startedAt` 更新**才算真的重载了。管理器返回 `restart-required` 时，如实告诉用户要重启，别声称已生效。
 
 ## 2. 故障档案
+
+### 2026-11-14 · 工作区/剪辑区开关会凭空消失，之后切不回来
+
+**现象**：侧栏左上那个「工作区/剪辑区」开关偶尔不见了；有时点导航里的「视频创作」，侧栏自己跳进剪辑区，
+再想切回来时开关已经没了。
+
+**根因**（两处，叠加）：
+1. `mount()` 是**一次性**的：`findHeader()` 返回 null 就直接 `cleanup()` 把开关删掉。锚点条件是
+   "span 文本 ∈ {工作区,会话} + 有 input + ≥2 个 button"——切分区、React 换标签、侧栏折叠、
+   插件重启让列表请求 404，任一条命中都会删掉它；恢复只能靠 MutationObserver 等到一次 `childList` 变动，
+   而折叠/纯 CSS 变化根本不产生变动。
+2. 自动跳转是 `document` 上的捕获监听，**任何**文本为「视频创作」的按钮都会切换模式，不只是导航条目。
+
+**改法**：锚点两段式（先认带 `data-no996-switch-host` 的 header，再认中文标签）；找不到不销毁，
+保持节点并 1 秒重试（可见时），`resize`/`focus` 也重试；连续 3 次失败自动退回工作区并把官方列表还回去；
+恢复写 `page-switch-remounted` / 丢失写 `page-switch-lost`（detail: no-header / reverted-workspaces）。
+自动跳转只认 `findPanelEntry()` 找到的那个导航条目。
+
+**边界**：改的是注入层（B2），不是官方壳；真机复现前只能说"按代码条件修掉了已知的两种路径"。
 
 ### 2026-11-14 · 左删右还在：两边读同一份记录，但只有一边会重读
 

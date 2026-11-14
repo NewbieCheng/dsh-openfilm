@@ -30,7 +30,7 @@ const templatesRoot = fileURLToPath(new URL('../vendor/templates/', import.meta.
 
 /** The ACP path is the default; an explicit 0 is the escape hatch. */
 /** Page events the Host will record; anything else is refused. */
-const CLIENT_EVENTS = new Set(['recovery-shown', 'restart-click', 'picker-placed', 'session-expired', 'permission-shown', 'permission-chosen']);
+const CLIENT_EVENTS = new Set(['recovery-shown', 'restart-click', 'picker-placed', 'session-expired', 'permission-shown', 'permission-chosen', 'switch-lost', 'switch-remounted']);
 import { redeemStudioSession, startStudioDebug } from './studio-debug.mjs';
 import { startLocalConsole } from './studio-debug-redirect.mjs';
 import { createDshAskAgent } from './dsh-ai.mjs';
@@ -345,7 +345,10 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     if (channel === 'client:log') {
       const event = typeof payload?.event === 'string' ? payload.event : '';
       if (!CLIENT_EVENTS.has(event)) throw Object.assign(new Error('unknown client event'), { code: 'CLIENT_EVENT_UNKNOWN' });
-      log.info(`page-${event}`, { anchor: typeof payload?.anchor === 'string' ? payload.anchor.slice(0, 16) : undefined });
+      log.info(`page-${event}`, {
+        anchor: typeof payload?.anchor === 'string' ? payload.anchor.slice(0, 16) : undefined,
+        detail: typeof payload?.detail === 'string' ? payload.detail.slice(0, 40) : undefined,
+      });
       return { ok: true };
     }
     if (channel === 'editor:link') {
