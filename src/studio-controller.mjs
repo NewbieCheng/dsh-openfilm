@@ -74,6 +74,8 @@ import { createPluginLog } from './plugin-log.mjs';
 import { createBridgeTrace } from './bridge-trace.mjs';
 import { openProjectPermissions, FULL_ACCESS, WORKSPACE_WRITE } from './official-permission.mjs';
 import { createProjectFiles } from './project-files.mjs';
+import { readJsonBody } from './studio-controller/http-body.mjs';
+import { createTurnLog } from './studio-controller/turns.mjs';
 
 /**
  * Host-only route and Studio lifecycle. `createProxy` receives the private
@@ -549,17 +551,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     log,
   });
   /** Read a small JSON request body; returns {} on anything malformed. */
-  const readJsonBody = async (req, limit = 8192) => {
-    try {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
-        if (Buffer.concat(chunks).byteLength > limit) return {};
-      }
-      const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-    } catch { return {}; }
-  };
   // Archive state of a project's bound conversation. Always resolved in the
   // Host: the page supplies a project ID and never a Session ID. This never
   // creates a Session — reading chat history must not have that side effect.
@@ -596,33 +587,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // the trace tab's reading: the tab renders one line per event, so what the turn
   // called (tool name, arguments, result) is finally visible instead of only the
   // chat's three-word action rows. Bounded: a long turn keeps its last events.
-  const TURN_LOG_TURNS = 4;
-  const TURN_LOG_EVENTS = 2000;
-  const turnLogs = new Map();
-  const recordTurnEvent = (projectId, event) => {
-    if (typeof projectId !== 'string' || !projectId || !event || typeof event !== 'object') return;
-    const turnId = typeof event.key === 'string' ? event.key : '';
-    if (!turnId) return;
-    const update = event.update && typeof event.update === 'object' ? event.update : {};
-    let turns = turnLogs.get(projectId);
-    if (!turns) turnLogs.set(projectId, turns = new Map());
-    let events = turns.get(turnId);
-    if (!events) {
-      turns.set(turnId, events = []);
-      while (turns.size > TURN_LOG_TURNS) turns.delete(turns.keys().next().value);
-    }
-    const kind = typeof update.sessionUpdate === 'string' ? update.sessionUpdate
-      : event.kind === 'done' ? 'done' : 'update';
-    events.push({ t: Date.now(), kind, ...update });
-    if (events.length > TURN_LOG_EVENTS) events.splice(0, events.length - TURN_LOG_EVENTS);
-    while (turnLogs.size > 8) turnLogs.delete(turnLogs.keys().next().value);
-  };
-  const turnLogOf = (projectId, turnId) => {
-    const events = turnLogs.get(projectId)?.get(turnId);
-    if (!events) return null;
-    // `whole` says these events are the log's, so the viewer replaces rather than appends.
-    return { file: 'dsh-turn', cut: false, whole: true, events: [...events], calls: [], callsWhole: true, callsCut: false, at: { events: events.length, calls: 0, callsFile: 0 } };
-  };
+  const { recordTurnEvent, turnLogOf } = createTurnLog();
   // Approval questions travel the same stream as transcript updates. `publish`
   // reports whether a live transport accepted the write, which is exactly the
   // coordinator's delivery contract (acceptance, not proof of rendering).

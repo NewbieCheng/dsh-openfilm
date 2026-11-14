@@ -8,15 +8,15 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 # 模块清单（自动生成）
 
-> 生成命令：`npm run docs:gen`。98 个模块、15216 行。
+> 生成命令：`npm run docs:gen`。98 个模块、15029 行。
 > **无同名测试**的模块：29 个 —— 这是待补清单，不是失败项。
 > "同名测试"按 `tests/*<模块名>*.test.mjs` 匹配，只说明"有测试提到它"，不保证覆盖。
 
 | 模块 | 行数 | 导出 | 同名测试 |
 |---|---|---|---|
-| `src/studio-controller.mjs` | 1557 | createStudioController | **无** |
-| `src/studio-proxy.mjs` | 1004 | startStudioProxy | `studio-proxy-files.test.mjs` |
+| `src/studio-controller.mjs` | 1522 | createStudioController | **无** |
 | `src/sidebar-editing.mjs` | 936 | EDITING_LABEL, installWorkspaceSwitch | `sidebar-editing-rows.test.mjs` |
+| `src/studio-proxy.mjs` | 852 | startStudioProxy | `studio-proxy-files.test.mjs` |
 | `src/acp-agent-service.mjs` | 561 | catalogFromConfigOptions, createAcpAgentService | `acp-agent-service.test.mjs` |
 | `src/official-facade.mjs` | 506 | officialFacadeSource | `official-facade-events.test.mjs` |
 | `src/login-page.mjs` | 440 | createLoginPage | **无** |
@@ -115,7 +115,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 ## 无同名测试
 
-- `src/studio-controller.mjs`（1557 行）
+- `src/studio-controller.mjs`（1522 行）
 - `src/login-page.mjs`（440 行）
 - `src/studio-panel.mjs`（370 行）
 - `src/transcribe-service.mjs`（255 行）

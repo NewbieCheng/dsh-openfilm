@@ -1,7 +1,4 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { appendFileSync, statSync, truncateSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { createServer, request } from 'node:http';
 import { officialFacadeSource } from './official-facade.mjs';
 import { officialUploadSource } from './official-attachment.mjs';
@@ -9,172 +6,23 @@ import { shellUiInjection, shellUiVersion } from './shell-extras.mjs';
 import { theme, themeSurfaceFor } from './theme.mjs';
 import { styleLabInjection } from './style-lab.mjs';
 import { replaceTitle } from './brand.mjs';
-
-// Upstream 5xx bodies are the only description of a Studio failure the person
-// can act on, and the page shows just the status. Keep the last few for
-// diagnosis; never the request body, never a project path.
-const failureLog = join(tmpdir(), 'dsh-openfilm-errors.jsonl');
-function recordFailure(method, path, status, body) {
-  try {
-    const line = JSON.stringify({ at: new Date().toISOString(), method, path, status, body: String(body).slice(0, 800) }) + '\n';
-    appendFileSync(failureLog, line, 'utf8');
-    if (statSync(failureLog).size > 64 * 1024) truncateSync(failureLog, 0);
-  } catch { /* diagnostics must never affect the response */ }
-}
+import { MAX_FRAME, WS_GUID, frames, wsFrame } from './studio-proxy/websocket.mjs';
+import {
+  RESPONSE_HEADERS,
+  SAFE_HEADERS,
+  ancestorsFor,
+  fail,
+  friendlyCommandFailure,
+  listen,
+  recordFailure,
+  shutdown,
+  upstreamOrigin,
+} from './studio-proxy/upstream.mjs';
 
 // Proxy for the pinned OpenFilm 0.3.2 protocol (0.3.1 shell snapshot). It does not provide process
 // isolation. Unrecognized or unsafe representations fail closed.
-const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-const MAX_FRAME = 1024 * 1024;
 const MAX_RESPONSE = 32 * 1024 * 1024;
 
-/**
- * Upstream 5xx bodies can be raw child-process failures: Node's `Command failed:`
- * message carries the whole PowerShell script. Showing that to a person is
- * useless and, worse, the shell's fetch wrapper retries 5xx up to four times —
- * so a delete that cannot finish is attempted again and again.
- *
- * Recognise the class, answer with a short explanation, and use 409 so nothing
- * retries it. The original text still goes to the failure log for diagnosis.
- */
-const COMMAND_FAILURE = /Command failed:|powershell\.exe|spawn .* ENOENT/i;
-
-/**
- * The same failed move has different causes per platform. Windows refuses a
- * directory a watcher still holds; macOS moves it by rename (POSIX allows that
- * with open handles), so a failure there is a permission or cross-volume one.
- */
-function projectDeleteMessage() {
-  if (process.platform === 'win32') {
-    return '这个项目的文件夹正被其他程序占用（通常是仍打开的 DSH 会话或文件监视），无法移入回收站。请关闭使用该文件夹的会话后再删除。';
-  }
-  if (process.platform === 'darwin') {
-    return '这个项目的文件夹无法移入废纸篓。请检查访达权限（完全磁盘访问），或关闭仍在使用它的程序后再试。';
-  }
-  return '这个项目的文件夹无法移入回收站。请关闭仍在使用它的程序后再试。';
-}
-
-function friendlyCommandFailure(text, pathname) {
-  if (!COMMAND_FAILURE.test(text)) return null;
-  const projectDelete = /^\/api\/projects\/[A-Za-z0-9_-]+\/?$/.test(pathname);
-  const error = projectDelete ? projectDeleteMessage() : '操作失败：系统命令执行出错。详细原因已写入插件日志。';
-  let json = null;
-  try { json = JSON.parse(text); } catch { /* not JSON: answer with ours */ }
-  const body = json && typeof json === 'object'
-    ? JSON.stringify({ ...json, error, code: 'no996-command-failed' })
-    : JSON.stringify({ error, code: 'no996-command-failed' });
-  return { status: 409, body };
-}
-
-// The 0.3.1 server sends unfragmented JSON frames and ping controls. Reject
-// unsupported extensions, fragmented frames, invalid masks and oversized frames.
-function wsFrame(opcode, payload, masked) {
-  const size = payload.length;
-  const length = size < 126 ? Buffer.from([size]) : size < 65536
-    ? Buffer.from([126, size >>> 8, size & 255])
-    : Buffer.from([127, 0, 0, 0, 0, (size >>> 24) & 255, (size >>> 16) & 255, (size >>> 8) & 255, size & 255]);
-  if (!masked) return Buffer.concat([Buffer.from([0x80 | opcode]), length, payload]);
-  length[0] |= 0x80;
-  const mask = randomBytes(4);
-  const copy = Buffer.from(payload);
-  for (let i = 0; i < copy.length; i++) copy[i] ^= mask[i % 4];
-  return Buffer.concat([Buffer.from([0x80 | opcode]), length, mask, copy]);
-}
-function frames(socket, expectMask, onMessage, close) {
-  let pending = Buffer.alloc(0);
-  const receive = (chunk) => {
-    if (pending.length + chunk.length > MAX_FRAME + 14) return close();
-    pending = Buffer.concat([pending, chunk]);
-    while (pending.length >= 2) {
-      const first = pending[0], second = pending[1], opcode = first & 15;
-      if ((first & 0xf0) !== 0x80 || Boolean(second & 0x80) !== expectMask) return close();
-      let n = second & 127, offset = 2;
-      if (n === 126) { if (pending.length < 4) return; n = pending.readUInt16BE(2); offset = 4; if (n < 126) return close(); }
-      else if (n === 127) {
-        if (pending.length < 10) return;
-        const value = pending.readBigUInt64BE(2);
-        if (value < 65536n || value > BigInt(MAX_FRAME)) return close();
-        n = Number(value); offset = 10;
-      }
-      if (n > MAX_FRAME || (opcode >= 8 && n > 125)) return close();
-      const maskOffset = offset;
-      if (expectMask) offset += 4;
-      if (pending.length < offset + n) return;
-      const data = Buffer.from(pending.subarray(offset, offset + n));
-      if (expectMask) for (let i = 0; i < n; i++) data[i] ^= pending[maskOffset + i % 4];
-      pending = pending.subarray(offset + n);
-      if (opcode === 8) return close();
-      if (opcode === 9) { socket.write(wsFrame(10, data, !expectMask)); continue; }
-      if (opcode === 10) continue;
-      if (opcode !== 1) return close();
-      onMessage(opcode, data);
-      if (socket.destroyed) return;
-    }
-  };
-  socket.on('data', receive);
-  return receive;
-}
-const SAFE_HEADERS = new Set(['accept', 'accept-language', 'content-type', 'content-length', 'range', 'if-range', 'if-none-match', 'if-modified-since']);
-const RESPONSE_HEADERS = new Set(['content-type', 'content-range', 'accept-ranges', 'last-modified', 'etag', 'cache-control', 'content-disposition']);
-
-function upstreamOrigin(value, hostname) {
-  const url = new URL(value);
-  if (url.protocol !== 'http:' || url.hostname !== hostname || !url.port || url.origin !== value || url.username || url.password) throw new TypeError('Invalid upstream origin');
-  return url;
-}
-function listen(server, host, preferred = 0) {
-  return new Promise((resolve, reject) => {
-    const done = () => { server.off('error', fallback); resolve(server.address().port); };
-    // A stable port keeps Studio's own localStorage (workspace layout, panes)
-    // across restarts; a busy port falls back to an ephemeral one.
-    const fallback = () => {
-      server.off('error', fallback);
-      server.once('error', reject);
-      server.listen(0, host, () => { server.off('error', reject); resolve(server.address().port); });
-    };
-    server.once('error', fallback);
-    server.listen(preferred, host, done);
-  });
-}
-function shutdown(server) {
-  return new Promise((resolve) => {
-    if (!server.listening) return resolve();
-    server.closeAllConnections();
-    server.close(() => resolve());
-  });
-}
-/**
- * Who may frame the editor. The desktop window is `dsh-app://app`, a scheme no
- * `frame-ancestors` entry of ours named until now — Chrome blocked the frame and
- * the panel showed a blank rectangle. Loopback ports plus the desktop scheme are
- * the only frames this localhost integration is built for; remote sites stay out.
- */
-function ancestorsFor(origin) {
-  return `${origin} 'self' http://127.0.0.1:* http://localhost:* dsh-app: app:`;
-}
-
-function fail(res, status = 403) {
-  if (res.headersSent) return res.destroy();
-  res.writeHead(status, { 'cache-control': 'no-store', 'content-length': '0' });
-  res.end();
-}
-
-/**
- * Host-only. bootstrap(res) MUST be invoked only after authenticating a browser
- * request on the Host's 127.0.0.1 origin and checking its Host and Origin. It
- * writes the editor origin and, in desktop mode, a one-time ticket; it does not
- * create a cookie. authenticateBrowser is a synchronous Host callback returning true only for an authenticated DSH
- * browser peer. It receives the actual request after the proxy's own trust checks;
- * the Host is responsible for carefully mapping the validated authority for DSH.
- * Film files use signed tokens on the separate localhost hostname.
- *
- * Buffered responses are limited to 32 MiB; eligible binary media is streamed.
- * Compressed responses, redirects and text ranges are refused. WebSocket messages
- * are bounded and only unfragmented JSON event streams are supported. Key
- * scanning is not protection against a malicious or modified upstream. OpenFilm
- * retains its native file and process permissions; DSH workspace tool restrictions
- * do not constrain these APIs.
- */
 const AGENT_HINTS = Object.freeze({
   OFFICIAL_AGENT_FAILED: '对话子进程出错了，请重试；多次失败就重启 DSH',
   OFFICIAL_AGENT_BUSY: '上一条还在进行中，等它结束或先取消',
