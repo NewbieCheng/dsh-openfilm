@@ -25,7 +25,7 @@ rot-if: 每次发版、每个批次结束、任何"待验"变"已验证"
 - 视觉收口：内联 SVG 图标、圆点选中态、菜单/弹窗/toast 入场动效，`prefers-reduced-motion` 关闭。
 - 工程：CI、零依赖 lint、`npm test`/`npm run check` 入口、`dist/` 二进制出库。
 - 文档：本文件与 `docs/index.md`、`decisions/`、`reference/`、`playbooks/` 落地（ADR-0007）。
-- 结构：代理与控制器抽出四个助手模块（ADR-0008 第一步）；路由注册表拆分进入下一批。
+- 结构：代理/控制器抽出 6 个模块，路由注册表已迁 4 条（system×3、client-log），余 10 条见 ADR-0008。
 
 ## 3. 进行中
 

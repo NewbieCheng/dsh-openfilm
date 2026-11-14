@@ -8,7 +8,7 @@ rot-if: 拆分完成或策略改变
 
 # ADR-0008：两个巨型闭包按职责拆开，分两步走
 
-- 状态：生效（第一步已落地，第二步待做）
+- 状态：生效（第一步、第二步前两批已落地，其余路由待迁）
 - 日期：2026-11-14
 
 ## 背景
@@ -40,17 +40,26 @@ rot-if: 拆分完成或策略改变
 
 代理 1,005 → 853 行，控制器 1,558 → 1,522 行。
 
-**第二步（待做）**：把路由从闭包里搬成注册表。
+**第二步（进行中）**：把路由从闭包里搬成注册表。已落地：
+
+| 新模块 | 内容 | 状态 |
+|---|---|---|
+| `src/studio-controller/router.mjs` | register/track/mount/rollback + 重复路径容忍 | 完成 |
+| `src/studio-controller/routes/system.mjs` | asr、system/check、system/install + 共享快照 | 完成（3 条） |
+| `src/studio-controller/routes/diagnostics.mjs` | client-log（枚举事件、512 B、仅本机浏览器） | 完成（1 条） |
+
+控制器 1,558 → 1,392 行。剩下的 10 条路由目标形态：
 
 ```text
 src/studio-controller/
   index.mjs               createStudioController：构图 + 装配（目标 < 250 行）
   router.mjs              registerRoute/trackRoute/rollback（TDZ 保护留在这里）
   routes/editing.mjs      editing-sessions、editing-delete-project、archive
-  routes/diagnostics.mjs  diagnose、client-log、bootstrap
-  routes/system.mjs       system/check、system/install、onboarding
-  routes/chat.mjs         agent:*（prompt/models/thinking/permission/cancel）
-  routes/assets.mjs       attachment、template、project-file
+  routes/diagnostics.mjs  diagnose、bootstrap（client-log 已迁）
+  routes/system.mjs       system/check、system/install、asr（已迁）
+  routes/chat.mjs         mcp、debug-url
+  routes/assets.mjs       attachment
+  routes/editing.mjs     editing-sessions/prefs/archive/delete/delete-project
 ```
 
 每个 `registerX(deps)` 接收显式依赖（ctx、log、proxy、officialRpc、sessions…），不再捕获闭包。迁移顺序：先建 `router.mjs` 与依赖对象，再逐组搬路由，**每搬一组重跑 614 条测试**。
@@ -63,4 +72,4 @@ src/studio-controller/
 
 ## 证据
 
-`src/studio-proxy/{websocket,upstream}.mjs`、`src/studio-controller/{http-body,turns}.mjs`；`docs/reference/modules.md`（生成的行数清单）；`npm test` 614 条。
+`src/studio-proxy/{websocket,upstream}.mjs`、`src/studio-controller/{http-body,turns,router}.mjs`、`src/studio-controller/routes/{system,diagnostics}.mjs`；`docs/reference/modules.md`（生成的行数清单）；`npm test` 618 条。

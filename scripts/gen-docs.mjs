@@ -28,10 +28,16 @@ function lineAt(text, index) {
 }
 
 function sourceFiles() {
-  const dir = join(ROOT, 'src')
-  const files = readdirSync(dir)
-    .filter((name) => /\.(mjs|js)$/.test(name))
-    .map((name) => join(dir, name))
+  const files = []
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name)
+      // src/studio-controller/** and src/studio-proxy/** hold real Host code now.
+      if (entry.isDirectory()) walk(full)
+      else if (/\.(mjs|js)$/.test(entry.name)) files.push(full)
+    }
+  }
+  walk(join(ROOT, 'src'))
   const entry = join(ROOT, 'index.js')
   if (existsSync(entry)) files.push(entry)
   return files.sort()

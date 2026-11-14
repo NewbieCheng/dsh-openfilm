@@ -75,6 +75,9 @@ import { createBridgeTrace } from './bridge-trace.mjs';
 import { openProjectPermissions, FULL_ACCESS, WORKSPACE_WRITE } from './official-permission.mjs';
 import { createProjectFiles } from './project-files.mjs';
 import { readJsonBody } from './studio-controller/http-body.mjs';
+import { createRouter } from './studio-controller/router.mjs';
+import { createDiagnosticsRoutes } from './studio-controller/routes/diagnostics.mjs';
+import { createSystemRoutes } from './studio-controller/routes/system.mjs';
 import { createTurnLog } from './studio-controller/turns.mjs';
 
 /**
@@ -431,11 +434,11 @@ export function createStudioController(ctx, createProxy, { officialShell = false
         };
       }
     }
-    if (channel === 'system:check') return systemSnapshot();
+    if (channel === 'system:check') return system.snapshot();
     if (channel === 'system:install') {
       const tool = payload && typeof payload === 'object' && typeof payload.tool === 'string' ? payload.tool : 'all';
-      startSystemInstall(tool);
-      return systemSnapshot();
+      system.install(tool);
+      return system.snapshot();
     }
     if (channel === 'asr:status' || channel === 'asr:install') {
       // Same service as /api/no996-openfilm/asr, exposed over the one bridge the
@@ -736,99 +739,10 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     resolveToken: token => mcpTokens.resolve(token),
     log: (event, fields) => void log.info(event, fields),
   });
-  const unregisterTranscribeRoute = registerRoute({
-    kind: 'exact', path: '/api/no996-openfilm/asr',
-    async handler(req, res) {
-      res.setHeader('cache-control', 'no-store');
-      res.setHeader('content-type', 'application/json; charset=utf-8');
-      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end('{}'); return; }
-      const admission = ctx.connection.admit({ headers: req.headers });
-      if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('{}'); return; }
-      let action = 'status';
-      try {
-        const chunks = [];
-        for await (const chunk of req) { chunks.push(chunk); if (Buffer.concat(chunks).byteLength > 4096) break; }
-        const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-        if (parsed?.action === 'install') action = 'install';
-      } catch { /* a body we cannot read is a status request */ }
-      try {
-        const state = await transcribeService.status();
-        if (action === 'install' && !state.ready) void transcribeService.setup().catch(() => undefined);
-        res.writeHead(200).end(JSON.stringify({
-          ready: state.ready, dir: state.dir, bytesTotal: state.bytesTotal,
-          bytesOnDisk: state.bytesOnDisk, progress: state.progress,
-          installing: state.installing || (action === 'install' && !state.ready), engine: state.engine,
-        }));
-      } catch (error) {
-        res.writeHead(500).end(JSON.stringify({ error: String(error?.message || error).slice(0, 200) }));
-      }
-    },
-  });
-  // One view for the wizard: what is installed, what is downloading, what is
-  // already usable. The detector answers "can it run"; the installer answers
-  // "is something arriving and what went wrong".
-  const systemSnapshot = async () => {
-    const [components, installer, asrState] = await Promise.all([
-      detectHostComponents(),
-      toolInstaller.snapshot(),
-      transcribeService.status().catch(() => ({ ready: false })),
-    ]);
-    const asr = {
-      ready: asrState.ready === true,
-      bytesTotal: Number(asrState.bytesTotal) || 0,
-      bytesOnDisk: Number(asrState.bytesOnDisk) || 0,
-      progress: Number(asrState.progress) || 0,
-      installing: asrState.installing === true,
-      engine: typeof asrState.engine === 'string' ? asrState.engine : '',
-      phase: typeof asrState.phase === 'string' ? asrState.phase : '',
-      source: typeof asrState.source === 'string' ? asrState.source : '',
-      speed: Number(asrState.speed) || 0,
-      error: typeof asrState.error === 'string' ? asrState.error : '',
-    };
-    return {
-      platform: components.platform,
-      tools: components.tools,
-      installer,
-      asr,
-      ready: components.tools.ffmpeg.status === 'ok' && components.tools.ffprobe.status === 'ok' && asr.ready,
-    };
-  };
-  const startSystemInstall = tool => {
-    if (tool === 'asr') { void transcribeService.setup().catch(() => undefined); return; }
-    const wanted = tool === 'ffmpeg' || tool === 'ffprobe' ? [tool] : ['ffmpeg', 'ffprobe'];
-    for (const item of wanted) void toolInstaller.install(item).catch(() => undefined);
-  };
-  const unregisterSystemCheck = registerRoute({
-    kind: 'exact', path: '/api/no996-openfilm/system/check',
-    async handler(req, res) {
-      res.setHeader('cache-control', 'no-store');
-      res.setHeader('content-type', 'application/json; charset=utf-8');
-      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end('{}'); return; }
-      const admission = ctx.connection.admit({ headers: req.headers });
-      if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('{}'); return; }
-      try { res.writeHead(200).end(JSON.stringify(await systemSnapshot())); }
-      catch (error) { res.writeHead(500).end(JSON.stringify({ error: String(error?.message || error).slice(0, 200) })); }
-    },
-  });
-  const unregisterSystemInstall = registerRoute({
-    kind: 'exact', path: '/api/no996-openfilm/system/install',
-    async handler(req, res) {
-      res.setHeader('cache-control', 'no-store');
-      res.setHeader('content-type', 'application/json; charset=utf-8');
-      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end('{}'); return; }
-      const admission = ctx.connection.admit({ headers: req.headers });
-      if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('{}'); return; }
-      let tool = 'all';
-      try {
-        const chunks = [];
-        for await (const chunk of req) { chunks.push(chunk); if (Buffer.concat(chunks).byteLength > 4096) break; }
-        const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
-        if (typeof parsed?.tool === 'string') tool = parsed.tool;
-      } catch { /* an unreadable body installs everything */ }
-      try { startSystemInstall(tool); res.writeHead(200).end(JSON.stringify(await systemSnapshot())); }
-      catch (error) { res.writeHead(500).end(JSON.stringify({ error: String(error?.message || error).slice(0, 200) })); }
-    },
-  });
+  // System capability (installed tools, downloads, ASR weights): one snapshot
+  // shared by the Host RPC and the panel routes, defined in its own module.
+  const system = createSystemRoutes({ ctx, register: registerRoute, transcribeService, toolInstaller, detectHostComponents });
+  const [unregisterTranscribeRoute, unregisterSystemCheck, unregisterSystemInstall] = system.disposers;
   const runtime = createStudioRuntime({ askAgent, ...(officialShell ? { resolveEditorDir: resolveOfficialShell } : {}), attach: async studio => {
     upstream = studio;
     return async () => {
@@ -867,31 +781,13 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     pending.catch(() => { if (proxies.get(browserOrigin) === pending) proxies.delete(browserOrigin); });
     return pending;
   }
-  // DSH webServer.register accepts ONE route and throws on duplicate path. If
-  // setup fails after a route is mounted, Cordis never gets a disposer and the
-  // path leaks — the next enable then fails with "duplicate exact route".
-  // Registering the same exact path twice throws inside the web registry; a
-  // management toggle can re-run this block in a Host that already has it, and a
-  // throw here would mark the whole plugin as failed to activate. Declared as a
-  // function so the routes registered earlier in this body can call it.
-  function registerRoute(route) {
-    try { return ctx.webServer.register(route); } catch (error) {
-      void log.warn('route-already-mounted', { path: route?.path, detail: String(error?.message ?? error).slice(0, 160) });
-      return () => {};
-    }
-  }
-  // Track every route disposer and roll back on throw; dispose sync-unregisters
-  // routes before any await so a re-enable cannot race a leftover path.
-  const routeDisposers = [];
-  const trackRoute = dispose => {
-    routeDisposers.push(dispose);
-    return dispose;
-  };
-  const rollbackRoutes = () => {
-    while (routeDisposers.length) {
-      try { routeDisposers.pop()(); } catch { /* already gone */ }
-    }
-  };
+  // Registration, duplicate-path tolerance and rollback order live in
+  // studio-controller/router.mjs; a module has no temporal dead zone to work
+  // around, so these are plain bindings instead of a hoisted function.
+  const router = createRouter({ webServer: ctx.webServer, log });
+  const registerRoute = router.register;
+  const trackRoute = router.track;
+  const rollbackRoutes = router.rollback;
   let unregisterTemplateBridge;
   let unregisterAuthBridge;
   let unregisterArchiveBridge;
@@ -1037,35 +933,9 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     },
   }));
   // Page-side events worth keeping when a person reports "it broke": the
-  // recovery card appeared, the button was pressed. Enum-only, 512 bytes, and
-  // only from the authenticated DSH browser — this is not a general log sink.
-  // DSH register() takes one route only; client-log and bootstrap must be separate.
-  unregisterClientLog = trackRoute(registerRoute({
-    kind: 'exact', path: '/api/no996-openfilm/client-log',
-    async handler(req, res) {
-      res.setHeader('cache-control', 'no-store');
-      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end(); return; }
-      const admission = ctx.connection.admit({ headers: req.headers });
-      if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end(); return; }
-      const chunks = [];
-      let size = 0;
-      const finish = (status) => { if (!res.writableEnded) res.writeHead(status).end(); };
-      req.on('data', (chunk) => {
-        size += chunk.length;
-        if (size > 512) { finish(413); req.destroy(); return; }
-        chunks.push(chunk);
-      });
-      req.on('end', () => {
-        if (res.writableEnded) return;
-        let value;
-        try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return finish(400); }
-        const event = typeof value?.event === 'string' ? value.event : '';
-        if (!CLIENT_EVENTS.has(event)) return finish(400);
-        log.info(`page-${event}`, { anchor: typeof value.anchor === 'string' ? value.anchor.slice(0, 16) : undefined });
-        finish(204);
-      });
-    },
-  }));
+  // Panel diagnostics routes (client-log) live in their own module.
+  const diagnostics = createDiagnosticsRoutes({ ctx, log, clientEvents: CLIENT_EVENTS, register: registerRoute, track: trackRoute });
+  const [unregisterClientLog] = diagnostics.disposers;
   unregisterBootstrap = trackRoute(registerRoute({
     kind: 'exact', path: '/api/no996-openfilm/bootstrap',
     async handler(req, res) {
