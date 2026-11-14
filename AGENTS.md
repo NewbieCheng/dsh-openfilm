@@ -118,6 +118,8 @@ npm run check                      # 提交前：lint + test + docs/brand/templa
 
 ## 7. 证据入口
 
+**出事了先看 [`docs/playbooks/incident.md`](docs/playbooks/incident.md)**：症状 → 根因 → 怎么一眼分辨 → 现在靠什么挡住。最新的两次真机故障（插件 activate 抛错、MCP 端点 400 导致 ACP 全挂）都在里面。
+
 `POST /api/no996-openfilm/diagnose {projectId}`（面板静默 20 秒后自动贴出）；`%TEMP%\dsh-openfilm\plugin.log`（JSON Lines，自动脱敏）；`%TEMP%\dsh-openfilm-frames.jsonl`（每轮覆盖）；`%TEMP%\dsh-openfilm-preset.json`；`%TEMP%\dsh-openfilm-host.json`（重载后 `startedAt` 必须更新）。
 
 **不要靠猜形状**：ACP 字段以 `fake-acp-agent.mjs` 或真机日志为准。
