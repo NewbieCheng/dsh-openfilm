@@ -19,12 +19,13 @@ rot-if: 每个批次开始/结束、任何"待拍板"有结论
 
 | 项 | 内容 | 状态 |
 |---|---|---|
-| U1 模板选择弹窗转源码 | `shell-ui.js` 的弹窗搬进 `apps/desktop/chat/src`，走补丁 + 重建壳 | 待做（P0） |
-| U3 账号条/登录态转源码 | 同上；Host 只留接口 | 待做（P0） |
-| U5 故障卡/恢复卡转源码 | 一个条件组件，别等重渲染 | 待做（P0） |
-| U6 主题进构建 | 构建期 import，L1+L2 都不再运行期注入 CSS | 待做（P1） |
-| U2 环境检查卡转源码 | 依赖 Host 接口时序，随 U1 批 | 待做（P1） |
-| U4 登录首页进壳 | 动首屏分支，前面稳了再做 | 待做（P2） |
+| U5 故障卡/恢复卡转源码 | `apps/desktop/shell/RecoveryGate.tsx`，注入已删 | 源码完成 / 真机待验 |
+| U2 环境检查卡转源码 | `apps/desktop/shell/EnvironmentNotice.tsx`，注入已删 | 源码完成 / 真机待验 |
+| U1 模板选择弹窗转源码 | `apps/desktop/chat/src/components/TemplatePicker.tsx`；旧注入先让路不删 | 源码完成 / 真机待验 |
+| U4 登录首页进壳 | 构建期 `login:sync` + 壳内 import，界面实现仍是原 DOM | 已不再注入 / 真机待验 |
+| U3 账号条/登录态 | 本来就在 `WorkbenchAccount.tsx`（补丁） | 无需迁移 |
+| U6 主题进构建 | 发布产物由 `shell:bake` 烘进，运行时那份只是开发热更 | 无需迁移 |
+| U1 旧注入删除 | 真机验收通过后删掉 `shell-ui.js` 里的弹窗与让路判断 | 待做（验收后） |
 | U7 侧栏开关 | DSH 无源码，保持窄注入（ADR-0006） | 保持 |
 | 全路径回归 | 登录 → 引导 → 丢素材 → 开剪 → 导出 | 待做 |
 | O1 片型引导 | `OnboardingGate` + 偏好记忆已进壳 | 源码完成 / 真机待验 |
