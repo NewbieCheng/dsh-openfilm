@@ -21,6 +21,13 @@ npm run build          # src/studio-entry.js → client.js
 
 `npm run check` 必须全绿。它等价于 CI，本地红着就别发。
 
+版本号、CHANGELOG 小节、STATUS 的版本、锁文件版本、同名 tag —— 这五项由
+`npm run release:check` 一次核对（草稿阶段可 `-- --allow-dirty`）：
+
+```sh
+npm run release:check          # 净仓 + 版本一致 + CHANGELOG/STATUS 有小节 + tag 未占用
+```
+
 ## 2. 版本与记录
 
 1. `package.json` 的 `version` +1（语义：修 bug → patch，加能力 → minor，破坏契约 → major）；

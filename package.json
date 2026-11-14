@@ -38,7 +38,8 @@
     "upstream:fetch": "node scripts/upstream.mjs fetch",
     "upstream:verify": "node scripts/upstream.mjs verify",
     "shell:dev": "node scripts/upstream.mjs shell:dev",
-    "shell:bake": "node scripts/theme-bake.mjs"
+    "shell:bake": "node scripts/theme-bake.mjs",
+    "release:check": "node scripts/release-check.mjs"
   },
   "devDependencies": {
     "esbuild": "0.24.2"

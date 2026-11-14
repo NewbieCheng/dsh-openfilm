@@ -177,24 +177,50 @@ function testFiles() {
   return existsSync(dir) ? readdirSync(dir).filter((name) => name.endsWith('.test.mjs')) : []
 }
 
-export function collectModules() {
-  const tests = testFiles()
+export function exclusions() {
+  const file = join(ROOT, 'scripts', 'test-exclusions.json')
+  return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {}
+}
+
+/**
+ * Which tests import a module, by resolving every relative import in tests/ to a
+ * file. The old name heuristic (`tests/*editing*.test.mjs`) over- and under-reported:
+ * `routes/editing.mjs` was listed as untested while `editing-routes.test.mjs` imports
+ * it, and a file whose name merely contained the word counted as coverage.
+ */
+function testsByModule() {
+  const map = new Map()
+  for (const name of testFiles()) {
+    const file = join(ROOT, 'tests', name)
+    const text = readFileSync(file, 'utf8')
+    for (const match of text.matchAll(/from\s+'(\.[^']+)'/g)) {
+      const target = rel(join(dirname(file), match[1]))
+      if (!map.has(target)) map.set(target, new Set())
+      map.get(target).add(name)
+    }
+  }
+  return map
+}
+
+function collectModules() {
+  const importedBy = testsByModule()
+  const testNames = testFiles()
+  const excluded = exclusions()
   return sourceFiles()
     .map((file) => {
       const text = readFileSync(file, 'utf8')
-      const base = rel(file).replace(/^src\//, '').replace(/\.(mjs|js)$/, '')
-      const reasons = []
-      const byName = tests.filter((name) => name.includes(base))
-      if (byName.length) reasons.push(...byName)
-      if (base === 'index') {
-        const entry = tests.filter((name) => name.includes('entry') || name.includes('plugin'))
-        reasons.push(...entry)
-      }
+      const name = rel(file)
+      const imported = [...(importedBy.get(name) ?? [])].sort()
+      // Some tests pin a module by reading its source instead of importing it
+      // (route tables, declaration order). That is still coverage of a kind.
+      const reads = imported.length ? [] : testNames.filter(test => readFileSync(join(ROOT, 'tests', test), 'utf8').includes(name)).sort()
       return {
-        file: rel(file),
+        file: name,
         lines: text.split('\n').length - 1,
         exports: exportsOf(text),
-        tests: [...new Set(reasons)],
+        tests: imported,
+        reads,
+        excluded: typeof excluded[name] === 'string' ? excluded[name] : null,
       }
     })
     .sort((a, b) => b.lines - a.lines)
@@ -203,7 +229,8 @@ export function collectModules() {
 export function renderModules() {
   const modules = collectModules()
   const total = modules.reduce((sum, m) => sum + m.lines, 0)
-  const untested = modules.filter((m) => m.tests.length === 0)
+  const untested = modules.filter((m) => m.tests.length === 0 && m.reads.length === 0 && !m.excluded)
+  const excluded = modules.filter((m) => m.tests.length === 0 && m.reads.length === 0 && m.excluded)
   const lines = [
     HEADER(
       'reference-modules',
@@ -215,18 +242,27 @@ export function renderModules() {
     '# 模块清单（自动生成）',
     '',
     `> 生成命令：\`npm run docs:gen\`。${modules.length} 个模块、${total} 行。`,
-    `> **无同名测试**的模块：${untested.length} 个 —— 这是待补清单，不是失败项。`,
-    '> "同名测试"按 `tests/*<模块名>*.test.mjs` 匹配，只说明"有测试提到它"，不保证覆盖。',
+    `> 没有测试直接 import 的模块：${untested.length} 个（待补清单，不是失败项）；另有 ${excluded.length} 个已登记排除。`,
+    '> "测试"列 = 直接 import 该模块的测试文件，来自 `tests/**` 的实际 import 语句，不做名字猜测。',
+    '> 排除项写在 `scripts/test-exclusions.json`，每条必须带理由。',
     '',
     '| 模块 | 行数 | 导出 | 同名测试 |',
     '|---|---|---|---|',
   ]
   for (const module of modules) {
     const exports = module.exports.length ? module.exports.slice(0, 6).join(', ') + (module.exports.length > 6 ? '…' : '') : '—'
-    lines.push(`| \`${module.file}\` | ${module.lines} | ${exports} | ${module.tests.length ? module.tests.map((t) => `\`${t}\``).join('、') : '**无**'} |`)
+    const tested = module.tests.length
+      ? module.tests.map((t) => `\`${t}\``).join('、')
+      : module.reads.length ? `读源码：${module.reads.map((t) => `\`${t}\``).join('、')}`
+      : module.excluded ? `排除：${module.excluded}` : '**无**'
+    lines.push(`| \`${module.file}\` | ${module.lines} | ${exports} | ${tested} |`)
   }
-  lines.push('', '## 无同名测试', '')
+  lines.push('', '## 没有测试直接 import 的模块', '')
   for (const module of untested) lines.push(`- \`${module.file}\`（${module.lines} 行）`)
+  if (excluded.length) {
+    lines.push('', '## 已登记排除', '')
+    for (const module of excluded) lines.push(`- \`${module.file}\`：${module.excluded}`)
+  }
   lines.push('')
   return `${lines.join('\n')}\n`
 }

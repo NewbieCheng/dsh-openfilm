@@ -11,7 +11,7 @@ rot-if: 新增/删除 docs/ 下的顶层文档
 > 这个仓库的文档按**寿命**分层，不按主题堆在一个文件里。
 > 一条经验：事实几周不变，决策几月不变，进度每天变——混写在一起，整篇就会跟着进度一起烂。
 
-## 1. 四条车道
+## 1. 五条车道
 
 | 车道 | 放什么 | 寿命 | 目录 |
 |---|---|---|---|
@@ -20,6 +20,9 @@ rot-if: 新增/删除 docs/ 下的顶层文档
 | **参考** | 可以生成的事实：路由、环境变量、模块、层、登记表 | 随代码 | [`reference/`](reference/) |
 | **流程** | 改界面、发版、升上游、出事怎么办 | 稳定 | [`playbooks/`](playbooks/) |
 | **进度** | 现在到哪了 | 每天 | [`STATUS.md`](STATUS.md)、[`ROADMAP.md`](ROADMAP.md)、[`../CHANGELOG.md`](../CHANGELOG.md) |
+
+> **没有 `topics/` 车道。** 跨领域材料按性质归位：是决策进 `decisions/`，是稳定事实进 `reference/`，是步骤进 `playbooks/`。单独开一个"主题"目录，最后只会变成杂物抽屉。
+> 按功能写的文档放 [`features/`](features/)，一功能一篇（例：[`features/editing-delete.md`](features/editing-delete.md)）。
 
 **铁律**：进度只允许出现在最后一行那三个文件里。`ARCHITECTURE`、`reference/`、`playbooks/` 里出现"这个功能已经做到某版本"这类叙述即视为文档缺陷，`docs:check` 会失败。
 
