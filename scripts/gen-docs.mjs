@@ -267,11 +267,94 @@ export function renderModules() {
   return `${lines.join('\n')}\n`
 }
 
+
+// --- kit inventory ------------------------------------------------------------
+
+const readJson = (rel) => JSON.parse(readFileSync(join(ROOT, rel), 'utf8'))
+
+/**
+ * Counts are the fastest-rotting thing in prose: "18 个单元" is true until someone
+ * adds one, and nobody notices. They are also trivially derivable from the
+ * catalogs, so they live here and prose links here instead of restating them.
+ */
+export function renderKit() {
+  const units = readJson('vendor/templates/_kit/catalog.json').units
+  const styles = readJson('vendor/motion/styles/catalog.json')
+  const cards = readJson('vendor/motion/shotcards/catalog.json')
+
+  const families = new Map()
+  for (const [id, unit] of Object.entries(units)) {
+    const family = id.split('.')[0]
+    if (!families.has(family)) families.set(family, [])
+    families.get(family).push({ id, unit })
+  }
+
+  const templates = readdirSync(join(ROOT, 'vendor', 'templates'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name !== '_kit')
+    .map((entry) => {
+      const dir = join(ROOT, 'vendor', 'templates', entry.name)
+      const shotsDir = join(dir, 'shots')
+      const shots = existsSync(shotsDir) ? readdirSync(shotsDir).filter((name) => name.endsWith('.json')).length : 0
+      const meta = existsSync(join(dir, 'template.json')) ? JSON.parse(readFileSync(join(dir, 'template.json'), 'utf8')) : {}
+      return { name: entry.name, kit: meta.kit ?? '—', size: Array.isArray(meta.size) ? meta.size.join('×') : '—', title: meta.wallTitle ?? '', shots }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const totalUnits = Object.keys(units).length
+  const lines = [
+    '<!-- doc',
+    'id: reference-kit',
+    'reader: 做模板、挑风格、查镜头卡的人',
+    'fact-source: vendor/templates/_kit/catalog.json、vendor/motion/*/catalog.json、vendor/templates/*/template.json（scripts/gen-docs.mjs 生成）',
+    'checked: generated',
+    'rot-if: 单元/模板/风格/镜头卡增删（重新生成即可）',
+    '-->',
+    '',
+    '# 素材库与动效索引（自动生成）',
+    '',
+    '> 生成命令：`npm run docs:gen`。**数量只允许出现在这一页**，正文写"8 个单元""124 张卡"，',
+    '> 第二天就会错——需要数字就链接到这里，或者让脚本生成本页。',
+    '',
+    `## 1. 模板（${templates.length} 个）`,
+    '',
+    '| 模板 | 单元族 | 画布 | 镜头数 | 标题 |',
+    '|---|---|---|---|---|',
+    ...templates.map((t) => `| \`${t.name}\` | ${t.kit} | ${t.size} | ${t.shots} | ${t.title} |`),
+    '',
+    `## 2. 单元（${totalUnits} 个，${[...families.keys()].map((f) => `${f} ${families.get(f).length}`).join(' + ')}）`,
+    '',
+  ]
+
+  for (const [family, list] of families) {
+    lines.push(`### ${family}.*（${list.length}）`, '', '| 单元 | 种类 | 说明 |', '|---|---|---|')
+    for (const { id, unit } of list) {
+      const doc = String(unit.doc ?? '').split('。')[0]
+      lines.push(`| \`${id}\` | ${unit.kind ?? '—'} | ${doc} |`)
+    }
+    lines.push('')
+  }
+
+  lines.push(
+    '## 3. 动效',
+    '',
+    '| 项 | 数量 | 出处 |',
+    '|---|---|---|',
+    `| 整片风格 | ${styles.styles.length} | \`vendor/motion/styles/catalog.json\` |`,
+    `| 镜头卡 | ${cards.cards.length} | \`vendor/motion/shotcards/catalog.json\` |`,
+    `| 镜头卡分类 | ${Object.keys(cards.categories).length} | 同上 |`,
+    '',
+    '选风格与镜头卡的说明在 [`../MOTION.md`](../MOTION.md) 第 6 节（那一节也是生成的）。',
+    '',
+  )
+  return `${lines.join('\n')}\n`
+}
+
 // --- run ----------------------------------------------------------------------
 const targets = [
   ['docs/reference/api-routes.md', renderRoutes],
   ['docs/reference/env-vars.md', renderEnv],
   ['docs/reference/modules.md', renderModules],
+  ['docs/reference/kit.md', renderKit],
 ]
 
 function main() {

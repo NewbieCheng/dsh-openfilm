@@ -108,7 +108,7 @@ test('an agent that exits mid-request fails that request with a named code', asy
 test('a hung agent times out instead of hanging the panel', async () => {
   const client = startClient({ mode: 'hang-on-prompt', timeoutMs: 250 });
   await client.start();
-  await assert.rejects(client.prompt({ sessionId: 'session-fake-1', blocks: [] }), error => error.code === 'ACP_TIMEOUT');
+  await assert.rejects(withLiveLoop(client.prompt({ sessionId: 'session-fake-1', blocks: [] })), error => error.code === 'ACP_TIMEOUT');
   await client.close();
 });
 
@@ -118,6 +118,18 @@ test('requests after close are refused by name, not by crashing', async () => {
   await client.close();
   await assert.rejects(client.newSession({ cwd: 'C:\\fake' }), error => error.code === 'ACP_NOT_READY');
 });
+
+/**
+ * The client unref()s its request timers on purpose: a stuck ACP call must not keep
+ * the Host process alive. In a test that is the ONLY pending work, an unref'd timer
+ * lets the event loop drain before it fires, and node --test cancels the test with
+ * "Promise resolution is still pending" (seen on cold CI runners, never locally where
+ * other tests keep the loop busy). Racing against a real timer keeps the loop alive.
+ */
+const withLiveLoop = (promise, ms = 3000) => Promise.race([
+  promise,
+  new Promise((resolve, reject) => setTimeout(() => reject(new Error('promise never settled in ' + ms + 'ms')), ms)),
+]);
 
 function fakeChild({ stdinFails = false, answer = false } = {}) {
   const child = new EventEmitter();
@@ -149,7 +161,7 @@ test('a dead pipe on stdin is logged, not an unhandled crash', async () => {
   });
   // The write fails asynchronously on stdin. Before the guard this was an
   // unhandled 'error' event that killed the Host; now the call just times out.
-  await assert.rejects(client.start(), error => error.code === 'ACP_TIMEOUT');
+  await assert.rejects(withLiveLoop(client.start()), error => error.code === 'ACP_TIMEOUT');
 });
 
 test('a prompt gets its own, much longer budget than control calls', async () => {
@@ -162,7 +174,7 @@ test('a prompt gets its own, much longer budget than control calls', async () =>
     spawnChild: () => child,
   });
   await client.start();
-  await assert.rejects(client.prompt({ sessionId: 's', blocks: [] }), error => error.code === 'ACP_TIMEOUT');
+  await assert.rejects(withLiveLoop(client.prompt({ sessionId: 's', blocks: [] })), error => error.code === 'ACP_TIMEOUT');
   // The control budget is untouched: an unanswered list is still waiting.
   let listed = 'pending';
   client.listSessions().then(() => { listed = 'resolved'; }, () => { listed = 'rejected'; });

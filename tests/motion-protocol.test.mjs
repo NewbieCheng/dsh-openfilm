@@ -63,8 +63,8 @@ test('镜头卡：124 张，每张有 recipe 与分类', () => {
   }
 });
 
-test('风格索引：14 种都在，且写明搬运依赖', () => {
-  const doc = read('docs/STYLES.md');
+test('风格索引：14 种都在，且写明搬运依赖（已并入 MOTION.md）', () => {
+  const doc = read('docs/MOTION.md');
   for (const slug of ['01-flat-vector', '02-line-art', '10-synthwave', '22-hud']) assert.ok(doc.includes(slug), 'index lists ' + slug);
   assert.ok(doc.includes('搬样片要带的依赖'), 'index states porting deps');
 });

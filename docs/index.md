@@ -59,9 +59,8 @@ rot-if: 什么变了这篇就该重写
 | 文档 | 内容 |
 |---|---|
 | [`TEMPLATES.md`](TEMPLATES.md) | L3 影片/模板的构建与校验 |
-| [`MOTION.md`](MOTION.md) | 动效生产 |
-| [`STYLES.md`](STYLES.md) | 风格库 |
-| [`SHOT-CARDS.md`](SHOT-CARDS.md) | 镜头卡索引 |
+| [`MOTION.md`](MOTION.md) | 动效生产 + 风格库/镜头卡（后两节由 catalog 生成） |
+| [`reference/kit.md`](reference/kit.md) | 模板、单元、风格、镜头卡的数量与清单（生成；正文不写数） |
 | [`TRANSCRIBE.md`](TRANSCRIBE.md) | 本地口播转写 |
 | [`BRAND.md`](BRAND.md) | 品牌替换与法务边界 |
 | [`DSH-SHELL-INTEGRATION.md`](DSH-SHELL-INTEGRATION.md) | DSH 三栏外壳改造案例（插槽细节见 `dsh-ui-extension` skill） |

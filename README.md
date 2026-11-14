@@ -42,7 +42,7 @@
 | [docs/playbooks/upstream-bump.md](docs/playbooks/upstream-bump.md) | 维护者 | 三处 pin、补丁系列、升级与冲突 |
 | [docs/TEST-CHECKLIST.md](docs/TEST-CHECKLIST.md) | 验收者 | 真机验收清单 |
 
-专题：[模板](docs/TEMPLATES.md)、[动效](docs/MOTION.md)、[风格库](docs/STYLES.md)、[镜头卡](docs/SHOT-CARDS.md)、[口播转写](docs/TRANSCRIBE.md)、[品牌](docs/BRAND.md)、[DSH 外壳改造案例](docs/DSH-SHELL-INTEGRATION.md)。
+专题：[模板](docs/TEMPLATES.md)、[动效（含风格库与镜头卡）](docs/MOTION.md)、[口播转写](docs/TRANSCRIBE.md)、[品牌](docs/BRAND.md)、[DSH 外壳改造案例](docs/DSH-SHELL-INTEGRATION.md)。
 通用 skill（独立仓库）：[dsh-harness-remix](https://github.com/NewbieCheng/dsh-harness-remix)（DSH UI 改造 + 后端衔接）。
 
 ## 能力与边界

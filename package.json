@@ -29,7 +29,7 @@
     "smoke:system": "node scripts/system-smoke.mjs",
     "dev:styles": "node scripts/dev-styles.mjs",
     "brand:check": "node scripts/brand-check.mjs",
-    "docs:check": "node scripts/docs-check.mjs && node scripts/gen-docs.mjs --check",
+    "docs:check": "node scripts/docs-check.mjs && node scripts/gen-docs.mjs --check && node scripts/build-motion-index.mjs --check",
     "docs:gen": "node scripts/gen-docs.mjs",
     "status:check": "node scripts/status-check.mjs",
     "patches:split": "node scripts/split-patch.mjs",
