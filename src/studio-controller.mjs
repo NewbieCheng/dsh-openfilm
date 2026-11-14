@@ -78,6 +78,7 @@ import { readJsonBody } from './studio-controller/http-body.mjs';
 import { createRouter } from './studio-controller/router.mjs';
 import { createAssetRoutes } from './studio-controller/routes/assets.mjs';
 import { createChatRoutes } from './studio-controller/routes/chat.mjs';
+import { createBootstrapRoute } from './studio-controller/routes/bootstrap.mjs';
 import { createDiagnosticsRoutes } from './studio-controller/routes/diagnostics.mjs';
 import { createEditingRoutes } from './studio-controller/routes/editing.mjs';
 import { createSystemRoutes } from './studio-controller/routes/system.mjs';
@@ -797,7 +798,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   let unregister;
   let unregisterAttachment;
   let unregisterClientLog;
-  let unregisterBootstrap;
   let unregisterStandalone;
   let unregisterTemplatesPage;
   let unregisterDebugUrl;
@@ -911,60 +911,21 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // Panel diagnostics routes (client-log) live in their own module.
   const diagnostics = createDiagnosticsRoutes({ ctx, log, clientEvents: CLIENT_EVENTS, register: registerRoute, track: trackRoute });
   const [unregisterClientLog] = diagnostics.disposers;
-  unregisterBootstrap = trackRoute(registerRoute({
-    kind: 'exact', path: '/api/no996-openfilm/bootstrap',
-    async handler(req, res) {
-      res.setHeader('cache-control', 'no-store');
-      if (disposed) { res.writeHead(503).end('STUDIO_DISPOSED'); return; }
-      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end(); return; }
-      // Use DSH's own Host/Origin and authenticated-peer fence. It intentionally
-      // accepts a missing Origin when the authenticated request is otherwise
-      // trusted; requiring an Origin here rejects valid local browser requests.
-      const admission = ctx.connection.admit({ headers: req.headers });
-      if ('rejection' in admission) {
-        res.writeHead(admission.rejection).end(admission.rejection === 403 ? 'DSH_ORIGIN_REJECTED' : 'DSH_SESSION_REQUIRED'); return;
-      }
-      if (admission.peer.id !== ctx.connection.browserPeer.id) {
-        res.writeHead(403).end('DSH_BROWSER_REQUIRED'); return;
-      }
-      const bootStarted = Date.now();
-      let stage = 'validate';
-      try {
-        // Desktop serves its UI from a privileged app scheme and forwards this
-        // already-authenticated call to the Host. It does not share DSH's
-        // browser cookie with loopback frames, so the proxy uses a one-time
-        // desktop bootstrap instead. Normal browser mode keeps its own origin.
-        const surface = req.headers['x-no996-surface'];
-        const desktop = surface === 'dsh-app://app' || surface === 'app://app';
-        const browser = desktop ? null : new URL(req.headers.origin || `http://${req.headers.host}`);
-        if (!desktop && (browser.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(browser.hostname) || browser.port !== origin.port)) {
-          res.writeHead(403).end('DSH_ORIGIN_REJECTED'); return;
-        }
-        log.info('bootstrap-start', { desktop });
-        stage = 'studio';
-        await runtime.ensureStarted();
-        if (disposed || !upstream) { log.warn('bootstrap-unavailable', { stage, disposed }); res.writeHead(503).end(); return; }
-        stage = 'proxy';
-        const proxy = await proxyFor(desktop ? surface : browser.origin, desktop);
-        if (disposed) { log.warn('bootstrap-unavailable', { stage, disposed }); res.writeHead(503).end(); return; }
-        stage = 'response';
-        await proxy.bootstrap(res);
-        log.info('bootstrap-finish', { status: res.statusCode, ms: Date.now() - bootStarted, desktop });
-      } catch (error) {
-        // Log only a bounded allowlisted error code: messages may contain bearer keys.
-        // OFFICIAL_SHELL_UNAVAILABLE belongs here: it is the one failure a person can
-        // act on (the bundled shell does not match the pinned OpenFilm kernel), and
-        // without it the log only ever said "OTHER".
-        const allowed = ['STUDIO_START', 'STUDIO_CLOSE', 'STUDIO_DEPENDENCY', 'OFFICIAL_SHELL_UNAVAILABLE'];
-        const code = allowed.includes(error?.code) ? error.code : 'OTHER';
-        log.warn('bootstrap-failed', { stage, code, ms: Date.now() - bootStarted });
-        if (!res.headersSent) res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' });
-        // The panel shows this body beside the status: naming the code is the
-        // difference between "broken" and "the shell and the kernel disagree".
-        if (!res.writableEnded) res.end(`Studio is unavailable (${code})`);
-      }
-    },
-  }));
+  // Bootstrap (auth → Studio up → proxy writes the editor origin) lives in its
+  // own module; `origin`, `upstream` and the proxy are live values, so they are
+  // passed as getters.
+  const bootstrap = createBootstrapRoute({
+    ctx,
+    register: registerRoute,
+    track: trackRoute,
+    log,
+    origin,
+    isDisposed: () => disposed,
+    getUpstream: () => upstream,
+    ensureStudioStarted: () => runtime.ensureStarted(),
+    proxyFor,
+  });
+  const [unregisterBootstrap] = bootstrap.disposers;
   // The sidebar's "剪辑区" dropdown: every Studio project (a folder), with its
   // editing conversations and the DSH Session the panel happens to be bound to.
   // Read-only and cheap: the project list comes from Studio, the binding from

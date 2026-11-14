@@ -8,7 +8,7 @@ rot-if: 拆分完成或策略改变
 
 # ADR-0008：两个巨型闭包按职责拆开，分两步走
 
-- 状态：生效（两步均已落地；14 条路由已迁 11 条，余 3 条）
+- 状态：生效（两步均已落地；14 条路由已迁 12 条，余 2 条）
 - 日期：2026-11-14
 
 ## 背景
@@ -51,18 +51,17 @@ rot-if: 拆分完成或策略改变
 | `src/studio-controller/routes/chat.mjs` | mcp（唯一跳过 cookie 准入的路由） | 完成（1 条） |
 | `src/studio-controller/routes/editing.mjs` | editing-sessions/prefs/archive/delete/delete-project | 完成（5 条） |
 
-控制器 1,558 → 1,141 行。剩下的 3 条路由目标形态：
+控制器 1,558 → 1,105 行。剩下的 2 条路由目标形态：
 
 ```text
 src/studio-controller/
   index.mjs               createStudioController：构图 + 装配（目标 < 250 行）
   router.mjs              registerRoute/trackRoute/rollback（TDZ 保护留在这里）
   routes/editing.mjs      editing-sessions、editing-delete-project、archive
-  routes/diagnostics.mjs  diagnose、bootstrap
+  routes/diagnostics.mjs  diagnose（依赖 lastProxy/turnLog/桥接状态）
   routes/debug.mjs        debug-url（依赖 runtime/proxyFor/debugBridge，最重）
-  routes/pages.mjs        standalone、templates 页（内联 HTML）
 
-已迁：system×3、client-log、attachment、mcp、editing×5。
+已迁：system×3、client-log、attachment、mcp、editing×5、bootstrap。
 ```
 
 每个 `registerX(deps)` 接收显式依赖（ctx、log、proxy、officialRpc、sessions…），不再捕获闭包。迁移顺序：先建 `router.mjs` 与依赖对象，再逐组搬路由，**每搬一组重跑 614 条测试**。
