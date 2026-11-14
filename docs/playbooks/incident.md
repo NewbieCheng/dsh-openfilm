@@ -2,7 +2,7 @@
 id: playbooks-incident
 reader: 值班的人、排查 bug 的人
 fact-source: 真实故障记录（2026-11）、%TEMP%/dsh-openfilm/plugin.log、docs/architecture
-checked: 0.15.3
+checked: 0.15.4
 rot-if: 出现新的故障类别，或某个根因被结构性消除
 -->
 
@@ -24,6 +24,43 @@ rot-if: 出现新的故障类别，或某个根因被结构性消除
 判据：**重载后 `plugin.log` 的 `startedAt` 更新**才算真的重载了。管理器返回 `restart-required` 时，如实告诉用户要重启，别声称已生效。
 
 ## 2. 故障档案
+
+### 2026-11-14 · 「一直在处理中」：子进程留在退役默认模型上
+
+**现象**：面板里提问后一直「仍在处理 36s」，不报错、没有回复、没有思考，等多久都一样。
+
+**根因**：ACP 子进程 session 打开后，若 `ctx.agentDefaultModel.currentSelection()` 存在但没交出
+值（或该 Host 版本没有这个服务），Host 的 `adoptDefaultSelection` 就什么都不设，子进程留在它自己
+退役的默认 `deepseek-official/deepseek-v4-flash` 上。这个模型既不回话也不报错，turn 永远跑不完。
+
+**怎么分辨**：`plugin.log` 有 `acp-default-effort` 但**没有** `acp-default-model`，且这一轮日志里
+只有 `acp-ready` 没有 `agent-trace`。
+
+**改法**：拿不到 Host 选择时读 profile 的 `agent-default-model`
+（`readProfileDefaultModel`，`src/acp-profile-models.mjs`），子进程一上来就是侧边栏那个模型与
+思考强度；`tests/acp-profile-models.test.mjs` 覆盖有/没有两种情况。
+
+**边界**：只读了 desktop 那份 profile 的 patch；`ctx.agentDefaultModel` 真给出值时仍以它为准。
+
+### 2026-11-14 · 思考过程看不见：先分「没发」还是「没显示」
+
+**现象**：对话能回，但从不出现思考过程，只有「仍在处理」。
+
+**实测结论**（不是猜的）：
+
+| 模型 | 一轮里 `agent_thought_chunk` | 回复 |
+|---|---|---|
+| `opencode-go/deepseek-v4.1-flash`（侧边栏默认） | **0 个** | 正常 |
+| `deepseek-official/deepseek-flash` + 思考强度 max | 正常，实测 82 字推理 | 正常 |
+
+面板渲染没问题：官方 `ThoughtRow` 流式时展开、一轮结束折叠成「思考 N 秒」。
+**要看到思考，模型选 DeepSeek-V4.1-Flash（官方）。** 侧边栏用 opencode-go 的话，那边同样不会有思考。
+
+**探针方法**（30 行，不花 GUI，也不改任何文件）：直接拉起 `dsh --profile acp`，`initialize` →
+`session/new` → `session/set_config_option` → `session/prompt`，数 `session/update` 的 kinds。
+注意那个模型选项是**分组**的（`options[].options[]`），照下标取会拿到 `null`。
+
+**可观测**：面板每轮把收到的 kinds 回报 Host，现在写进 `plugin.log`（`agent-trace`）。
 
 ### 2026-11-14 · 对话全挂、模型只剩「默认」：路由 handler 里一个未声明的变量
 
@@ -145,6 +182,8 @@ UI 完全由 `/api/local-models` 的数据驱动，所以**不需要重建 Studi
 | 双实例 | profile 里同时有用户层与 bundle 条目，两个实例都 apply，第二个抛 "already registered"，整个插件 failed | 只留一个条目 |
 | TDZ | 路由注册块写在 `const trackRoute` 之前 | `Cannot access 'trackRoute' before initialization`，apply 抛错 = 整个插件失败 |
 | 拆分漏参 | 控制器拆成路由模块后，handler 读了作用域里已不存在的变量（`disposed` vs `isDisposed`） | 400 + 自己设的响应头；真调一次 handler 的测试才能抓到 |
+| 模型假设 | 子进程留在退役默认模型上 → 不报错也不回话，永远「处理中」 | 启动即同步 profile 的 `agent-default-model`；日志里必须有 `acp-default-model` |
+| 能力假设 | 以为「有思考选项」＝「会发思考」；不同 provider 返回 0 个 thought chunk | 用 acp 探针数 kinds，别用菜单猜 |
 
 ## 4. 新增一条故障记录
 

@@ -2,7 +2,7 @@
 id: decisions
 reader: 维护者、要推翻某个设计的人
 fact-source: docs/decisions/README.md 的历史条目（已迁入）、CHANGELOG、源码
-checked: 0.15.3
+checked: 0.15.4
 rot-if: 新增或废弃一条 ADR
 -->
 

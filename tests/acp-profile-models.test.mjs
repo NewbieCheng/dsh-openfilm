@@ -63,3 +63,39 @@ test('a user entry in the acp patch survives a re-sync', () => {
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('the sidebar model is read from the profile patch, so the child is not left on its retired default', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { readProfileDefaultModel } = await import('../src/acp-profile-models.mjs');
+  const home = mkdtempSync(join(tmpdir(), 'dsh-profile-model-'));
+  const profile = join(home, 'profiles', 'desktop');
+  mkdirSync(profile, { recursive: true });
+  writeFileSync(join(profile, 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['dsh-openfilm'] } } }));
+  writeFileSync(join(profile, 'cordis.patch.yml'), [
+    '- id: agent-default-model',
+    '  name: "@deepseek-ai/dsh-agent-default-model"',
+    '  config:',
+    '    provider: opencode-go',
+    '    model: deepseek-v4.1-flash',
+    '    reasoningEffort: max',
+    '- id: llm-pi-ai',
+    '  name: "@deepseek-ai/dsh-llm-pi-ai"',
+    '  config: {}',
+    '',
+  ].join('\n'));
+  assert.deepEqual(readProfileDefaultModel({ env: { DSH_HOME: home }, home }), {
+    provider: 'opencode-go', model: 'deepseek-v4.1-flash', reasoningEffort: 'max',
+  });
+
+  const empty = mkdtempSync(join(tmpdir(), 'dsh-profile-none-'));
+  assert.equal(readProfileDefaultModel({ env: { DSH_HOME: empty }, home: empty }), null);
+});
+
+test('the controller falls back to that reader when the Host exposes no selection service', () => {
+  const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const source = read('src/studio-controller.mjs');
+  assert.match(source, /import \{ readProfileDefaultModel \} from '\.\/acp-profile-models\.mjs'/);
+  assert.match(source, /return readProfileDefaultModel\(\) \?\? undefined;/);
+});

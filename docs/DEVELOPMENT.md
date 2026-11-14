@@ -2,7 +2,7 @@
 id: development
 reader: 新开发者、智能体
 fact-source: package.json、cordis.patch.yml、src/*.mjs、scripts/*
-checked: 0.15.3
+checked: 0.15.4
 rot-if: 启动时序、请求路径、模块职责或构建方式变化
 -->
 

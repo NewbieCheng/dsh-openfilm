@@ -1,14 +1,14 @@
 # AGENTS.md — dsh-openfilm / No996 Studio
 
-给在本仓工作的智能体的操作手册。人读 [`README.md`](README.md)；架构与重载 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)；改界面 [`docs/playbooks/ui-change.md`](docs/playbooks/ui-change.md)；上游 [`docs/playbooks/upstream-bump.md`](docs/playbooks/upstream-bump.md)；品牌 [`docs/BRAND.md`](docs/BRAND.md)；架构 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；路线 [`docs/ROADMAP.md`](docs/ROADMAP.md)；决策与故障 [`docs/decisions/README.md`](docs/decisions/README.md)。
+给在本仓工作的智能体的操作手册。人读 [`README.md`](README.md)；重载见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)；改界面 [`docs/playbooks/ui-change.md`](docs/playbooks/ui-change.md)；上游 [`docs/playbooks/upstream-bump.md`](docs/playbooks/upstream-bump.md)；品牌 [`docs/BRAND.md`](docs/BRAND.md)；架构 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；路线 [`docs/ROADMAP.md`](docs/ROADMAP.md)；决策与故障 [`docs/decisions/README.md`](docs/decisions/README.md)。
 
-> 被 `openfilm-video-editing` 预设的 `@deepseek-ai/dsh-agent-instructions` 读入（`maxBytes: 65536`）。细节写进 `docs/`，这里只留"不知道就会犯错"的部分。
+> 由 `openfilm-video-editing` 预设读入。细节写进 `docs/`，这里只留"不知道就会犯错"的部分。
 
 ---
 
 ## 0. 一句话
 
-把官方 **OpenFilm 0.3.2** 工作台封装成可分发的 **DSH 插件**：Host 拉起官方 Studio 并反向代理，浏览器用 `shell.overlay` 常驻 iframe，官方对话由 Host 交给 `dsh --profile acp` 子进程（会话、模型、审批、思考、续聊都是 DSH 的）。当前 `0.15.3`（发布包 `0.12.1`）。仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。
+把官方 **OpenFilm 0.3.2** 工作台封装成可分发的 **DSH 插件**：Host 拉起官方 Studio 并反向代理，浏览器用 `shell.overlay` 常驻 iframe，官方对话由 Host 交给 `dsh --profile acp` 子进程（会话、模型、审批、思考、续聊都是 DSH 的）。当前 `0.15.4`。仓库 `NewbieCheng/dsh-openfilm`，分支 `main`。
 
 ---
 
@@ -118,7 +118,7 @@ npm run check                      # 提交前：lint + test + docs/brand/templa
 
 ## 7. 证据入口
 
-**出事了先看 [`docs/playbooks/incident.md`](docs/playbooks/incident.md)**：症状 → 根因 → 怎么一眼分辨 → 现在靠什么挡住。最新的两次真机故障（插件 activate 抛错、MCP 端点 400 导致 ACP 全挂）都在里面。
+**出事了先看 [`docs/playbooks/incident.md`](docs/playbooks/incident.md)**：症状 → 根因 → 怎么一眼分辨 → 现在靠什么挡住。
 
 `POST /api/no996-openfilm/diagnose {projectId}`（面板静默 20 秒后自动贴出）；`%TEMP%\dsh-openfilm\plugin.log`（JSON Lines，自动脱敏）；`%TEMP%\dsh-openfilm-frames.jsonl`（每轮覆盖）；`%TEMP%\dsh-openfilm-preset.json`；`%TEMP%\dsh-openfilm-host.json`（重载后 `startedAt` 必须更新）。
 

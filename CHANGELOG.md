@@ -1,5 +1,20 @@
 # 更新记录
 
+## 0.15.4 —— 「一直在处理中」的子进程模型 + 思考过程看不见的实测结论
+
+- **对话卡在「仍在处理」**：子进程 session 打开后，若 DSH 侧没交出当前模型，它留在自己退役的默认
+  `deepseek-official/deepseek-v4-flash` 上，这个模型既不回话也不报错，turn 永远在跑。现在
+  `defaultSelection` 在拿不到 Host 选择时**读 profile 的 `agent-default-model`**
+  （`readProfileDefaultModel`），子进程一上来就是侧边栏那个模型 + 思考强度。
+- **思考过程看不见**：实测结论——`opencode-go/deepseek-v4.1-flash` 这条线跑完一轮
+  **0 个 `agent_thought_chunk`**；`deepseek-official/deepseek-flash` 正常返回（实测 82 字推理）。
+  面板渲染没问题（官方 `ThoughtRow` 流式时展开、结束后折叠）。要看到思考，模型选
+  **DeepSeek-V4.1-Flash（官方）**。
+- **可观测**：面板每轮把收到的 `sessionUpdate` 种类回报 Host，现在写进 `plugin.log`
+  （`agent-trace`），"有没有 thought chunk"不用再猜。
+- 探针方法写进 [`docs/playbooks/incident.md`](docs/playbooks/incident.md)：直接拉一个
+  `dsh --profile acp` 子进程，数 kinds，不花 GUI。
+
 ## 0.15.3 —— 0.15.2 的诊断是错的：真凶是 handler 里一个未声明的变量
 
 - 0.15.2 把 `/api/no996-openfilm/mcp` 当成 DSH 保留路径改了名。**换名后 400 依旧**，说明问题不在路径。

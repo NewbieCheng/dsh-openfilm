@@ -2,7 +2,7 @@
 id: architecture
 reader: 开发者、智能体
 fact-source: index.js、src/studio-*.mjs、cordis.patch.yml、DSH 的 Cordis 契约
-checked: 0.15.3
+checked: 0.15.4
 rot-if: 进程模型、对话边界、面板宿主方式变化
 -->
 

@@ -89,3 +89,40 @@ export function applyAcpModelProviders({ env = process.env, home = homedir(), lo
   }
   return { patched: true, providers: blocks.length };
 }
+
+/**
+ * The model the person uses in the sidebar, read from the profile that hosts this
+ * plugin: `<profile>/cordis.patch.yml` → the `agent-default-model` entry.
+ *
+ * Why read the file: `ctx.agentDefaultModel.currentSelection()` is not present in
+ * every Host build, and when it is missing the child keeps its own retired
+ * default (`deepseek-official/deepseek-v4-flash`), which answers nothing — the
+ * turn sits on "still working" forever. A file read costs nothing and the value
+ * is the same one the sidebar shows.
+ *
+ * @returns {{ provider: string, model: string, reasoningEffort?: string } | null}
+ */
+export function readProfileDefaultModel({ env = process.env, home = homedir() } = {}) {
+  const active = activeProfileDir({ env, home });
+  if (!active) return null;
+  let source = '';
+  try { source = readFileSync(join(active, 'cordis.patch.yml'), 'utf8'); } catch { return null; }
+  const blocks = [];
+  let current = null;
+  for (const line of source.split('\n')) {
+    if (/^- id: /.test(line)) { if (current !== null) blocks.push(current); current = line; }
+    else if (current !== null) current += '\n' + line;
+  }
+  if (current !== null) blocks.push(current);
+  const block = blocks.find(value => /^- id: agent-default-model\b/m.test(value));
+  if (!block) return null;
+  const field = name => {
+    const match = new RegExp(`^\\s+${name}:\\s*(\\S+)\\s*$`, 'm').exec(block);
+    return match ? match[1].replace(/^['"]|['"]$/g, '') : undefined;
+  };
+  const provider = field('provider');
+  const model = field('model');
+  if (!provider || !model) return null;
+  const reasoningEffort = field('reasoningEffort');
+  return reasoningEffort ? { provider, model, reasoningEffort } : { provider, model };
+}

@@ -2,7 +2,7 @@
 id: ADR-0001-repo-boundary
 reader: 维护者
 fact-source: package.json 的 files/dsh.bundle、cordis.patch.yml
-checked: 0.15.3
+checked: 0.15.4
 rot-if: 并入工作台、或改变分发形态
 -->
 

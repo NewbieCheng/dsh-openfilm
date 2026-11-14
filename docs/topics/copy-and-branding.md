@@ -2,7 +2,7 @@
 id: topics-copy-and-branding
 reader: 改文案、换产品名、做英文版的人
 fact-source: brand/brand.json、src/brand.mjs、locale/zh.json、assets/shell-ui.js、patches/series.json
-checked: 0.15.3
+checked: 0.15.4
 rot-if: 文案归属层变化、patches 系列重组、新增语言
 -->
 

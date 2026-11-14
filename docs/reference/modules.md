@@ -8,14 +8,14 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 # 模块清单（自动生成）
 
-> 生成命令：`npm run docs:gen`。111 个模块、15508 行。
+> 生成命令：`npm run docs:gen`。111 个模块、15560 行。
 > 没有测试直接 import 的模块：23 个（待补清单，不是失败项）；另有 1 个已登记排除。
 > "测试"列 = 直接 import 该模块的测试文件，来自 `tests/**` 的实际 import 语句，不做名字猜测。
 > 排除项写在 `scripts/test-exclusions.json`，每条必须带理由。
 
 | 模块 | 行数 | 导出 | 同名测试 |
 |---|---|---|---|
-| `src/studio-controller.mjs` | 1049 | createStudioController | 读源码：`declaration-order.test.mjs`、`mcp-endpoint-path.test.mjs`、`route-registration-order.test.mjs`、`sidebar-untouched.test.mjs`、`system-routes.test.mjs` |
+| `src/studio-controller.mjs` | 1064 | createStudioController | 读源码：`acp-profile-models.test.mjs`、`declaration-order.test.mjs`、`mcp-endpoint-path.test.mjs`、`route-registration-order.test.mjs`、`sidebar-untouched.test.mjs`、`system-routes.test.mjs` |
 | `src/sidebar-editing.mjs` | 936 | EDITING_LABEL, installWorkspaceSwitch | `sidebar-editing-rows.test.mjs` |
 | `src/studio-proxy.mjs` | 852 | startStudioProxy | `panel-sse-e2e.test.mjs`、`proxy-error-sanitize.test.mjs`、`studio-proxy-files.test.mjs`、`theme-injection.test.mjs` |
 | `src/acp-agent-service.mjs` | 561 | catalogFromConfigOptions, createAcpAgentService | `acp-agent-service.test.mjs`、`acp-catalog.test.mjs`、`acp-rpc-round-trip.test.mjs`、`panel-sse-e2e.test.mjs` |
@@ -51,6 +51,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/official-chat-rpc.mjs` | 140 | createOfficialChatRpc | `acp-rpc-round-trip.test.mjs`、`official-chat-rpc.test.mjs` |
 | `src/auth-bridge.mjs` | 134 | dispatchAuthAction, registerAuthBridge | `workbench-auth.test.mjs` |
 | `src/workspace-archive.mjs` | 131 | createArchiveWatcher | `workspace-archive.test.mjs` |
+| `src/acp-profile-models.mjs` | 128 | activeProfileDir, applyAcpModelProviders, providerBlocks, readProfileDefaultModel | `acp-profile-models.test.mjs` |
 | `src/login-remember.mjs` | 124 | createLoginRememberStore | `login-remember.test.mjs` |
 | `src/asr-wav.mjs` | 123 | openWav, parseWavHeader | `asr-wav.test.mjs` |
 | `src/official-project-scope.mjs` | 122 | OfficialProjectScope | **无** |
@@ -75,7 +76,6 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/brand.mjs` | 96 | brandCssVars, brandVersion, getBrand, replaceTitle, validateBrand | `brand.test.mjs` |
 | `src/host-components.mjs` | 96 | createHostComponentDetector | `host-components.test.mjs` |
 | `src/asr-segments.mjs` | 95 | SEGMENT_LIMITS, normalizeSegments, planSegments | `asr-segments.test.mjs` |
-| `src/acp-profile-models.mjs` | 91 | activeProfileDir, applyAcpModelProviders, providerBlocks | `acp-profile-models.test.mjs` |
 | `src/asr-sensevoice.mjs` | 89 | createSenseVoiceRecognizer, loadSherpa | **无** |
 | `src/download-sources.mjs` | 89 | MODEL_BASES, MODEL_REPO, TOOL_SOURCES, augmentPath, knownBinaryDirs, modelBases… | `download-sources.test.mjs` |
 | `src/studio-controller/routes/diagnose.mjs` | 88 | createDiagnoseRoute | `diagnose-route.test.mjs` |

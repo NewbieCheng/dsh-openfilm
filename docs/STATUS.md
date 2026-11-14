@@ -2,7 +2,7 @@
 id: status
 reader: 所有人（"现在到哪了"）
 fact-source: package.json 的 version、CHANGELOG.md、git log、playbooks/manual-acceptance.md 的待验项
-checked: 0.15.3
+checked: 0.15.4
 rot-if: 每次发版、每个批次结束、任何"待验"变"已验证"
 -->
 
@@ -15,7 +15,7 @@ rot-if: 每次发版、每个批次结束、任何"待验"变"已验证"
 
 | 项 | 值 |
 |---|---|
-| 仓库版本 | **0.15.3**（`package.json`） |
+| 仓库版本 | **0.15.4**（`package.json`） |
 | 最近发布包 | 0.12.1（据 `AGENTS.md`；发版前在 Releases 页核对一次） |
 | 运行基线 | DSH 0.15.x、Node ≥ 22.8 |
 

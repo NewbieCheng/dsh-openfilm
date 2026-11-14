@@ -72,6 +72,7 @@ import { createLoginRememberStore } from './login-remember.mjs';
 import { createArchiveWatcher } from './workspace-archive.mjs';
 import { createPluginLog } from './plugin-log.mjs';
 import { createBridgeTrace } from './bridge-trace.mjs';
+import { readProfileDefaultModel } from './acp-profile-models.mjs';
 import { openProjectPermissions, FULL_ACCESS, WORKSPACE_WRITE } from './official-permission.mjs';
 import { createProjectFiles } from './project-files.mjs';
 import { readJsonBody } from './studio-controller/http-body.mjs';
@@ -332,6 +333,11 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       // envelope reached the panel, not to log what the model said.
       const projectId = typeof payload?.projectId === 'string' ? payload.projectId : '';
       if (!/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw Object.assign(new Error('unknown project'), { code: 'TRACE_INPUT' });
+      // The page's counts, in the log too: "no thinking shown" is answered by
+      // whether `agent_thought_chunk` appears here, without a live panel.
+      const kinds = payload?.kinds && typeof payload.kinds === 'object' ? payload.kinds : {};
+      const summary = Object.fromEntries(Object.entries(kinds).slice(0, 8).map(([key, value]) => [String(key).slice(0, 32), Number(value) || 0]));
+      log.info('agent-trace', { projectId, seen: Number(payload?.seen) || 0, kinds: summary });
       return { ok: bridgeTrace.panel(projectId, { seen: payload?.seen, kinds: payload?.kinds }) };
     }
     if (channel === 'client:log') {
@@ -617,7 +623,16 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     approvals,
     // The panel starts on the model the person already chose for DSH, not on the
     // acp profile's own default.
-    defaultSelection: () => { try { return ctx.agentDefaultModel?.currentSelection?.(); } catch { return undefined; } },
+    defaultSelection: () => {
+      // The sidebar's current model, when this Host build exposes it. Otherwise the
+      // profile's own `agent-default-model` entry: without it the child keeps its
+      // retired default, which answers nothing and leaves the turn "still working".
+      try {
+        const current = ctx.agentDefaultModel?.currentSelection?.();
+        if (current && (current.provider || current.model)) return current;
+      } catch { /* fall through to the profile */ }
+      return readProfileDefaultModel() ?? undefined;
+    },
     // The panel's permission row is the child's sandbox too: DSH reads the mode
     // from the environment at boot, so the child is spawned with the preset the
     // person chose here.
