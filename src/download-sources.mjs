@@ -12,7 +12,7 @@
  * model.int8.onnx + tokens.txt, not the PyTorch checkpoint ModelScope hosts),
  * so it is not listed there; NO996_OPENFILM_ASR_BASE_URL still overrides all.
  */
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
 
 const FFMPEG_VERSION = 'b6.0';
 const FFPROBE_VERSION = '3.1.0';
@@ -66,9 +66,12 @@ export function knownBinaryDirs(platform = process.platform, env = process.env) 
   if (platform === 'darwin') return ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin'];
   if (platform === 'win32') {
     const dirs = [];
-    if (env.LOCALAPPDATA) dirs.push(join(env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links'));
-    if (env.USERPROFILE) dirs.push(join(env.USERPROFILE, 'scoop', 'shims'));
-    if (env.ProgramData) dirs.push(join(env.ProgramData, 'chocolatey', 'bin'));
+    // The platform argument is explicit, so the separator must be too: on a POSIX
+    // host `join()` would turn C:\\Users\\x into C:\\Users\\x/Microsoft/... and every
+    // caller comparing Windows paths would silently get nothing.
+    if (env.LOCALAPPDATA) dirs.push(win32.join(env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links'));
+    if (env.USERPROFILE) dirs.push(win32.join(env.USERPROFILE, 'scoop', 'shims'));
+    if (env.ProgramData) dirs.push(win32.join(env.ProgramData, 'chocolatey', 'bin'));
     return dirs;
   }
   return ['/usr/local/bin', '/usr/bin', '/snap/bin'];
