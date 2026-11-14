@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.15.3 —— 0.15.2 的诊断是错的：真凶是 handler 里一个未声明的变量
+
+- 0.15.2 把 `/api/no996-openfilm/mcp` 当成 DSH 保留路径改了名。**换名后 400 依旧**，说明问题不在路径。
+- 真正的根因：路由拆模块时，`createChatRoutes` 的入参叫 `isDisposed`，handler 里却写 `if (disposed)`。每次请求都在 `res.setHeader('cache-control','no-store')` 之后抛 ReferenceError，Host 回 400 空 body（还带着我们刚设的头），ACP 子进程连不上 → `session/new` 失败 → 模型、对话、思考强度全没了。
+- 修：`isDisposed()`。新增 `tests/chat-route.test.mjs` 直接调 handler，覆盖 405 / 503 / 200 / 500。
+- 保留 `/mcp-host` 这个名字（避免和 DSH 的 MCP 约定撞名），但注释改成事实：改名不是修复。
+- 保留 `mcp-self-check`：这次正是它把 400 摆到台面上，不用再靠猜。
+- [`docs/playbooks/incident.md`](docs/playbooks/incident.md) 的条目按真实根因重写，并把"先误判成保留路径"写进教训。
+
 ## 0.15.2 —— 修 ACP 全挂：MCP 端点占了 DSH 的保留路径
 
 - 症状：面板里 `OpenFilm capability unavailable: agent:prompt [503] ACP_REQUEST_FAILED`，模型菜单只剩「默认」，对话发不出去；日志每 2 秒一轮 `mcp-client(no996-openfilm): initial connection or tool synchronization failed`。

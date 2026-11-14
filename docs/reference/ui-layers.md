@@ -2,7 +2,7 @@
 id: ui-layers
 reader: 改界面的人、智能体
 fact-source: src/studio-entry.js、src/theme.mjs、DSH 客户端包（source map）、推进记录见 ADR-0002/0006
-checked: 0.15.2
+checked: 0.15.3
 rot-if: 层数变化、DSH 为侧栏开出官方插槽、或上游提供源码
 -->
 

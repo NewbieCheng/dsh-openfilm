@@ -2,7 +2,7 @@
 id: playbooks-ui-change
 reader: 改界面的人、智能体
 fact-source: docs/reference/ui-layers.md、src/theme.mjs、assets/theme/*.css
-checked: 0.15.2
+checked: 0.15.3
 rot-if: 手段分级变化，或出现新的界面层
 -->
 

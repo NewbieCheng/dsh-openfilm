@@ -2,7 +2,7 @@
 id: ADR-0007-docs-and-baseline
 reader: 维护者
 fact-source: docs/index.md、scripts/docs-check.mjs、.github/workflows/ci.yml
-checked: 0.15.2
+checked: 0.15.3
 rot-if: 文档分层被推翻，或 CI 不再是唯一守门人
 -->
 

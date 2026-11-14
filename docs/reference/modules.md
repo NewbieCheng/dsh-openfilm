@@ -8,7 +8,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 # 模块清单（自动生成）
 
-> 生成命令：`npm run docs:gen`。111 个模块、15504 行。
+> 生成命令：`npm run docs:gen`。111 个模块、15508 行。
 > 没有测试直接 import 的模块：23 个（待补清单，不是失败项）；另有 1 个已登记排除。
 > "测试"列 = 直接 import 该模块的测试文件，来自 `tests/**` 的实际 import 语句，不做名字猜测。
 > 排除项写在 `scripts/test-exclusions.json`，每条必须带理由。
@@ -104,10 +104,10 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/template-bridge.mjs` | 50 | registerTemplateBridge | `template-bridge.test.mjs` |
 | `src/studio-controller/router.mjs` | 47 | createRouter | `route-registration-order.test.mjs` |
 | `src/editing-project-delete.mjs` | 44 | createEditingProjectDelete | `editing-project-delete.test.mjs` |
+| `src/studio-controller/routes/chat.mjs` | 44 | createChatRoutes | `chat-route.test.mjs` |
 | `src/official-event-hub.mjs` | 43 | createOfficialEventHub | `official-event-stream.test.mjs`、`panel-sse-e2e.test.mjs` |
 | `src/project-markers.mjs` | 41 | OPENED_MARKER, markProjectOpened | `project-markers.test.mjs` |
 | `src/official-shell.mjs` | 40 | resolveOfficialShell | **无** |
-| `src/studio-controller/routes/chat.mjs` | 40 | createChatRoutes | 读源码：`declaration-order.test.mjs`、`mcp-endpoint-path.test.mjs` |
 | `src/draft-tool.mjs` | 38 | createDraftTool | `draft-tool.test.mjs`、`tool-schema.test.mjs` |
 | `src/studio-controller/routes/diagnostics.mjs` | 38 | createDiagnosticsRoutes | **无** |
 | `src/studio-controller/routes/assets.mjs` | 37 | createAssetRoutes | **无** |

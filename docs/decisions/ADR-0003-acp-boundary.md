@@ -2,7 +2,7 @@
 id: ADR-0003-acp-boundary
 reader: 维护者、要改对话链路的人
 fact-source: src/acp-client.mjs、src/acp-agent-service.mjs、docs/ARCHITECTURE.md
-checked: 0.15.2
+checked: 0.15.3
 rot-if: DSH 提供稳定的进程内 agent API，或改用 MCP/其它协议
 -->
 

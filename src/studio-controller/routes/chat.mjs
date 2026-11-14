@@ -4,17 +4,21 @@
 // process and proves itself with a per-Session bearer token resolved inside the
 // endpoint. A Host that is shutting down answers 503 instead of half-serving.
 //
-// The path is NOT `/api/no996-openfilm/mcp`: DSH reserves every `/api/<plugin>/mcp`
-// for MCP servers declared in the plugin manifest. A plugin that registers its own
-// handler there never sees a request — the Host answers 400 first, which the ACP
-// child reports as "initial connection or tool synchronization failed" and every
-// chat request then fails with ACP_REQUEST_FAILED.
+// The path is `mcp-host`, not `/mcp`: `/mcp` is the name DSH uses for MCP servers a
+// plugin declares, so the plain form invites a future collision.
+//
+// This handler once read `disposed` where this factory only receives `isDisposed`.
+// That is a ReferenceError on every request — thrown *after* the cache-control header
+// is set, so the Host answered 400 with our header and an empty body. The child
+// reported "mcp-client(no996-openfilm): initial connection or tool synchronization
+// failed" and every chat request failed with ACP_REQUEST_FAILED (no models, no
+// prompt). tests/chat-route.test.mjs calls this handler the way the Host does.
 export function createChatRoutes({ register, track, mcpEndpoint, isDisposed, log }) {
   const unregisterMcp = track(register({
     kind: 'exact', path: '/api/no996-openfilm/mcp-host',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
-      if (disposed) { res.writeHead(503).end('{}'); return; }
+      if (isDisposed()) { res.writeHead(503).end('{}'); return; }
       if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end('{}'); return; }
       const chunks = [];
       let size = 0;

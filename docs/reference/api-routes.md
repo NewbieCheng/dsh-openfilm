@@ -28,7 +28,7 @@ rot-if: 新增或删除任何 /api 路由（重新生成即可）
 | POST | `/api/no996-openfilm/editing-delete-project` | exact | `src/studio-controller/routes/editing.mjs:223` |
 | POST | `/api/no996-openfilm/editing-prefs` | exact | `src/studio-controller/routes/editing.mjs:114` |
 | GET | `/api/no996-openfilm/editing-sessions` | exact | `src/studio-controller/routes/editing.mjs:31` |
-| POST | `/api/no996-openfilm/mcp-host` | exact | `src/studio-controller/routes/chat.mjs:14` |
+| POST | `/api/no996-openfilm/mcp-host` | exact | `src/studio-controller/routes/chat.mjs:18` |
 | POST | `/api/no996-openfilm/system/check` | exact | `src/studio-controller/routes/system.mjs:71` |
 | POST | `/api/no996-openfilm/system/install` | exact | `src/studio-controller/routes/system.mjs:83` |
 | POST | `/api/no996-openfilm/templates` | exact | `src/template-bridge.mjs:8` |
