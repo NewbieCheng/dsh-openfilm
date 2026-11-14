@@ -46,7 +46,7 @@ OpenFilm 把页面当**静态 HTML** 渲染：没有打包器、没有模块加�
 |---|---|---|
 | `paper-texture` | **静态页**：同一画面在整个镜头里不动 | `shots/*.json` 的 `copy`（文案）与 `vars`（字号/位置） |
 | `replica-film` | **内容 + 动画**：每个镜头有自己的画面块和 `draw(t)` | `shots/<id>.json` 的 `copy`；`shots/<id>.content.html`（画面块）；`shots/<id>.anim.js`（动效） |
-| `sketchnote` | **一场戏多窗口**：七个镜头是同一张纸面的七个时间窗 | `assets/notebook-config.js`（内容）+ `shots/*.json`（窗口） |
+| `sketchnote` | **一场戏多窗口**：七个镜头是同一张纸面的七个时间窗 | `vendor/templates/sketchnote/assets/notebook-config.js`（内容）+ `shots/*.json`（窗口） |
 | `motion-styles` | **整片样片直封**：一个镜头 = 一支上游 10 秒样片 | `shots/*.json` 的 `style`（样片 slug）与 `duration`；画面改 `vendor/motion/styles/demos/<slug>/index.html` |
 
 `sketchnote` 的 `notebook.js` 按**绝对时间**绘制整场戏，页面只声明 `START` /
@@ -78,17 +78,18 @@ OpenFilm 把页面当**静态 HTML** 渲染：没有打包器、没有模块加�
 |---|---|---|
 | `paper.*` | 8 | 纸纹讲堂：标题、课件台、名牌、人物窗、字幕胶囊、步骤 |
 | `replica.*` | 10 | 复刻影片：主标题、贴纸、纸卡/深色卡、胶囊排、指标、要点列表、场景图标 |
-| 笔触原语 | — | 手绘笔记的笔触在 `assets/drawing-tools.js`（线、圈、箭头、便利贴、荧光笔） |
+| 笔触原语 | — | 手绘笔记的笔触在 `vendor/templates/sketchnote/assets/drawing-tools.js`（线、圈、箭头、便利贴、荧光笔） |
 
 ## 写一个单元
 
-`vendor/templates/_kit/paper/units/pull-quote.html`：
+在 `vendor/templates/_kit/paper/units/` 下新建一对文件（同名的 `.html` 与 `.css`），
+例如 `quote.html`：
 
 ```html
 <div class="pull-quote">{{props.text}}</div>
 ```
 
-同名 `pull-quote.css` 放它的声明（只用变量，不要写死会用到的字号）。然后在
+`quote.css` 放它的声明（只用变量，不要写死会用到的字号）。然后在
 `catalog.json` 里登记，最后在某个镜头的 `units` 里引用：
 
 ```json
@@ -169,7 +170,7 @@ npm run templates:build motion-styles
 
 - 19 个复刻镜头原本每个 ~75 行手写页面，现在各是一份 JSON + 一个内容片段 + 一个
   动画文件，页面外壳零手写；`COPY`、`DURATION`、`START`、`mount` 装配不可能再漏。
-- 纸纹讲堂的两个镜头共用一套单元与一份 `assets/kit.css`，差异只剩 7 个 CSS 变量。
+- 纸纹讲堂的两个镜头共用一套单元与一份 `<模板>/assets/kit.css`，差异只剩 7 个 CSS 变量。
 - 手绘笔记的七个页面由窗口数据生成，窗口连续性有测试。
 - 已知未做的优化：`sketchnote/assets/fonts.css` 有 10.4 MB（内嵌字体），
   仍未做子集化——它影响的是首屏体积，不影响画面，单独排期。

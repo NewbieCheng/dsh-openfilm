@@ -168,7 +168,7 @@ G0 接单 → G1 分镜 → G2 定调帧 → G3 量产 → G4 声音 → G5 帧�
 
 ## 5. 动作词汇（`_kit/motion/motion.js`）
 
-构建时发到每个模板的 `assets/motion.js`，页面里用 `<script src="../assets/motion.js"></script>` 引入，
+构建时发到每个模板的 `vendor/templates/<模板>/assets/motion.js`，页面里用 `<script src="../assets/motion.js"></script>` 引入，
 脚本里通过 `Motion` 或 `Scene.motion` 使用。**全部是给定 t 的纯函数**，可以乱序取帧。
 
 | 组 | API | 说明 |

@@ -167,6 +167,29 @@ function checkFreshness(root, { problems, warnings }) {
   }
 }
 
+/**
+ * Prose that names a repository file is a claim that the file exists. Prose rots by
+ * pointing at things that moved (`src/studio-controller.mjs` line numbers, a renamed
+ * module), and nothing else notices: a dead *link* is checked, a dead *code span* is
+ * not. Only paths with a known source extension are checked, so examples and prose
+ * stay free.
+ */
+const CODE_PATH = /`((?:src|scripts|tests|assets|brand|patches|vendor|locale|docs)\/(?:[\w.-]+\/)*[\w.-]+\.(?:mjs|js|json|css|md|yml|patch|html))(?::\d+(?:-\d+)?)?`/g;
+
+function checkCodePaths(root, { problems }) {
+  const targets = [join(root, 'README.md'), join(root, 'AGENTS.md'), ...walkMarkdown(join(root, 'docs'))];
+  for (const file of targets) {
+    if (!existsSync(file)) continue;
+    const relative = file.slice(root.length).replace(/\\/g, '/');
+    const text = stripFences(readFileSync(file, 'utf8'));
+    for (const match of text.matchAll(CODE_PATH)) {
+      const target = match[1];
+      if (target.startsWith('dist/')) continue; // build output, not in git
+      if (!existsSync(join(root, target))) problems.push(`${relative}: names missing file ${target}`);
+    }
+  }
+}
+
 function checkStale(root, { problems }) {
   const targets = [join(root, 'README.md'), join(root, 'AGENTS.md'), ...walkMarkdown(join(root, 'docs'))];
   for (const file of targets) {
@@ -209,6 +232,7 @@ export function checkDocs({ root = ROOT, agentsLimit = AGENTS_LIMIT, strictMeta 
   if (strictMeta) {
     checkFreshness(root, { problems, warnings });
     checkStale(root, { problems });
+    checkCodePaths(root, { problems });
   }
   return { problems, warnings };
 }

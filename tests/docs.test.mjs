@@ -143,3 +143,29 @@ test('generated reference pages match the tree', async () => {
   assert.equal(read('modules.md'), renderModules());
   assert.match(read('api-routes.md'), /\/api\/no996-openfilm\/diagnose/);
 });
+
+// --- code spans that name repository files -----------------------------------
+
+test('a code span naming a missing file is reported', () => {
+  const dir = metaRoot({ docs: { 'x.md': GOOD_HEADER + '改 `src/gone.mjs` 即可。\n' } });
+  const { problems } = checkDocs({ root: dir, agentsLimit: 1024, strictMeta: true });
+  assert.deepEqual(problems.filter(line => line.includes('missing file')), [
+    '/docs/x.md: names missing file src/gone.mjs',
+  ]);
+});
+
+test('the same span is fine once the file exists, and line numbers are ignored', () => {
+  const dir = metaRoot({ docs: { 'x.md': GOOD_HEADER + '改 `src/here.mjs:12-30` 即可。\n' } });
+  mkdirSync(join(dir, 'src'), { recursive: true });
+  writeFileSync(join(dir, 'src', 'here.mjs'), 'export {};\n');
+  const { problems } = checkDocs({ root: dir, agentsLimit: 1024, strictMeta: true });
+  assert.deepEqual(problems.filter(line => line.includes('missing file')), []);
+});
+
+test('fenced examples and dist output are not treated as claims', () => {
+  const dir = metaRoot({
+    docs: { 'x.md': GOOD_HEADER + '```\n见 src/whatever.mjs\n```\n构建产物在 `dist/bundle.mjs`。\n' },
+  });
+  const { problems } = checkDocs({ root: dir, agentsLimit: 1024, strictMeta: true });
+  assert.deepEqual(problems.filter(line => line.includes('missing file')), []);
+});
