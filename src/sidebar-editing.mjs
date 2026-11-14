@@ -623,8 +623,14 @@ export function installWorkspaceSwitch({ document: doc, fetchSessions } = {}) {
     if (message.includes('PROJECT_BUSY')) return '项目正在被使用，先关掉视频创作或 Studio 再试。';
     if (message.includes('PROJECT_NOT_OPENFILM')) return '这个目录不像是 OpenFilm 项目，已取消。';
     if (message.includes('PROJECT_PATH_INVALID')) return '项目路径不合法，已取消。';
-    if (message.includes('UNKNOWN_PROJECT')) return 'Studio 里找不到这个项目，已取消。';
-    return '删除失败，请稍后再试。';
+    if (message.includes('UNKNOWN_PROJECT')) return 'Studio 里找不到这个项目，也没有它的会话绑定，已取消。先刷新一次列表再试。';
+    if (message.includes('DSH_SESSION_REQUIRED')) return '登录状态过期了，刷新页面再试。';
+    if (message.includes('DSH_ORIGIN_REJECTED')) return '请求来源不被信任，刷新页面再试。';
+    if (message.includes('DSH_BROWSER_REQUIRED')) return '这个操作只能在浏览器窗口里做，已取消。';
+    if (message.includes('DELETE_FAILED')) return '删除时出错了（Host 返回 DELETE_FAILED），详情已写进 plugin.log。';
+    // Never swallow the code: "删除失败，请稍后再试" cost a whole debugging round.
+    const detail = message.trim().slice(0, 80) || (error?.status ? `HTTP ${error.status}` : '未知原因');
+    return `删除失败（${detail}），详情已写进 plugin.log。`;
   };
 
   const toast = message => {

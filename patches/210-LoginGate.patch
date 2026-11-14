@@ -1,0 +1,624 @@
+diff --git a/apps/desktop/shell/LoginGate.tsx b/apps/desktop/shell/LoginGate.tsx
+new file mode 100644
+index 0000000..564155f
+--- /dev/null
++++ b/apps/desktop/shell/LoginGate.tsx
+@@ -0,0 +1,618 @@
++'use client';
++
++/**
++ * The pre-auth gate: "欢迎回来，准点下班。"
++ *
++ * This used to be a page-wide DOM injection (`assets/shell-login.js`): it built ~150
++ * nodes by hand, appended them to `documentElement`, and drove the day-cycle sky,
++ * the playhead and the captcha through closures over those nodes. It is a component
++ * now — same markup and the same stylesheet (`login.css`, extracted from it), but
++ * React owns the tree and state owns the flow.
++ *
++ * Behaviour that must not change (it is the door to everything):
++ * - three modes: login / register / reset, with the same validation and copy;
++ * - the click captcha (single pick, or a sequence in the shown order), refreshed
++ *   after two wrong sequence clicks;
++ * - "记住本机账号和密码" through `auth:remember-*`;
++ * - `auth:status` decides whether the gate is on screen at all.
++ */
++import React from 'react';
++import { BRAND_WHITE } from './brand-mark';
++import './login.css';
++
++type Mode = 'login' | 'register' | 'reset';
++type Captcha = {
++  open: boolean;
++  id: string;
++  prompt: string;
++  sequence: string[];
++  hint: string;
++  svg: string;
++  error: string;
++  clicks: string[];
++  wrong: number;
++  marks: { x: number; y: number; n: number }[];
++};
++
++const NAMES = ['上班', '开会', '改稿', '返工', '收尾', '关电脑', '下班'];
++const DUR = [1, 1.5, 1.5, 2.2, 1.2, 0.8, 0.8];
++const TOTAL = 9;
++const GREET: Record<Mode, string> = { login: '欢迎回来，准点下班。', register: '新同事，欢迎入职。', reset: '忘了也没关系。' };
++const SUB: Record<Mode, string> = {
++  login: '登录后继续剪辑；会话保存在本机。',
++  register: '注册需要邮箱验证码与邀请码。',
++  reset: '用邮箱验证码设置新密码。',
++};
++const ICON_LABEL: Record<string, string> = {
++  fish: '鱼', cake: '蛋糕', egg: '蛋', milk: '牛奶', chili: '辣椒', potato: '土豆', chocolate: '巧克力',
++  garlic: '蒜', scallion: '葱', mint: '薄荷', snow_lotus: '雪莲', sweet_potato: '红薯', bean: '豆子',
++};
++const DAY_SECONDS = 150;
++const CITY_START = 1.9;
++const CITY_END = 2.86;
++const CITY_SPEED = 0.2;
++const CITY_INTERVAL = 33;
++const PAUSE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>';
++const PLAY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
++
++async function rpc(channel: string, payload: unknown = {}) {
++  const reply = await fetch('/__dsh/official-rpc', {
++    method: 'POST',
++    credentials: 'same-origin',
++    headers: { 'content-type': 'application/json' },
++    body: JSON.stringify({ channel, payload }),
++  });
++  if (!reply.ok) throw new Error('HTTP ' + reply.status);
++  return reply.json();
++}
++
++async function auth(action: string, fields: Record<string, unknown>) {
++  const data = await rpc('auth:action', { action, ...fields });
++  if (data && data.ok === false) throw new Error(data.message || data.error || '请求失败');
++  return data;
++}
++
++const pad2 = (n: number) => (n < 10 ? '0' + n : String(n));
++const smooth = (a: number, b: number, x: number) => {
++  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
++  return t * t * (3 - 2 * t);
++};
++
++/** Sky + orb colours for a point in the day: morning dark, noon bright, warm afternoon, orange dusk, deep blue night. */
++function skyFor(v: number) {
++  const mix = (layers: [number, number, number, number][]) => {
++    let r = 0, g = 0, b = 0, a = 0;
++    for (const [lr, lg, lb, la0] of layers) {
++      const la = Math.round(la0 * 50) / 50;
++      if (la <= 0) continue;
++      r = lr * la + r * (1 - la);
++      g = lg * la + g * (1 - la);
++      b = lb * la + b * (1 - la);
++      a = la + a * (1 - la);
++    }
++    return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${Math.round(a * 100) / 100})`;
++  };
++  const morning = 1 - smooth(0.04, 0.3, v);
++  const warm = smooth(0.45, 0.72, v) * (1 - smooth(0.82, 1, v));
++  const dusk = smooth(0.62, 0.86, v) * (1 - smooth(0.95, 1, v));
++  const night = smooth(0.8, 1, v);
++  const top = mix([[6, 18, 48, morning * 0.6], [255, 196, 120, warm * 0.22], [255, 104, 56, dusk * 0.55], [8, 12, 40, night * 0.78]]);
++  const bottom = mix([[10, 40, 90, morning * 0.6], [255, 150, 80, warm * 0.22], [38, 18, 58, dusk * 0.55], [3, 6, 20, night * 0.78]]);
++  return { sky: `linear-gradient(180deg,${top} 0%,${bottom} 100%)`, night };
++}
++
++function promptHint(prompt: string, icon?: string) {
++  const label = ICON_LABEL[icon ?? ''] || '图标';
++  if (prompt === 'click_largest') return '请点击最大的' + label;
++  if (prompt === 'click_smallest') return '请点击最小的' + label;
++  if (prompt === 'click_second_smallest') return '请点击第二小的' + label;
++  if (prompt === 'click_icon') return '请点击图中的' + label;
++  if (prompt === 'click_sequence') return '请按提示顺序点击';
++  if (prompt === 'click_size_asc') return '请按从小到大点击' + label;
++  if (prompt === 'click_size_desc') return '请按从大到小点击' + label;
++  return '请完成人机验证';
++}
++
++const isSequence = (prompt: string) => prompt === 'click_sequence' || prompt === 'click_size_asc' || prompt === 'click_size_desc';
++
++export function LoginGate() {
++  const [visible, setVisible] = React.useState(false);
++  const [mode, setMode] = React.useState<Mode>('login');
++  const [account, setAccount] = React.useState('');
++  const [password, setPassword] = React.useState('');
++  const [code, setCode] = React.useState('');
++  const [invite, setInvite] = React.useState('');
++  const [displayName, setDisplayName] = React.useState('');
++  const [remember, setRemember] = React.useState(true);
++  const [showPassword, setShowPassword] = React.useState(false);
++  const [message, setMessage] = React.useState('');
++  const [isError, setIsError] = React.useState(false);
++  const [busy, setBusy] = React.useState(false);
++  const [otpWait, setOtpWait] = React.useState(0);
++  const [captcha, setCaptcha] = React.useState<Captcha>({ open: false, id: '', prompt: '', sequence: [], hint: '请完成人机验证', svg: '', error: '', clicks: [], wrong: 0, marks: [] });
++  const [playing, setPlaying] = React.useState(true);
++
++  const rootRef = React.useRef<HTMLDivElement | null>(null);
++  const sceneRef = React.useRef<HTMLDivElement | null>(null);
++  const cityRef = React.useRef<SVGSVGElement | null>(null);
++  const skyRef = React.useRef<HTMLDivElement | null>(null);
++  const starsRef = React.useRef<HTMLElement | null>(null);
++  const sunRef = React.useRef<HTMLDivElement | null>(null);
++  const moonRef = React.useRef<HTMLDivElement | null>(null);
++  const clockRef = React.useRef<HTMLTimeElement | null>(null);
++  const tracksRef = React.useRef<HTMLDivElement | null>(null);
++  const playheadRef = React.useRef<HTMLDivElement | null>(null);
++  const tipRef = React.useRef<HTMLSpanElement | null>(null);
++  const clipRefs = React.useRef<HTMLDivElement[]>([]);
++  const pending = React.useRef<'login' | 'otp' | ''>('');
++  const progress = React.useRef(0);
++  const playingRef = React.useRef(true);
++  const trackWidth = React.useRef(0);
++
++  const note = (text: string) => { setMessage(text); setIsError(false); };
++  const problem = (text: string) => { setMessage(text); setIsError(true); };
++
++  // ---- one clock for the timeline and the sky ------------------------------
++  React.useEffect(() => {
++    let raf = 0;
++    let lastNow = 0;
++    let ct = 2.35;
++    let lastCityAt = 0;
++    let lastMinute = -1;
++    let lastSeg = -1;
++    let city: { renderAt: (t: number) => void } | null = null;
++    let cityTries = 0;
++
++    const mountCity = () => {
++      const mount = (window as unknown as { __NOF_MOUNT_CITY__?: (svg: SVGSVGElement) => Promise<{ renderAt: (t: number) => void }> }).__NOF_MOUNT_CITY__;
++      if (typeof mount !== 'function') {
++        if (cityTries++ < 60) window.setTimeout(mountCity, 80);
++        return;
++      }
++      const svg = cityRef.current;
++      if (!svg) return;
++      void mount(svg).then(api => {
++        // The sample's own sun sits baked in the corner; we draw the travelling one.
++        svg.querySelector('#nof-sun')?.remove();
++        svg.querySelector('#nof-rays')?.remove();
++        city = api;
++        api.renderAt(ct);
++      }).catch(() => {});
++    };
++
++    const paint = (v: number) => {
++      const { sky, night } = skyFor(v);
++      if (skyRef.current) skyRef.current.style.background = sky;
++      if (starsRef.current) starsRef.current.style.opacity = String(Math.round(night * 0.85 * 100) / 100);
++      if (sunRef.current && moonRef.current) {
++        const x = 82 - 68 * v;
++        const narrow = window.innerWidth < 600;
++        const y = narrow ? 9 + 2 * v - 5 * Math.sin(Math.PI * v) : 27 + 4 * v - 21 * Math.sin(Math.PI * v);
++        const transform = `translate3d(${x.toFixed(2)}vw,${y.toFixed(2)}vh,0) translate(-50%,-50%)`;
++        sunRef.current.style.transform = transform + ' scale(1)';
++        moonRef.current.style.transform = transform + ' scale(.72)';
++        sunRef.current.style.opacity = String(1 - smooth(0.87, 0.93, v));
++        moonRef.current.style.opacity = String(smooth(0.93, 0.99, v));
++      }
++    };
++
++    const setP = (v: number) => {
++      const p = Math.min(1, Math.max(0, v));
++      progress.current = p;
++      const minute = 540 + Math.round(p * 540);
++      let seg = 0;
++      for (let i = 0, at = 0; i < DUR.length; i += 1) {
++        if (p * TOTAL >= at - 1e-6) seg = i;
++        at += DUR[i];
++      }
++      if (!trackWidth.current && tracksRef.current) trackWidth.current = tracksRef.current.clientWidth;
++      if (playheadRef.current) playheadRef.current.style.transform = `translateX(${p * trackWidth.current}px)`;
++      if (tipRef.current) {
++        tipRef.current.style.transform = p < 0.08 ? 'translateX(0)' : p > 0.92 ? 'translateX(-100%)' : 'translateX(-50%)';
++        tipRef.current.textContent = `${pad2(Math.floor(minute / 60))}:${pad2(minute % 60)} ${NAMES[seg]}`;
++      }
++      if (minute !== lastMinute) {
++        lastMinute = minute;
++        if (clockRef.current) clockRef.current.textContent = `${pad2(Math.floor(minute / 60))}:${pad2(minute % 60)}`;
++        tracksRef.current?.setAttribute('aria-valuenow', String(minute));
++        tracksRef.current?.setAttribute('aria-valuetext', `${pad2(Math.floor(minute / 60))}:${pad2(minute % 60)} ${NAMES[seg]}`);
++      }
++      if (seg !== lastSeg) {
++        lastSeg = seg;
++        clipRefs.current.forEach((clip, i) => clip.classList.toggle('on', i <= seg));
++      }
++      paint(p);
++    };
++
++    const frame = (now: number) => {
++      if (document.hidden) { lastNow = now; raf = requestAnimationFrame(frame); return; }
++      const dt = lastNow ? Math.min(0.05, (now - lastNow) / 1000) : 0;
++      lastNow = now;
++      if (playingRef.current) {
++        let p = progress.current + dt / DAY_SECONDS;
++        if (p >= 1) { p -= 1; if (sceneRef.current) sceneRef.current.style.opacity = '1'; }
++        ct += dt * CITY_SPEED;
++        if (ct > CITY_END) ct = CITY_START + ((ct - CITY_END) % (CITY_END - CITY_START));
++        if (city && now - lastCityAt >= CITY_INTERVAL) { lastCityAt = now; city.renderAt(ct); }
++        setP(p);
++      }
++      raf = requestAnimationFrame(frame);
++    };
++
++    let reduced = false;
++    try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* ignore */ }
++    playingRef.current = !reduced;
++    setPlaying(!reduced);
++    setP(0);
++    raf = requestAnimationFrame(frame);
++    mountCity();
++    const onResize = () => { trackWidth.current = tracksRef.current?.clientWidth ?? 0; };
++    window.addEventListener('resize', onResize);
++    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', onResize); };
++  }, []);
++
++  React.useEffect(() => {
++    void rpc('auth:status').then((data: { loggedIn?: boolean }) => setVisible(data?.loggedIn !== true)).catch(() => setVisible(true));
++    void rpc('auth:remember-get').then((data: { enabled?: boolean; account?: string; password?: string }) => {
++      if (!data?.enabled || !data.account) return;
++      setAccount(String(data.account).slice(0, 160));
++      if (data.password) setPassword(String(data.password).slice(0, 128));
++      setRemember(true);
++    }).catch(() => {});
++  }, []);
++
++  React.useEffect(() => {
++    playingRef.current = playing;
++  }, [playing]);
++
++  if (!visible) return null;
++
++  const afterLogin = () => {
++    setPlaying(false);
++    setProgressEnd();
++    setVisible(false);
++    try {
++      if (window.parent !== window) window.parent.postMessage({ type: 'no996-openfilm:auth', version: 1, action: 'logged-in' }, '*');
++    } catch { /* ignore */ }
++  };
++  function setProgressEnd() {
++    progress.current = 1;
++    if (playheadRef.current && tracksRef.current) playheadRef.current.style.transform = `translateX(${tracksRef.current.clientWidth}px)`;
++  }
++
++  const saveRemember = async () => {
++    if (mode !== 'login') return;
++    if (!remember) { await rpc('auth:remember-clear').catch(() => {}); return; }
++    await rpc('auth:remember-set', { account: account.trim(), password, enabled: true }).catch(() => {});
++  };
++
++  const openCaptcha = (kind: 'login' | 'otp') => {
++    pending.current = kind;
++    setCaptcha({ open: true, id: '', prompt: '', sequence: [], hint: '请完成人机验证', svg: '', error: '', clicks: [], wrong: 0, marks: [] });
++    void loadCaptcha();
++  };
++
++  const loadCaptcha = async () => {
++    setCaptcha(was => ({ ...was, open: true, id: '', error: '', svg: '', clicks: [], wrong: 0, marks: [] }));
++    try {
++      const data = await auth('captcha', { type: 'click' });
++      if (!data?.id || !data?.svg) { setCaptcha(was => ({ ...was, error: '验证码加载失败，请重试' })); return; }
++      const svg = String(data.svg).replace(/<svg\b([^>]*)>/, (_match: string, attrs: string) => (
++        /\spreserveAspectRatio\s*=/.test(attrs)
++          ? '<svg' + attrs.replace(/\spreserveAspectRatio\s*=\s*(["']).*?\1/, 'preserveAspectRatio="none"') + '>'
++          : '<svg' + attrs + ' preserveAspectRatio="none">'
++      ));
++      setCaptcha({
++        open: true,
++        id: data.id,
++        prompt: data.prompt || '',
++        sequence: Array.isArray(data.sequence) ? data.sequence : [],
++        hint: promptHint(data.prompt || '', data.icon_target),
++        svg,
++        error: '',
++        clicks: [],
++        wrong: 0,
++        marks: [],
++      });
++    } catch (error) {
++      setCaptcha(was => ({ ...was, error: (error as Error).message || '验证码加载失败' }));
++    }
++  };
++
++  const closeCaptcha = () => {
++    pending.current = '';
++    setCaptcha(was => ({ ...was, open: false, id: '', clicks: [], marks: [], error: '' }));
++  };
++
++  const finishCaptcha = (codeValue?: string) => {
++    const kind = pending.current;
++    const id = captcha.id;
++    closeCaptcha();
++    if (kind === 'login') void runLogin(id, codeValue);
++    else if (kind === 'otp') void runOtp(id, codeValue);
++  };
++
++  const runLogin = async (id: string, codeValue?: string) => {
++    setBusy(true);
++    try {
++      await auth('login', { account: account.trim(), password, captchaId: id, captchaCode: codeValue });
++      await saveRemember();
++      afterLogin();
++    } catch (error) {
++      problem((error as Error).message || '登录失败');
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  const runOtp = async (id: string, codeValue?: string) => {
++    setBusy(true);
++    try {
++      await auth('verification-code', {
++        account: account.trim(),
++        purpose: mode === 'reset' ? 'reset_password' : 'register',
++        captchaId: id,
++        captchaCode: codeValue,
++      });
++      note('验证码已发送，请查收邮箱');
++      setOtpWait(60);
++      const timer = window.setInterval(() => {
++        setOtpWait(was => {
++          if (was <= 1) { window.clearInterval(timer); return 0; }
++          return was - 1;
++        });
++      }, 1000);
++    } catch (error) {
++      problem((error as Error).message || '验证码发送失败');
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  const onCaptchaClick = (event: React.MouseEvent<HTMLDivElement>) => {
++    const stage = event.currentTarget;
++    const target = (event.target as HTMLElement).closest?.('[data-captcha-id]') as HTMLElement | null;
++    if (!target || !captcha.id) return;
++    const id = target.getAttribute('data-captcha-id');
++    const kind = target.getAttribute('data-captcha-kind') || '';
++    if (!id) return;
++    const stageRect = stage.getBoundingClientRect();
++    const rect = target.getBoundingClientRect();
++    const mark = {
++      x: rect.left - stageRect.left + rect.width / 2,
++      y: rect.top - stageRect.top + rect.height / 2,
++      n: 1,
++    };
++    if (!isSequence(captcha.prompt)) {
++      setCaptcha(was => ({ ...was, marks: [mark] }));
++      window.setTimeout(() => finishCaptcha(id), 180);
++      return;
++    }
++    const clicks = captcha.clicks;
++    if (clicks.includes(id)) return;
++    if (captcha.prompt === 'click_sequence') {
++      const expected = captcha.sequence[clicks.length];
++      if (expected && kind !== expected) {
++        const wrong = captcha.wrong + 1;
++        if (wrong >= 2) {
++          setCaptcha(was => ({ ...was, wrong, error: '点错太多次，已刷新题目', clicks: [], marks: [] }));
++          void loadCaptcha();
++        } else {
++          setCaptcha(was => ({ ...was, wrong, error: '顺序不对，请重试', clicks: [], marks: [] }));
++        }
++        return;
++      }
++    }
++    const next = [...clicks, id];
++    const expectedSteps = captcha.prompt === 'click_sequence' ? (captcha.sequence.length || 1) : isSequence(captcha.prompt) ? 4 : 1;
++    setCaptcha(was => ({ ...was, clicks: next, marks: [...was.marks, { ...mark, n: next.length }], error: '' }));
++    if (next.length >= expectedSteps) window.setTimeout(() => finishCaptcha(next.join(',')), 220);
++  };
++
++  const submit = (event: React.FormEvent) => {
++    event.preventDefault();
++    if (busy || captcha.open) return;
++    const acc = account.trim();
++    if (!acc) return problem(mode === 'login' ? '请输入账号：手机号或邮箱。' : '请输入邮箱。');
++    if (mode === 'login') {
++      if (password.length < 6) return problem('密码至少 6 位，请重新输入。');
++      openCaptcha('login');
++      return;
++    }
++    if (mode === 'register') {
++      if (!acc.includes('@')) return problem('注册请使用邮箱。');
++      if (password.length < 6) return problem('密码至少 6 位。');
++      if (!code.trim()) return problem('请输入邮箱验证码。');
++      if (!invite.trim()) return problem('请输入邀请码。');
++      setBusy(true);
++      void auth('register', { account: acc, password, code: code.trim(), inviteCode: invite.trim(), displayName: displayName.trim() || undefined })
++        .then(afterLogin)
++        .catch(error => problem((error as Error).message || '注册失败'))
++        .finally(() => setBusy(false));
++      return;
++    }
++    if (!acc.includes('@')) return problem('请使用邮箱重置密码。');
++    if (!code.trim()) return problem('请输入邮箱验证码。');
++    if (password.length < 6) return problem('新密码至少 6 位。');
++    setBusy(true);
++    void auth('reset-password', { account: acc, code: code.trim(), newPassword: password })
++      .then(() => { setMode('login'); note('密码已更新，请登录。'); setCode(''); })
++      .catch(error => problem((error as Error).message || '重置失败'))
++      .finally(() => setBusy(false));
++  };
++
++  const seekTo = (clientX: number) => {
++    const tracks = tracksRef.current;
++    if (!tracks) return;
++    const rect = tracks.getBoundingClientRect();
++    if (!rect.width) return;
++    const p = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
++    progress.current = p;
++    // Reuse the paint path: nudge the loop by writing the playhead directly.
++    if (playheadRef.current && trackWidth.current) playheadRef.current.style.transform = `translateX(${p * trackWidth.current}px)`;
++  };
++
++  const onTracksKey = (event: React.KeyboardEvent) => {
++    const step = ({ ArrowLeft: -0.04, ArrowDown: -0.04, ArrowRight: 0.04, ArrowUp: 0.04 } as Record<string, number>)[event.key];
++    if (step != null) seekTo(0 + (progress.current + step) * (trackWidth.current || 1) + (tracksRef.current?.getBoundingClientRect().left ?? 0));
++    else if (event.key === 'Home') seekTo(tracksRef.current?.getBoundingClientRect().left ?? 0);
++    else if (event.key === 'End') seekTo((tracksRef.current?.getBoundingClientRect().right ?? 0));
++    else return;
++    event.preventDefault();
++  };
++
++  const otpDisabled = busy || otpWait > 0;
++  const asideText = message || (mode === 'login' ? '使用不加班账号登录。点登录后完成人机验证即可。' : '');
++  const goLabel = mode === 'login' ? '登录并继续剪辑' : mode === 'register' ? '注册并继续剪辑' : '更新密码';
++
++  return (
++    <div ref={rootRef} id="no996-shell-login" className="nof-lg" role="dialog" aria-label="登录">
++      <div ref={sceneRef} className="lg-scene" aria-hidden="true">
++        <div className="lg-city">
++          <svg ref={cityRef} viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" focusable="false" />
++        </div>
++        <div ref={skyRef} className="lg-sky"><i ref={starsRef} className="stars" /></div>
++        <div ref={sunRef} className="lg-orb sun" aria-hidden="true" />
++        <div ref={moonRef} className="lg-orb moon" aria-hidden="true" />
++      </div>
++
++      <header className="lg-brand">
++        <span className="lg-mark" aria-hidden="true" dangerouslySetInnerHTML={{ __html: BRAND_WHITE }} />
++        <b>不加班</b>
++        <span>AI 剪辑</span>
++      </header>
++
++      <main className="lg-main">
++        <form id="nof-form" className="lg-card" noValidate onSubmit={submit}>
++          <i className="lg-tape" aria-hidden="true" />
++          <div className="lg-punch"><span>今日考勤</span><time ref={clockRef}>09:00</time></div>
++          <h1>{GREET[mode]}</h1>
++          <p className="lg-sub">{SUB[mode]}</p>
++
++          <label className="lg-field">
++            <span className="lg-lab">{mode === 'login' ? '账号' : '邮箱'}</span>
++            <span className="lg-f">
++              <input
++                autoComplete="username" autoCapitalize="none" spellCheck={false}
++                placeholder={mode === 'login' ? '手机号或邮箱' : 'name@example.com'}
++                value={account} onChange={event => setAccount(event.target.value)}
++              />
++            </span>
++          </label>
++
++          {mode === 'register' && (
++            <label className="lg-field">
++              <span className="lg-lab">昵称（可选）</span>
++              <span className="lg-f"><input autoComplete="nickname" placeholder="怎么称呼你" value={displayName} onChange={event => setDisplayName(event.target.value)} /></span>
++            </label>
++          )}
++
++          {mode !== 'login' && (
++            <div className="lg-row">
++              <label className="lg-field">
++                <span className="lg-lab">邮箱验证码</span>
++                <span className="lg-f"><input inputMode="numeric" autoComplete="one-time-code" placeholder="6 位" value={code} onChange={event => setCode(event.target.value)} /></span>
++              </label>
++              <button type="button" className="lg-otp" disabled={otpDisabled} onClick={() => {
++                if (busy || otpWait > 0) return;
++                if (!account.trim().includes('@')) return problem('请先填写邮箱');
++                openCaptcha('otp');
++              }}>{otpWait > 0 ? otpWait + 's' : '发送验证码'}</button>
++            </div>
++          )}
++
++          {mode === 'register' && (
++            <label className="lg-field">
++              <span className="lg-lab">邀请码</span>
++              <span className="lg-f"><input autoComplete="off" placeholder="同事给你的邀请码" value={invite} onChange={event => setInvite(event.target.value)} /></span>
++            </label>
++          )}
++
++          <label className="lg-field">
++            <span className="lg-lab">{mode === 'reset' ? '新密码' : '密码'}</span>
++            <span className="lg-f">
++              <input
++                type={showPassword ? 'text' : 'password'}
++                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
++                placeholder="至少 6 位" value={password} onChange={event => setPassword(event.target.value)}
++              />
++              <button type="button" className="lg-eye" aria-label={showPassword ? '隐藏密码' : '显示密码'} aria-pressed={showPassword} onClick={() => setShowPassword(v => !v)}>
++                {showPassword ? '隐藏' : '显示'}
++              </button>
++            </span>
++          </label>
++
++          <div className="lg-meta">
++            {mode === 'login' && (
++              <label className="lg-remember">
++                <input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} />
++                <span>记住本机账号和密码</span>
++              </label>
++            )}
++            <div className="lg-links">
++              <button type="button" className="lg-lk" onClick={() => setMode(mode === 'login' ? 'reset' : 'login')}>
++                {mode === 'login' ? '忘记密码' : '返回登录'}
++              </button>
++              <button type="button" className="lg-lk" onClick={() => setMode(mode === 'register' ? 'login' : 'register')}>
++                {mode === 'login' ? '注册新账号' : '去登录'}
++              </button>
++            </div>
++          </div>
++
++          <button type="submit" className="lg-go" disabled={busy}>{goLabel}</button>
++          <p className={isError ? 'lg-msg err' : 'lg-msg'} role="status" aria-live="polite">{asideText}</p>
++          <div className="lg-stamp" aria-hidden="true">准点<br />下班</div>
++        </form>
++      </main>
++
++      <div className="lg-tl">
++        <div className="lg-ruler" aria-hidden="true">
++          {Array.from({ length: 10 }, (_, i) => 9 + i).map(hour => (
++            <i key={hour} style={{ left: `${((hour - 9) / 9) * 100}%` }}><b>{hour}</b></i>
++          ))}
++        </div>
++        <button type="button" className="lg-play" aria-label={playing ? '暂停' : '播放'} title={playing ? '暂停' : '播放'} onClick={() => setPlaying(v => !v)}>
++          <span style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: playing ? PAUSE_ICON : PLAY_ICON }} />
++        </button>
++        <div
++          ref={tracksRef}
++          className="lg-tracks" role="slider" tabIndex={0}
++          aria-label="时间轴：拖动查看一天从上班到下班"
++          aria-valuemin={540} aria-valuemax={1080} aria-valuenow={540} aria-valuetext="09:00 上班"
++          onPointerDown={event => { setPlaying(false); seekTo(event.clientX); }}
++          onPointerMove={event => { if (event.buttons === 1) seekTo(event.clientX); }}
++          onKeyDown={onTracksKey}
++        >
++          <div className="lg-clips">
++            {NAMES.map((name, i) => (
++              <div key={name} ref={node => { if (node) clipRefs.current[i] = node; }} className="lg-clip" style={{ flex: String(DUR[i]) }}>{name}</div>
++            ))}
++          </div>
++          <div ref={playheadRef} className="lg-playhead">
++            <div className="lg-grip"><span ref={tipRef} className="lg-tip">09:00 上班</span></div>
++          </div>
++        </div>
++      </div>
++
++      <div className="lg-vig" aria-hidden="true" />
++
++      {captcha.open && (
++        <div className="cap-mask" role="presentation">
++          <div className="cap" role="dialog" aria-modal="true" aria-label="人机验证">
++            <h2>人机验证</h2>
++            <p className="hint">{captcha.hint}</p>
++            <div className="stage" onClick={onCaptchaClick} dangerouslySetInnerHTML={{ __html: captcha.error && !captcha.svg ? '<div style="display:grid;place-items:center;min-height:200px;color:#8d90a6">加载中…</div>' : captcha.svg }} />
++            {captcha.marks.map((mark, i) => (
++              <span key={i} style={{ position: 'absolute', left: mark.x, top: mark.y, width: 20, height: 20, margin: '-10px 0 0 -10px', borderRadius: '50%', background: '#FF6400', color: '#fff', display: 'grid', placeItems: 'center', font: '700 10px/1 inherit', pointerEvents: 'none', boxShadow: '0 0 0 2px #fff' }}>{mark.n}</span>
++            ))}
++            <p className="err">{captcha.error}</p>
++            <div className="acts">
++              <button type="button" className="refresh" onClick={() => void loadCaptcha()}>换一张</button>
++              <button type="button" className="cancel" onClick={closeCaptcha}>取消</button>
++            </div>
++          </div>
++        </div>
++      )}
++    </div>
++  );
++}

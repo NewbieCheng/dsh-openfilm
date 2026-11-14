@@ -2,7 +2,7 @@
 id: ADR-0004-upstream-patches
 reader: 维护者、升上游的人
 fact-source: patches/series.json、vendor/official-shell/manifest.json、src/official-shell.mjs
-checked: 0.15.5
+checked: 0.15.6
 rot-if: 上游提供可注入的扩展点，或本项目不再 vendored 上游
 -->
 

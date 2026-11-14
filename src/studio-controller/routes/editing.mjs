@@ -20,6 +20,8 @@ export function createEditingRoutes({
   archive,
   editingPrefs,
   verifyOfficialProject,
+  resolveDeleteTarget,
+  log,
   listTemplates,
   templatesRoot,
   getLastProxy,
@@ -147,7 +149,13 @@ export function createEditingRoutes({
       const projectId = typeof body.projectId === 'string' ? body.projectId : '';
       if (!/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) { res.writeHead(400).end('BAD_PROJECT'); return; }
       const archived = body.archived === true;
-      try { await verifyOfficialProject(projectId); } catch { res.writeHead(404).end('UNKNOWN_PROJECT'); return; }
+      let identity;
+      try { identity = await resolveDeleteTarget(projectId); }
+      catch (error) {
+        void log?.warn?.('delete-failed', { what: 'conversation', projectId, code: String(error?.code ?? 'UNKNOWN_PROJECT').slice(0, 40) });
+        res.writeHead(404).end('UNKNOWN_PROJECT'); return;
+      }
+      void log?.info?.('delete-attempt', { what: 'conversation', projectId, source: identity.source, one: typeof body.sessionId === 'string' });
       const record = acpSessions.get(projectId);
       // A conversation row archives that chat session in the Studio store; the
       // project folder row archives the ACP binding (the DSH Session).
@@ -235,6 +243,7 @@ export function createEditingRoutes({
       try { result = await deleteEditingProject(projectId, { permanent }); }
       catch (error) {
         const code = String(error?.code ?? '');
+        void log?.warn?.('delete-failed', { what: 'project', projectId, code: code.slice(0, 40) });
         if (code === 'UNKNOWN_PROJECT') { res.writeHead(404).end('UNKNOWN_PROJECT'); return; }
         if (code === 'PROJECT_BUSY') { res.writeHead(409).end('PROJECT_BUSY'); return; }
         if (code === 'PROJECT_NOT_OPENFILM' || code === 'PROJECT_PATH_INVALID') { res.writeHead(422).end(code); return; }

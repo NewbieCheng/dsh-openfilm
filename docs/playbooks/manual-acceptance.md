@@ -2,7 +2,7 @@
 id: manual-acceptance
 reader: 验收者（要亲手点一遍的人）
 fact-source: STATUS 的待验项、真实 UI 行为
-checked: 0.15.5
+checked: 0.15.6
 rot-if: 每次发版、任何界面大改
 -->
 

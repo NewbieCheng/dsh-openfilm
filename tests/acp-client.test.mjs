@@ -11,12 +11,12 @@ import { createAcpClient, resolveAcpCommand } from '../src/acp-client.mjs';
 
 const fixture = fileURLToPath(new URL('./fixtures/fake-acp-agent.mjs', import.meta.url));
 
-function startClient({ mode, timeoutMs = 5000 } = {}) {
+function startClient({ mode, timeoutMs = 5000, promptTimeoutMs = timeoutMs } = {}) {
   const client = createAcpClient({
     resolve: () => ({ command: process.execPath, args: [fixture] }),
     env: { ...process.env, ...(mode ? { FAKE_ACP_MODE: mode } : {}) },
     requestTimeoutMs: timeoutMs,
-    promptTimeoutMs: timeoutMs,
+    promptTimeoutMs,
     spawnChild: (command, args, options) => spawn(command, args, options),
   });
   return client;
@@ -106,7 +106,10 @@ test('an agent that exits mid-request fails that request with a named code', asy
 });
 
 test('a hung agent times out instead of hanging the panel', async () => {
-  const client = startClient({ mode: 'hang-on-prompt', timeoutMs: 250 });
+  // A 250 ms *request* budget also covered `initialize`, which spawns a node
+  // process: on a loaded suite that spawn alone can take longer, and the test
+  // failed with ACP_TIMEOUT: initialize instead of testing the prompt timeout.
+  const client = startClient({ mode: 'hang-on-prompt', promptTimeoutMs: 250 });
   await client.start();
   await assert.rejects(withLiveLoop(client.prompt({ sessionId: 'session-fake-1', blocks: [] })), error => error.code === 'ACP_TIMEOUT');
   await client.close();

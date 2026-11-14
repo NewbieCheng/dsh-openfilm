@@ -1,0 +1,21 @@
+diff --git a/apps/desktop/chat/src/state/local-agent-store.ts b/apps/desktop/chat/src/state/local-agent-store.ts
+index a3c7f97..2d4085e 100644
+--- a/apps/desktop/chat/src/state/local-agent-store.ts
++++ b/apps/desktop/chat/src/state/local-agent-store.ts
+@@ -365,9 +365,14 @@ export function agentModelSummary(
+     const value = optionValue(options, prefs, modelOpt.id);
+     const choice = modelOpt.options?.find((o) => o.value === value);
+     const raw = value === 'default' && choice?.description ? choice.description : optionLabel(options, modelOpt.id, value);
+-    model = raw ? (raw.split('·')[0]!.replace(/\s*\([^)]*\)/g, '').trim() || raw) : null;
++    /* dsh-openfilm: the Host names a model <group> / <model>; the button says the model, the menu says the group */
++    const named = raw && raw.includes(' / ') ? raw.slice(raw.indexOf(' / ') + 3) : raw;
++    model = named ? (named.split('·')[0]!.replace(/\s*\([^)]*\)/g, '').trim() || named) : null;
+   }
+   const effortValue = effortOpt ? optionValue(options, prefs, effortOpt.id) : undefined;
+-  const effort = effortOpt && effortValue !== 'default' ? optionLabel(options, effortOpt.id, effortValue) : null;
++  const effortRaw = effortOpt && effortValue !== 'default' ? optionLabel(options, effortOpt.id, effortValue) : null;
++  /* dsh-openfilm: the composer button says the rung, not its paragraph. "自动（按这一句话的内容）" pushed
++     the model name out of the button; "自动" is what the person needs there. */
++  const effort = effortRaw ? (effortRaw.replace(/[（(][^）)]*[）)]/g, '').trim() || effortRaw) : null;
+   return { model, effort };
+ }

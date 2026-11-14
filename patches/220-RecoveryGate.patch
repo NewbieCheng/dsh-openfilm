@@ -1,0 +1,69 @@
+diff --git a/apps/desktop/shell/RecoveryGate.tsx b/apps/desktop/shell/RecoveryGate.tsx
+new file mode 100644
+index 0000000..9bd6e9c
+--- /dev/null
++++ b/apps/desktop/shell/RecoveryGate.tsx
+@@ -0,0 +1,63 @@
++import { useEffect, useState } from 'react';
++
++/**
++ * The Host's Studio can go away while this page stays up. Upstream's own error
++ * overlay asks the person to restart an application that is not involved, so we
++ * show our own: poll the Studio's own health endpoint and offer to re-bootstrap
++ * through the panel.
++ *
++ * This used to live in a runtime DOM injection (assets/shell-ui.js). It is
++ * component state now: no MutationObserver, no element created outside React,
++ * and the overlay cannot be wiped by a re-render of the app.
++ */
++export function RecoveryGate() {
++  const [shown, setShown] = useState(false);
++
++  useEffect(() => {
++    let misses = 0;
++    let cancelled = false;
++    const probe = async () => {
++      try {
++        const controller = new AbortController();
++        const timer = setTimeout(() => controller.abort(), 4000);
++        const reply = await fetch('/api/version', { cache: 'no-store', signal: controller.signal });
++        clearTimeout(timer);
++        if (!reply.ok) throw new Error('unhealthy');
++        misses = 0;
++        if (!cancelled) setShown(false);
++      } catch {
++        misses += 1;
++        if (misses >= 2 && !cancelled) setShown(true);
++      }
++    };
++    const first = setTimeout(probe, 3000);
++    const every = setInterval(probe, 5000);
++    return () => {
++      cancelled = true;
++      clearTimeout(first);
++      clearInterval(every);
++    };
++  }, []);
++
++  if (!shown) return null;
++
++  const restart = () => {
++    if (window.parent !== window) {
++      window.parent.postMessage({ type: 'no996-openfilm:restart', version: 1 }, '*');
++    }
++  };
++
++  return (
++    <div style={{ position: 'fixed', inset: 0, zIndex: 2147483001, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(10,10,12,.88)', font: '14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif', color: '#e9e9ee' }}>
++      <div style={{ maxWidth: 400, padding: 24, borderRadius: 12, background: '#232326', border: '1px solid rgba(255,255,255,.14)', textAlign: 'center', boxShadow: '0 16px 48px rgba(0,0,0,.6)' }}>
++        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>工作台已停止运行</div>
++        <div style={{ opacity: 0.75, fontSize: 12, lineHeight: 1.7, marginBottom: 18 }}>
++          视频编辑服务已断开。重新启动会重新加载界面，未保存的内容可能丢失。
++        </div>
++        <button type="button" onClick={restart} style={{ padding: '9px 20px', border: 0, borderRadius: 8, background: '#3b82f6', color: '#fff', fontSize: 13, cursor: 'pointer' }}>
++          重新启动工作台
++        </button>
++      </div>
++    </div>
++  );
++}

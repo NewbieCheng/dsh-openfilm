@@ -2,7 +2,7 @@
 id: templates
 reader: 做模板的人
 fact-source: vendor/templates/**、scripts/templates-build.mjs
-checked: 0.15.5
+checked: 0.15.6
 rot-if: 模板结构、_kit 或构建流程变化
 -->
 

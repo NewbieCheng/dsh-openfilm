@@ -8,15 +8,15 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 # 模块清单（自动生成）
 
-> 生成命令：`npm run docs:gen`。111 个模块、15574 行。
+> 生成命令：`npm run docs:gen`。112 个模块、15679 行。
 > 没有测试直接 import 的模块：23 个（待补清单，不是失败项）；另有 1 个已登记排除。
 > "测试"列 = 直接 import 该模块的测试文件，来自 `tests/**` 的实际 import 语句，不做名字猜测。
 > 排除项写在 `scripts/test-exclusions.json`，每条必须带理由。
 
 | 模块 | 行数 | 导出 | 同名测试 |
 |---|---|---|---|
-| `src/studio-controller.mjs` | 1065 | createStudioController | 读源码：`acp-profile-models.test.mjs`、`declaration-order.test.mjs`、`mcp-endpoint-path.test.mjs`、`route-registration-order.test.mjs`、`sidebar-untouched.test.mjs`、`system-routes.test.mjs` |
-| `src/sidebar-editing.mjs` | 936 | EDITING_LABEL, installWorkspaceSwitch | `sidebar-editing-rows.test.mjs` |
+| `src/studio-controller.mjs` | 1092 | createStudioController | 读源码：`acp-profile-models.test.mjs`、`declaration-order.test.mjs`、`mcp-endpoint-path.test.mjs`、`route-registration-order.test.mjs`、`sidebar-untouched.test.mjs`、`system-routes.test.mjs` |
+| `src/sidebar-editing.mjs` | 942 | EDITING_LABEL, installWorkspaceSwitch | `sidebar-editing-rows.test.mjs` |
 | `src/studio-proxy.mjs` | 852 | startStudioProxy | `panel-sse-e2e.test.mjs`、`proxy-error-sanitize.test.mjs`、`studio-proxy-files.test.mjs`、`theme-injection.test.mjs` |
 | `src/acp-agent-service.mjs` | 574 | catalogFromConfigOptions, createAcpAgentService | `acp-agent-service.test.mjs`、`acp-catalog.test.mjs`、`acp-rpc-round-trip.test.mjs`、`panel-sse-e2e.test.mjs` |
 | `src/official-facade.mjs` | 506 | officialFacadeSource | `facade-page.test.mjs`、`official-attachment.test.mjs`、`official-facade-events.test.mjs` |
@@ -24,10 +24,10 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/workbench-auth.mjs` | 392 | DEFAULT_WORKBENCH_BASE_URL, createWorkbenchAuth, parseAuthActionBody | `dev-mode.test.mjs`、`workbench-auth.test.mjs` |
 | `src/studio-panel.mjs` | 370 | createStudioPanel, templateProjectUrl | `template-bridge.test.mjs`、`template-panel.test.mjs` |
 | `src/preferences.mjs` | 263 | balanceCachePatch, balanceFromPrefs, clearBalanceCachePatch, createPreferencesStore, onboardingCopy, productMeta | `preferences-custom.test.mjs`、`preferences.test.mjs` |
+| `src/studio-controller/routes/editing.mjs` | 258 | createEditingRoutes | `editing-routes.test.mjs` |
 | `src/tool-installer.mjs` | 256 | TOOL_SOURCES, createToolInstaller, readTarMember | `tool-installer.test.mjs` |
 | `src/transcribe-service.mjs` | 255 | CACHE_VERSION, createTranscribeService, fingerprint | **无** |
 | `src/acp-client.mjs` | 251 | createAcpClient, resolveAcpCommand | `acp-agent-service.test.mjs`、`acp-client.test.mjs` |
-| `src/studio-controller/routes/editing.mjs` | 249 | createEditingRoutes | `editing-routes.test.mjs` |
 | `src/official-permission.mjs` | 237 | FULL_ACCESS, PROJECT_PERMISSIONS_DOMAIN, WORKSPACE_WRITE, openProjectPermissions | `official-permission.test.mjs` |
 | `src/captcha-challenge.mjs` | 236 | createCaptchaChallenge | **无** |
 | `src/client-entry.js` | 197 | — | 排除：浏览器端打包入口：与 src/studio-*.js 一起被 esbuild 打进 client.js，只能由面板端到端测试覆盖 |
@@ -91,6 +91,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/asr-refine.mjs` | 65 | REFINE_REASONS, buildRefinePrompt, parseRefineReply, refineTranscript | `asr-refine.test.mjs` |
 | `src/film-summary.mjs` | 65 | summarizeFilm | `film-summary.test.mjs`、`timeline-layout.test.mjs` |
 | `src/studio-library-patch.mjs` | 64 | SENSE_VOICE_ABOUT, SENSE_VOICE_ID, SENSE_VOICE_MODEL, applyStudioLibraryPatch | `studio-library-patch.test.mjs` |
+| `src/chat-trace.mjs` | 63 | createChatTrace, describeEvent | `chat-trace.test.mjs` |
 | `src/acp-session-store.mjs` | 62 | createAcpSessionStore | **无** |
 | `src/editing-filter.mjs` | 60 | SESSION_FALLBACK, filterEditing, matchRange, normalizeQuery, projectDisplayTitle, sessionDisplayTitle | `editing-filter.test.mjs` |
 | `src/archive-bridge.mjs` | 59 | registerArchiveBridge | **无** |

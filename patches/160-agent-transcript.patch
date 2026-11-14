@@ -1,0 +1,92 @@
+diff --git a/apps/desktop/chat/src/lib/agent-transcript.ts b/apps/desktop/chat/src/lib/agent-transcript.ts
+index 48d05f4..b57684c 100644
+--- a/apps/desktop/chat/src/lib/agent-transcript.ts
++++ b/apps/desktop/chat/src/lib/agent-transcript.ts
+@@ -35,6 +35,8 @@ export interface TranscriptItem {
+   kind: 'text' | 'act' | 'notice' | 'thought' | 'plan';
+   /** What it is doing (a closed set); absent for text / notice. */
+   act?: AgentAct;
++  /** The real tool that ran (openfilm_frame, web_search), when the agent named it. */
++  tool?: string;
+   /** The short visible text after the act (search query / picture description), picked by the server. */
+   query?: string;
+   /**
+@@ -83,6 +85,28 @@ export function reduceTranscript(
+   items: TranscriptItem[],
+   event: PublicGenerationEvent,
+   now: number = Date.now(),
++): TranscriptItem[] {
++  const next = reduceTranscriptEvent(items, event, now);
++  /* Anything but thinking means the turn moved on: a thought row that was streaming stops here, so it
++     reports how long it thought instead of shimmering until the turn ends. */
++  return event.type === 'agent-thinking' ? next : closeThoughts(next, now);
++}
++
++/** A thought row still streaming when the turn moves on is finished, and knows when. */
++function closeThoughts(items: TranscriptItem[], now: number): TranscriptItem[] {
++  let changed = false;
++  const next = items.map((item) => {
++    if (item.kind !== 'thought' || !item.pending) return item;
++    changed = true;
++    return { ...item, pending: false, endedAt: item.endedAt ?? now };
++  });
++  return changed ? next : items;
++}
++
++function reduceTranscriptEvent(
++  items: TranscriptItem[],
++  event: PublicGenerationEvent,
++  now: number = Date.now(),
+ ): TranscriptItem[] {
+   switch (event.type) {
+     case 'agent-text': {
+@@ -127,6 +151,7 @@ export function reduceTranscript(
+         kind: 'act',
+         act: event.act,
+         ...(event.query ? { query: event.query } : {}),
++        ...(event.tool ? { tool: event.tool } : {}),
+         ...(event.ask ? { ask: event.ask } : {}),
+         turnNo: event.turnNo,
+         pending: true,
+@@ -147,9 +172,38 @@ export function reduceTranscript(
+       return next;
+     }
+ 
+-    /* Thinking only drives the status line underneath. Drafts are not sent and vanish when done: not in the conversation, not in the summary. */
+-    case 'agent-thinking':
+-      return items;
++    /**
++     * dsh-openfilm: thinking is kept as a row of its own.
++     *
++     * It used to only drive the status line underneath, which is all a built-in agent's reasoning could
++     * do — it never sent any. Our bridging agent does send it, so a turn that thought for 16s should say
++     * so and open to the reasoning; the row closes as soon as the turn moves on (see below).
++     */
++    case 'agent-thinking': {
++      const id = `thought:${event.partId ?? event.turnNo}`;
++      const at = items.findIndex((item) => item.id === id);
++      const text = event.text ? mergeStreamText(items[at]?.text ?? '', event.text) : items[at]?.text;
++      const pending = event.done !== true;
++      if (at >= 0) {
++        const next = [...items];
++        next[at] = {
++          ...next[at]!,
++          ...(text !== undefined ? { text } : {}),
++          pending,
++          ...(pending ? {} : { endedAt: now }),
++        };
++        return next;
++      }
++      if (text === undefined) return items;
++      return [...items, {
++        id,
++        kind: 'thought',
++        text,
++        turnNo: event.turnNo,
++        pending,
++        startedAt: now,
++      }];
++    }
+ 
+     /* The agent's question settled (answered / skipped / timed out): write it back to its row, so the conversation
+        reads "asked what · answered what". The question's id is not the tool call's callId, so match the latest

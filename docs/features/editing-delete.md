@@ -2,7 +2,7 @@
 id: features-editing-delete
 reader: 维护剪辑区的人
 fact-source: src/editing-project-delete.mjs、src/project-trash.mjs、src/studio-controller.mjs
-checked: 0.15.5
+checked: 0.15.6
 rot-if: 删除作用域、回收站位置或守卫条件变化
 -->
 
@@ -32,6 +32,13 @@ HTTP 入口是 `POST /api/no996-openfilm/editing-delete-project`（[`src/studio-
 6. 删 ACP 绑定、置顶/改名（`acp-sessions`、`editing-prefs.remove`）；
 7. 归档 DSH 会话（不删 DSH 自己的会话文件）；
 8. 返回 `{ ok, trashPath, sessions }`，客户端刷新列表并 toast 回收站路径。
+
+## 身份来源（Studio 不认识也要能删）
+
+删除先让 Studio 确认项目（`/api/projects`），**失败再退到 Host 自己的会话绑定**
+（`acpSessions.get(projectId).cwd`）。原因：Studio 的列表会因为索引没刷新而不包含一个真实存在的
+文件夹，而那种文件夹恰恰是最想删的——以前这里直接回 404，界面上只留一句"删除失败"。
+两条来源都在日志里留痕：`delete-attempt`（source=studio|binding）、`delete-failed`（code）。
 
 ## 守卫
 

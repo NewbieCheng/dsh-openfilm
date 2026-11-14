@@ -2,7 +2,7 @@
 id: playbooks-incident
 reader: 值班的人、排查 bug 的人
 fact-source: 真实故障记录（2026-11）、%TEMP%/dsh-openfilm/plugin.log、docs/architecture
-checked: 0.15.5
+checked: 0.15.6
 rot-if: 出现新的故障类别，或某个根因被结构性消除
 -->
 
@@ -24,6 +24,37 @@ rot-if: 出现新的故障类别，或某个根因被结构性消除
 判据：**重载后 `plugin.log` 的 `startedAt` 更新**才算真的重载了。管理器返回 `restart-required` 时，如实告诉用户要重启，别声称已生效。
 
 ## 2. 故障档案
+
+### 2026-11-14 · 思考过程看得见了：官方把 thought 行扔了
+
+**现象**：对话正常回复，但永远看不到思考。日志里 `agent_thought_chunk=1`，面板也 `seen:6`
+全收到——内容到了，就是没画。
+
+**根因**：`apps/desktop/chat/src/lib/agent-activity-runs.ts` 的 `buildRuns` 里有一句
+`if (item.kind === 'thought' || isEphemeral(item)) continue;`。它在"思考只是状态行"的年代是
+对的；后来上游加了 `ThoughtRow`（流式展开、结束折叠成"思考 N 秒"），却没人把这一句改回来——
+**`ThoughtRow` 从写下那天起就是死代码**。
+
+**改法**：A1 源码补丁，thought 作为独立 run 进入列表（不进工具折叠组）。补丁在
+`patches/140-agent-activity-runs.patch`，`scripts/build-official-shell.mjs` 的 PATCHED 白名单
+同步加了这个文件。
+
+**边界**：ACP 一轮只发 1 个 message chunk，所以"逐字流式"改不了；能修的是思考先出现、回答整段到。
+
+### 2026-11-14 · 删除项目/对话两头都报错：只认 Studio 的项目列表
+
+**现象**：剪辑区 ⋯ 里删除对话和删除项目都弹"删除失败，请稍后再试"。
+
+**根因**：两个入口都先用 `verifyOfficialProject`（拉 Studio `/api/projects`）确认项目；Studio
+列表没刷新或根本没索引这个文件夹时就是 404，客户端把 404 折成一句泛泛的失败文案，真实原因被吞。
+
+**改法**：
+- 身份来源加兜底：Studio 不认就用 ACP 绑定的 `cwd`（`resolveDeleteTarget`，日志
+  `delete-attempt` 里记 source）；目录移动仍由 `project-trash` 守卫；
+- 客户端不再吞码：把服务端返回的码/HTTP 状态直接显示出来，并指向 `plugin.log`；
+- `delete-failed` 日志记录失败码。
+
+**边界**：没有绑定、Studio 也不认识的项目仍然拒绝删除——那种情况没有可信路径可用。
 
 ### 2026-11-14 · 「一直在处理中」：子进程留在退役默认模型上
 

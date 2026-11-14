@@ -2,7 +2,7 @@
 id: dsh-shell-case
 reader: 要改造 DSH 外壳的人
 fact-source: DSH 客户端包（source map）、dsh-ui-extension skill 的生成表
-checked: 0.15.5
+checked: 0.15.6
 rot-if: DSH 版本变化（槽表以 skill 生成表为准）
 -->
 

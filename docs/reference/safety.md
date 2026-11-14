@@ -2,7 +2,7 @@
 id: safety
 reader: 维护者、reviewer、写新路由的人
 fact-source: src/studio-proxy.mjs、src/workbench-auth.mjs、src/auth-bridge.mjs、SECURITY.md
-checked: 0.15.5
+checked: 0.15.6
 rot-if: 新增对浏览器的信任假设，或改动鉴权链路
 -->
 

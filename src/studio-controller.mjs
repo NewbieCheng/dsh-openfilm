@@ -73,6 +73,7 @@ import { createArchiveWatcher } from './workspace-archive.mjs';
 import { createPluginLog } from './plugin-log.mjs';
 import { createBridgeTrace } from './bridge-trace.mjs';
 import { readProfileDefaultModel } from './acp-profile-models.mjs';
+import { createChatTrace } from './chat-trace.mjs';
 import { openProjectPermissions, FULL_ACCESS, WORKSPACE_WRITE } from './official-permission.mjs';
 import { createProjectFiles } from './project-files.mjs';
 import { readJsonBody } from './studio-controller/http-body.mjs';
@@ -556,8 +557,28 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // The only irreversible folder action: guarded move to `<projects root>/../.no996-trash`
   // (or an explicit permanent delete). Kept injectable for tests.
   const projectTrash = createProjectTrash();
+  // Deleting must not depend on Studio still listing the project: a folder Studio
+  // never indexed is exactly the one people ask to remove, and it used to answer
+  // 404 while the row sat on screen. The ACP binding is Host-owned and carries the
+  // path, so it is the fallback identity. The move itself stays guarded by
+  // project-trash (realpath, marker files, home/root, already-trashed).
+  async function resolveDeleteTarget(projectId) {
+    try {
+      const identity = await verifyOfficialProject(projectId);
+      return { ...identity, source: 'studio' };
+    } catch { /* fall back to the binding */ }
+    const record = acpSessions.get(projectId);
+    if (record && typeof record.cwd === 'string' && record.cwd) {
+      try {
+        const path = await realpath(record.cwd);
+        return { projectId, path, source: 'binding' };
+      } catch { /* the folder is already gone; the records still need clearing */ }
+    }
+    throw Object.assign(new Error('Studio does not know this project and no binding has its path'), { code: 'UNKNOWN_PROJECT' });
+  }
+
   const deleteEditingProject = createEditingProjectDelete({
-    verifyProject: verifyOfficialProject,
+    verifyProject: resolveDeleteTarget,
     acpSessions,
     editingPrefs,
     officialStore,
@@ -592,6 +613,9 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   // The ACP child is a different process, so its film-tool calls arrive over MCP.
   // These records are the only synthetic agents in the Host: minted here, checked
   // here, and resolved by the same `projectOfAgent` every tool already uses.
+  // Optional on-disk event trace (NO996_OPENFILM_TRACE=1): shape only, never text.
+  const chatTrace = createChatTrace();
+  if (chatTrace.enabled) void log.info('chat-trace', { enabled: true, dir: tmpdir() + '\\dsh-openfilm\\trace' });
   const mcpTokens = createMcpTokens({ randomBytes });
   const mcpAgents = new Map();
   const mcpAgentFor = (projectId, path) => ({ id: `mcp:${projectId}`, path, projectId });
@@ -611,6 +635,7 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     const delivered = eventHub.publish(projectId, event);
     bridgeTrace.emit(projectId, event, delivered);
     recordTurnEvent(projectId, event);
+    chatTrace.record(projectId, event);
     return delivered;
   };
   const approvals = createOfficialApprovals({ deliver: deliverToPanel });
@@ -926,6 +951,8 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     getLastProxy: () => lastProxy,
     officialStore,
     deleteEditingProject,
+    resolveDeleteTarget,
+    log,
     getAcpAgentService: () => acpAgentService,
   });
   unregisterStandalone = trackRoute(registerRoute({

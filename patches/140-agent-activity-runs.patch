@@ -1,0 +1,29 @@
+diff --git a/apps/desktop/chat/src/lib/agent-activity-runs.ts b/apps/desktop/chat/src/lib/agent-activity-runs.ts
+index a5ba7ea..357ca7a 100644
+--- a/apps/desktop/chat/src/lib/agent-activity-runs.ts
++++ b/apps/desktop/chat/src/lib/agent-activity-runs.ts
+@@ -14,7 +14,7 @@ import type { AgentActAsset } from '@openfilm/shared';
+  *   · the agent's messages, plans and notices each get a row.
+  *
+  * Some are only status words, not work (thinking, working, planning, reconnecting): shown in the status row
+- * while current, gone when done. They are not folded with the tools nor kept as rows: "thought for 6s" between
++ * while current, gone when done. A thought is its own row (see buildRuns below): "thought for 6s" between
+  * "read 3 files · ran 2 commands" would read like a tool.
+  */
+ 
+@@ -64,7 +64,14 @@ export function buildRuns<T extends ActivityRunItem>(items: T[]): ActivityRun<T>
+   let lastIsWork = false;
+   for (const item of items) {
+     /* Status words (thinking, working…) stay in the status line, not the tool list. */
+-    if (item.kind === 'thought' || isEphemeral(item)) continue;
++    if (isEphemeral(item)) continue;
++    /* dsh-openfilm: a thought gets a row of its own. It used to be dropped here, which made the
++       renderer's ThoughtRow unreachable and left a reasoning turn looking like it did nothing. */
++    if (item.kind === 'thought') {
++      runs.push({ items: [item] });
++      lastIsWork = false;
++      continue;
++    }
+     const last = runs[runs.length - 1];
+     const work = isWork(item);
+     if (last && lastIsWork && work) {

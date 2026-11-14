@@ -1162,8 +1162,13 @@
       if (message.includes("PROJECT_BUSY")) return "\u9879\u76EE\u6B63\u5728\u88AB\u4F7F\u7528\uFF0C\u5148\u5173\u6389\u89C6\u9891\u521B\u4F5C\u6216 Studio \u518D\u8BD5\u3002";
       if (message.includes("PROJECT_NOT_OPENFILM")) return "\u8FD9\u4E2A\u76EE\u5F55\u4E0D\u50CF\u662F OpenFilm \u9879\u76EE\uFF0C\u5DF2\u53D6\u6D88\u3002";
       if (message.includes("PROJECT_PATH_INVALID")) return "\u9879\u76EE\u8DEF\u5F84\u4E0D\u5408\u6CD5\uFF0C\u5DF2\u53D6\u6D88\u3002";
-      if (message.includes("UNKNOWN_PROJECT")) return "Studio \u91CC\u627E\u4E0D\u5230\u8FD9\u4E2A\u9879\u76EE\uFF0C\u5DF2\u53D6\u6D88\u3002";
-      return "\u5220\u9664\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5\u3002";
+      if (message.includes("UNKNOWN_PROJECT")) return "Studio \u91CC\u627E\u4E0D\u5230\u8FD9\u4E2A\u9879\u76EE\uFF0C\u4E5F\u6CA1\u6709\u5B83\u7684\u4F1A\u8BDD\u7ED1\u5B9A\uFF0C\u5DF2\u53D6\u6D88\u3002\u5148\u5237\u65B0\u4E00\u6B21\u5217\u8868\u518D\u8BD5\u3002";
+      if (message.includes("DSH_SESSION_REQUIRED")) return "\u767B\u5F55\u72B6\u6001\u8FC7\u671F\u4E86\uFF0C\u5237\u65B0\u9875\u9762\u518D\u8BD5\u3002";
+      if (message.includes("DSH_ORIGIN_REJECTED")) return "\u8BF7\u6C42\u6765\u6E90\u4E0D\u88AB\u4FE1\u4EFB\uFF0C\u5237\u65B0\u9875\u9762\u518D\u8BD5\u3002";
+      if (message.includes("DSH_BROWSER_REQUIRED")) return "\u8FD9\u4E2A\u64CD\u4F5C\u53EA\u80FD\u5728\u6D4F\u89C8\u5668\u7A97\u53E3\u91CC\u505A\uFF0C\u5DF2\u53D6\u6D88\u3002";
+      if (message.includes("DELETE_FAILED")) return "\u5220\u9664\u65F6\u51FA\u9519\u4E86\uFF08Host \u8FD4\u56DE DELETE_FAILED\uFF09\uFF0C\u8BE6\u60C5\u5DF2\u5199\u8FDB plugin.log\u3002";
+      const detail = message.trim().slice(0, 80) || (error?.status ? `HTTP ${error.status}` : "\u672A\u77E5\u539F\u56E0");
+      return `\u5220\u9664\u5931\u8D25\uFF08${detail}\uFF09\uFF0C\u8BE6\u60C5\u5DF2\u5199\u8FDB plugin.log\u3002`;
     };
     const toast = (message) => {
       const node = doc.createElement("div");

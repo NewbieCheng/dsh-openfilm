@@ -2,7 +2,7 @@
 id: adr-0009
 reader: 改界面的人、决定"改哪一层"的人
 fact-source: scripts/build-official-shell.mjs、patches/series.json、.upstream/openfilm、docs/reference/injection-registry.md
-checked: 0.15.5
+checked: 0.15.6
 rot-if: 上游不再发布 studio/ui 源码、构建白名单变化、任何注入转成补丁或被撤掉
 -->
 

@@ -48,6 +48,7 @@ function main() {
     'apps/desktop/chat/src/state/local-agent-store.ts',
     'apps/desktop/chat/src/lib/agent-transcript.ts',
     'apps/desktop/chat/src/lib/local-agent-run.ts',
+    'apps/desktop/chat/src/lib/agent-activity-runs.ts',
     'apps/desktop/chat/src/components/AgentActivityRow.tsx',
     'packages/shared/src/contract.ts',
   'packages/shared/src/markdown-blocks.ts',

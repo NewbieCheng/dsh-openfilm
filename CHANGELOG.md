@@ -1,5 +1,17 @@
 # 更新记录
 
+## 0.15.6 —— 思考过程看得见；删除不再只认 Studio 的列表；事件可落盘
+
+- **思考显示（A1 源码补丁）**：官方 `buildRuns` 把 `kind:'thought'` 直接丢掉，导致 `ThoughtRow`
+  从未被渲染过。现在 thought 作为独立行进入列表：流式时展开、一轮结束折叠成「思考 N 秒」。
+- **删除兜底**：两个删除入口原先只认 Studio `/api/projects`，Studio 列表没刷新就 404，界面只剩
+  一句"删除失败"。现在退到 ACP 绑定的 `cwd`（`resolveDeleteTarget`），日志记 `delete-attempt`
+  （source）与 `delete-failed`（code）。
+- **报错说人话**：客户端不再吞服务端返回码，红条会写出具体原因并指向 `plugin.log`。
+- **事件落盘**：`NO996_OPENFILM_TRACE=1` 时每轮把每个事件的形状写进
+  `%TEMP%\dsh-openfilm\trace\<projectId>.jsonl`（只记 kind/长度/标题，不记模型原文）。
+- 「非流式」不是面板能修的：ACP 一轮只给 1 个 `agent_message_chunk`（日志可证），逐字流要等上游。
+
 ## 0.15.5 —— 把「这轮到底跑在哪个模型上」写进日志
 
 - `agent-trace` 的 `kinds` 之前是嵌套对象，日志脱敏把它变成了 `"[object]"`——等于没记。现在是一行

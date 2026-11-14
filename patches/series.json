@@ -5,7 +5,7 @@
   },
   "generatedFrom": {
     "file": "patch.diff",
-    "sha256": "1d2e6e793b6bb9150aa78b251a49b6fc696dbde517c189c39b305ca8aa4a39fb"
+    "sha256": "d2f9ae9a0ca3151d23cf75adab6a669e7e8aeffd731760927ce15b8ba8a87fe7"
   },
   "patches": [
     {
@@ -113,128 +113,136 @@
       "bytes": 2517
     },
     {
-      "id": "140-agent-menu-rows",
-      "file": "140-agent-menu-rows.patch",
+      "id": "140-agent-activity-runs",
+      "file": "140-agent-activity-runs.patch",
+      "source": "apps/desktop/chat/src/lib/agent-activity-runs.ts",
+      "group": "chat",
+      "sha256": "2ba2646465e001802955596b57eae911ef353fa25cc080401ab8dfa5706b2312",
+      "bytes": 1580
+    },
+    {
+      "id": "150-agent-menu-rows",
+      "file": "150-agent-menu-rows.patch",
       "source": "apps/desktop/chat/src/lib/agent-menu-rows.ts",
       "group": "menus",
       "sha256": "3c97ebe40f27c036297843687c425ad8d761a389a66a3f4f2a1c1233307f87a5",
       "bytes": 1356
     },
     {
-      "id": "150-agent-transcript",
-      "file": "150-agent-transcript.patch",
+      "id": "160-agent-transcript",
+      "file": "160-agent-transcript.patch",
       "source": "apps/desktop/chat/src/lib/agent-transcript.ts",
       "group": "chat",
       "sha256": "29a81f226d12d82c722fb35b4a9b0253710c65fc576d424c757033d306f9d10a",
       "bytes": 3811
     },
     {
-      "id": "160-chat-store",
-      "file": "160-chat-store.patch",
+      "id": "170-chat-store",
+      "file": "170-chat-store.patch",
       "source": "apps/desktop/chat/src/lib/chat-store.ts",
       "group": "chat",
       "sha256": "f55aec1053550487ed26a5a0515901207f8a14be9b3c32036d52bbe1a0543e80",
       "bytes": 1143
     },
     {
-      "id": "170-local-agent-run",
-      "file": "170-local-agent-run.patch",
+      "id": "180-local-agent-run",
+      "file": "180-local-agent-run.patch",
       "source": "apps/desktop/chat/src/lib/local-agent-run.ts",
       "group": "chat",
       "sha256": "803b17356a469b68aa226629e6f32c13d043f4b73755b03e26007dd0bedbcb8a",
       "bytes": 1796
     },
     {
-      "id": "180-local-agent-store",
-      "file": "180-local-agent-store.patch",
+      "id": "190-local-agent-store",
+      "file": "190-local-agent-store.patch",
       "source": "apps/desktop/chat/src/state/local-agent-store.ts",
       "group": "chat",
       "sha256": "82976474e16c0bda198bed44f9611787b2c4bc58e842abff8460e82a3d8c12bf",
       "bytes": 1633
     },
     {
-      "id": "190-EnvironmentNotice",
-      "file": "190-EnvironmentNotice.patch",
+      "id": "200-EnvironmentNotice",
+      "file": "200-EnvironmentNotice.patch",
       "source": "apps/desktop/shell/EnvironmentNotice.tsx",
       "group": "chat",
       "sha256": "623d66b2babbd8bb98fdcd1b53c58e63c12f36e7a9c83e3ba6e50c8dad6e2d39",
       "bytes": 9036
     },
     {
-      "id": "200-LoginGate",
-      "file": "200-LoginGate.patch",
+      "id": "210-LoginGate",
+      "file": "210-LoginGate.patch",
       "source": "apps/desktop/shell/LoginGate.tsx",
       "group": "chat",
       "sha256": "62587e3e5f271bea08d7aeb46a2ee14a18aeebdaeca5317370ef0c50990f3eca",
       "bytes": 29334
     },
     {
-      "id": "210-RecoveryGate",
-      "file": "210-RecoveryGate.patch",
+      "id": "220-RecoveryGate",
+      "file": "220-RecoveryGate.patch",
       "source": "apps/desktop/shell/RecoveryGate.tsx",
       "group": "chat",
       "sha256": "412b5604f84055fc15c98ec4a13678c67a05db4d539ba1faedbd874c4830f9f8",
       "bytes": 2890
     },
     {
-      "id": "220-brand-mark",
-      "file": "220-brand-mark.patch",
+      "id": "230-brand-mark",
+      "file": "230-brand-mark.patch",
       "source": "apps/desktop/shell/brand-mark.ts",
       "group": "chat",
       "sha256": "dfca654096462c6a9d74a33f1d1e69cdac1945ed5032448b16c1a4d7901bc9bb",
       "bytes": 1785
     },
     {
-      "id": "230-login-city",
-      "file": "230-login-city.patch",
+      "id": "240-login-city",
+      "file": "240-login-city.patch",
       "source": "apps/desktop/shell/login-city.js",
       "group": "chat",
       "sha256": "926d9f575310e43e523ad826c429d56fad3e28c0fd288a0e0935509c1ea37f0f",
       "bytes": 78148
     },
     {
-      "id": "240-login.css",
-      "file": "240-login.css.patch",
+      "id": "250-login.css",
+      "file": "250-login.css.patch",
       "source": "apps/desktop/shell/login.css",
       "group": "chat",
       "sha256": "201e9e3d6dd8998cb95e38ddbe8777d518a5f40350298af57f2c02efd9ce26e4",
       "bytes": 18119
     },
     {
-      "id": "250-main",
-      "file": "250-main.patch",
+      "id": "260-main",
+      "file": "260-main.patch",
       "source": "apps/desktop/shell/main.tsx",
       "group": "chat",
       "sha256": "c58f74c8d0d7c6f4ee2ec62b6b058a516c4237a5c85e8b23d9cacd0934f36dfd",
       "bytes": 1241
     },
     {
-      "id": "260-ProjectView",
-      "file": "260-ProjectView.patch",
+      "id": "270-ProjectView",
+      "file": "270-ProjectView.patch",
       "source": "packages/openfilm/studio/ui/src/components/ProjectView.tsx",
       "group": "chat",
       "sha256": "e735de7b410c6bbba5015d877dabfcbe1f24d93ff707e7da4d92829904ee2e17",
       "bytes": 1853
     },
     {
-      "id": "270-WorkbenchAccount",
-      "file": "270-WorkbenchAccount.patch",
+      "id": "280-WorkbenchAccount",
+      "file": "280-WorkbenchAccount.patch",
       "source": "packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx",
       "group": "chat",
       "sha256": "60afc68e056c75e48a90ba7ce0361a208bee54a6ae520ecd6d769a76aa99f803",
       "bytes": 15349
     },
     {
-      "id": "280-contract",
-      "file": "280-contract.patch",
+      "id": "290-contract",
+      "file": "290-contract.patch",
       "source": "packages/shared/src/contract.ts",
       "group": "shared",
       "sha256": "29ff9533aabfbc2373810234ae762e4f856b5e052dfc748ec0d1873ef24edb84",
       "bytes": 1729
     },
     {
-      "id": "290-markdown-blocks",
-      "file": "290-markdown-blocks.patch",
+      "id": "300-markdown-blocks",
+      "file": "300-markdown-blocks.patch",
       "source": "packages/shared/src/markdown-blocks.ts",
       "group": "shared",
       "sha256": "d9d3ec49a9eed7b40d02cf1099add6f047fe9bc376619f9dec3530a140248690",

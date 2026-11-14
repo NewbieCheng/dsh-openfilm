@@ -1,0 +1,334 @@
+diff --git a/packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx b/packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx
+new file mode 100644
+index 0000000..e9a36ac
+--- /dev/null
++++ b/packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx
+@@ -0,0 +1,328 @@
++/**
++ * Workbench account chip + right detail panel (no996 Host auth).
++ * Chip sits left of the page reload control in the title bar.
++ * Wallet numbers come from Host `account:balance` (workbench GET /account/balance),
++ * cached in preferences.json — same口径 as 清流 / 工作台-web.
++ */
++import * as React from 'react';
++import { createPortal } from 'react-dom';
++import { RefreshCw, Settings2, X } from 'lucide-react';
++import { Tooltip } from './Tooltip';
++import type { SettingsSection } from './settings/SettingsModal';
++import { useT } from '@/i18n';
++
++type Wallet = {
++  available_points?: number | null;
++  points_balance?: number | null;
++  period_points_balance?: number | null;
++  expert_points_balance?: number | null;
++  period_expires_at?: string | null;
++  cached_at?: string;
++  stale?: boolean;
++  source?: string;
++  message?: string;
++};
++
++type AuthStatus = {
++  loggedIn: boolean;
++  dev?: boolean;
++  account?: string;
++  displayName?: string;
++  credits?: number | null;
++  balance?: Wallet;
++};
++
++async function hostRpc<T>(channel: string, payload: Record<string, unknown> = {}): Promise<T> {
++  const response = await fetch('/__dsh/official-rpc', {
++    method: 'POST',
++    credentials: 'same-origin',
++    headers: { 'content-type': 'application/json' },
++    body: JSON.stringify({ channel, payload }),
++  });
++  if (!response.ok) {
++    let detail = '';
++    try { detail = (await response.text()).slice(0, 200); } catch { /* ignore */ }
++    throw new Error(detail || `HTTP ${response.status}`);
++  }
++  return response.json() as Promise<T>;
++}
++
++function labelOf(status: AuthStatus | null): string {
++  if (!status?.loggedIn) return '';
++  if (status.dev) return '开发模式';
++  return String(status.displayName || status.account || '已登录').trim().slice(0, 64);
++}
++
++function formatPoints(value: number | null | undefined): string {
++  if (typeof value === 'number' && Number.isFinite(value)) {
++    return new Intl.NumberFormat('zh-CN').format(value);
++  }
++  return '—';
++}
++
++function formatSyncedAt(iso?: string): string {
++  if (!iso) return '';
++  const ms = Date.parse(iso);
++  if (!Number.isFinite(ms)) return '';
++  try {
++    return new Date(ms).toLocaleString('zh-CN', { hour12: false });
++  } catch {
++    return '';
++  }
++}
++
++export function WorkbenchAccountControls({
++  className = '',
++  onSettings,
++}: {
++  className?: string;
++  /** Same entry as AppMenu → Settings; opens Studio SettingsModal. */
++  onSettings?: (section: SettingsSection) => void;
++}) {
++  const t = useT();
++  const [status, setStatus] = React.useState<AuthStatus | null>(null);
++  const [wallet, setWallet] = React.useState<Wallet | null>(null);
++  const [open, setOpen] = React.useState(false);
++  const [busy, setBusy] = React.useState(false);
++  const [walletBusy, setWalletBusy] = React.useState(false);
++  const walletBusyRef = React.useRef(false);
++  const name = labelOf(status);
++  const available = wallet?.available_points ?? status?.credits ?? null;
++  const hasPeriod = typeof wallet?.period_points_balance === 'number';
++
++  const refreshStatus = React.useCallback(() => {
++    void hostRpc<AuthStatus>('auth:status', {})
++      .then((next) => {
++        if (!next || typeof next !== 'object') {
++          setStatus(null);
++          return;
++        }
++        setStatus(next);
++        if (next.balance) setWallet((prev) => prev?.source === 'live' ? prev : next.balance ?? prev);
++      })
++      .catch(() => setStatus(null));
++  }, []);
++
++  const refreshWallet = React.useCallback(async (opts?: { soft?: boolean }) => {
++    if (walletBusyRef.current) return;
++    walletBusyRef.current = true;
++    setWalletBusy(true);
++    try {
++      // Soft open: serve prefs cache first, then pull live.
++      if (opts?.soft) {
++        const cached = await hostRpc<Wallet>('account:balance', { refresh: false });
++        if (cached && typeof cached === 'object') setWallet(cached);
++      }
++      const live = await hostRpc<Wallet>('account:balance', { refresh: true });
++      if (live && typeof live === 'object') setWallet(live);
++      refreshStatus();
++    } catch {
++      setWallet((prev) => prev ? { ...prev, stale: true, message: '积分同步失败' } : prev);
++    } finally {
++      walletBusyRef.current = false;
++      setWalletBusy(false);
++    }
++  }, [refreshStatus]);
++
++  React.useEffect(() => {
++    refreshStatus();
++    const timer = window.setInterval(refreshStatus, 15_000);
++    const onAuth = () => refreshStatus();
++    window.addEventListener('no996-auth-changed', onAuth);
++    return () => {
++      window.clearInterval(timer);
++      window.removeEventListener('no996-auth-changed', onAuth);
++    };
++  }, [refreshStatus]);
++
++  React.useEffect(() => {
++    if (!open) return;
++    void refreshWallet({ soft: true });
++    const onKey = (event: KeyboardEvent) => {
++      if (event.key === 'Escape') setOpen(false);
++    };
++    window.addEventListener('keydown', onKey);
++    return () => window.removeEventListener('keydown', onKey);
++  }, [open, refreshWallet]);
++
++  const logout = async () => {
++    if (busy || status?.dev) return;
++    setBusy(true);
++    try {
++      await hostRpc('auth:logout', {});
++      setStatus({ loggedIn: false });
++      setWallet(null);
++      setOpen(false);
++      try { window.dispatchEvent(new CustomEvent('no996-auth-changed', { detail: { loggedIn: false } })); } catch { /* ignore */ }
++      try {
++        if (window.parent !== window) {
++          window.parent.postMessage({ type: 'no996-openfilm:auth', version: 1, action: 'logged-out' }, '*');
++        }
++      } catch { /* ignore */ }
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  const synced = formatSyncedAt(wallet?.cached_at);
++  const periodExpires = wallet?.period_expires_at ? formatSyncedAt(wallet.period_expires_at) : '';
++
++  return (
++    <div className={`pointer-events-auto flex min-w-0 items-center gap-1 ${className}`} data-workbench-account="">
++      {name ? (
++        <button
++          type="button"
++          aria-haspopup="dialog"
++          aria-expanded={open}
++          aria-label={`账号 ${name}`}
++          title={typeof available === 'number' ? `${name} · ${formatPoints(available)} 积分` : name}
++          onClick={() => setOpen(true)}
++          className="flex h-[26px] max-w-[11rem] min-w-0 items-center gap-1.5 rounded-md border border-[var(--border-strong)] bg-[var(--bg-field)] px-2 text-[12px] text-[var(--text)] transition hover:bg-[var(--bg-hover)]"
++        >
++          <span className="min-w-0 truncate">{name}</span>
++          {typeof available === 'number' ? (
++            <span className="shrink-0 tabular-nums text-[11px] text-[var(--text-muted)]">{formatPoints(available)}</span>
++          ) : null}
++        </button>
++      ) : null}
++      <Tooltip label="刷新界面（重新加载工作台页面）" side="bottom">
++        <button
++          type="button"
++          aria-label="刷新界面"
++          onClick={() => location.reload()}
++          className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md text-[var(--text-muted)] transition hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
++        >
++          <RefreshCw size={14} strokeWidth={1.9} />
++        </button>
++      </Tooltip>
++      {open && name ? createPortal(
++        <div className="fixed inset-0 z-[10060]" role="presentation">
++          <button
++            type="button"
++            aria-label="关闭账号面板"
++            className="absolute inset-0 bg-black/45"
++            onClick={() => setOpen(false)}
++          />
++          <aside
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="workbench-account-title"
++            className="absolute inset-y-0 right-0 flex w-[min(360px,92vw)] flex-col border-l border-[var(--border)] bg-[var(--bg-panel)] shadow-[-18px_0_48px_rgba(0,0,0,.35)]"
++            style={{ animation: 'workbench-account-in 180ms ease-out both' }}
++          >
++            <style>{`@keyframes workbench-account-in{from{transform:translateX(12px);opacity:.0}to{transform:none;opacity:1}}`}</style>
++            <header className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--border)] px-3">
++              <h2 id="workbench-account-title" className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-[var(--text)]">账号与积分</h2>
++              <Tooltip label="刷新资产">
++                <button
++                  type="button"
++                  aria-label="刷新资产"
++                  disabled={walletBusy}
++                  onClick={() => void refreshWallet()}
++                  className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)] disabled:opacity-45"
++                >
++                  <RefreshCw size={14} className={walletBusy ? 'animate-spin' : ''} />
++                </button>
++              </Tooltip>
++              <button
++                type="button"
++                aria-label="关闭"
++                onClick={() => setOpen(false)}
++                className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
++              >
++                <X size={15} />
++              </button>
++            </header>
++            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
++              <section className="min-w-0">
++                <div className="text-[11.5px] text-[var(--text-faint)]">当前登录</div>
++                <div className="mt-1 truncate text-[15px] font-medium text-[var(--text)]" title={name}>{name}</div>
++                {status?.account && status.account !== name ? (
++                  <div className="mt-0.5 truncate text-[12px] text-[var(--text-muted)]" title={status.account}>{status.account}</div>
++                ) : null}
++              </section>
++
++              <section className="rounded-md border border-[var(--border)] bg-[var(--bg-field)] px-3 py-3">
++                <div className="text-[11.5px] text-[var(--text-faint)]">可用积分</div>
++                <div className="mt-1 text-[22px] font-semibold tabular-nums tracking-tight text-[var(--text)]">
++                  {formatPoints(available)}
++                  <span className="ml-1 text-[12px] font-medium text-[var(--text-muted)]">点</span>
++                </div>
++                {wallet?.stale ? (
++                  <p className="mt-2 text-[12px] text-[var(--warn)]">{wallet.message || '显示的是本地缓存，线上可能已变化。'}</p>
++                ) : null}
++                {synced ? (
++                  <p className="mt-2 text-[11px] text-[var(--text-faint)]">最近同步 {synced}</p>
++                ) : (
++                  <p className="mt-2 text-[11px] text-[var(--text-faint)]">{walletBusy ? '正在同步…' : '尚未同步到工作台余额'}</p>
++                )}
++              </section>
++
++              <section className="grid grid-cols-2 gap-2">
++                {hasPeriod ? (
++                  <>
++                    <div className="rounded-md border border-[var(--border)] px-3 py-2.5">
++                      <div className="text-[11px] text-[var(--text-faint)]">本期积分</div>
++                      <div className="mt-1 text-[15px] font-semibold tabular-nums text-[var(--text)]">{formatPoints(wallet?.period_points_balance)}</div>
++                      <div className="mt-1 text-[11px] text-[var(--text-muted)]">{periodExpires ? `到期 ${periodExpires}` : '订阅发放，到期作废'}</div>
++                    </div>
++                    <div className="rounded-md border border-[var(--border)] px-3 py-2.5">
++                      <div className="text-[11px] text-[var(--text-faint)]">永久积分</div>
++                      <div className="mt-1 text-[15px] font-semibold tabular-nums text-[var(--text)]">{formatPoints(wallet?.points_balance)}</div>
++                    </div>
++                  </>
++                ) : (
++                  <div className="col-span-2 rounded-md border border-[var(--border)] px-3 py-2.5">
++                    <div className="text-[11px] text-[var(--text-faint)]">永久积分</div>
++                    <div className="mt-1 text-[15px] font-semibold tabular-nums text-[var(--text)]">{formatPoints(wallet?.points_balance ?? available)}</div>
++                  </div>
++                )}
++                <div className="col-span-2 rounded-md border border-[var(--border)] px-3 py-2.5">
++                  <div className="text-[11px] text-[var(--text-faint)]">专家 / 高级积分</div>
++                  <div className="mt-1 text-[15px] font-semibold tabular-nums text-[var(--text)]">{formatPoints(wallet?.expert_points_balance ?? 0)}</div>
++                </div>
++              </section>
++
++              {onSettings ? (
++                <button
++                  type="button"
++                  onClick={() => {
++                    setOpen(false);
++                    onSettings('general');
++                  }}
++                  className="flex w-full items-center gap-2.5 rounded-md border border-[var(--border-strong)] bg-[var(--bg-field)] px-3 py-2.5 text-left text-[13px] text-[var(--text)] transition hover:bg-[var(--bg-hover)]"
++                >
++                  <Settings2 size={15} strokeWidth={1.75} className="shrink-0 text-[var(--text-muted)]" aria-hidden />
++                  <span className="min-w-0 flex-1 font-medium">{t('settings.title')}</span>
++                  <span className="text-[11.5px] text-[var(--text-faint)]">外观 · 代理 · 快捷键</span>
++                </button>
++              ) : (
++                <p className="text-[12px] leading-relaxed text-[var(--text-muted)]">
++                  充值与流水将放在设置 → 账号。此处先看当前身份与余额缓存。
++                </p>
++              )}
++            </div>
++            <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-[var(--border)] px-4 py-3">
++              <button
++                type="button"
++                disabled={busy || status?.dev === true}
++                onClick={() => void logout()}
++                className="rounded-md border border-[var(--border-strong)] px-3 py-1.5 text-[12.5px] text-[var(--text)] transition hover:bg-[var(--bg-hover)] disabled:cursor-not-allowed disabled:opacity-45"
++              >
++                {status?.dev ? '开发模式无需退出' : busy ? '退出中…' : '退出登录'}
++              </button>
++              <button
++                type="button"
++                onClick={() => setOpen(false)}
++                className="rounded-md px-3 py-1.5 text-[12.5px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
++              >
++                关闭
++              </button>
++            </footer>
++          </aside>
++        </div>,
++        document.body,
++      ) : null}
++    </div>
++  );
++}
