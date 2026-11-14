@@ -1,7 +1,7 @@
 <!-- doc
 id: status
 reader: 所有人（"现在到哪了"）
-fact-source: package.json 的 version、CHANGELOG.md、git log、TEST-CHECKLIST 的待验项
+fact-source: package.json 的 version、CHANGELOG.md、git log、playbooks/manual-acceptance.md 的待验项
 checked: 0.15.1
 rot-if: 每次发版、每个批次结束、任何"待验"变"已验证"
 -->
@@ -35,7 +35,7 @@ rot-if: 每次发版、每个批次结束、任何"待验"变"已验证"
 
 | 项 | 证据等级 | 怎么验 |
 |---|---|---|
-| ACP 面板：刷新页面后发一句 → 侧栏同一会话 | 源码 + 离线集成通过 | [`TEST-CHECKLIST.md`](TEST-CHECKLIST.md) 第 11 步 |
+| ACP 面板：刷新页面后发一句 → 侧栏同一会话 | 源码 + 离线集成通过 | [`playbooks/manual-acceptance.md`](playbooks/manual-acceptance.md) 第 11 步 |
 | 删除项目：壳里删 → 进回收站 → 恢复 | 单测通过 | 手动删一个空项目再恢复 |
 | 登录一次、退出、再打开应免登录 | 单测 + 离线 | 首次安装 → 登录 → 做一支片 → 退出 → 重开面板 |
 | 首次打开的两处引导：①选影片类型的四张卡 ②编辑器里的空态/拖放提示 | 源码完成 | 覆盖安装后第一次打开面板；只想看界面：`npm run onboard:preview`（打桩，不起真 Studio） |

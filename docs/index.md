@@ -34,7 +34,7 @@ rot-if: 新增/删除 docs/ 下的顶层文档
 | 新开发者 | [`DEVELOPMENT.md`](DEVELOPMENT.md) | [`ARCHITECTURE.md`](ARCHITECTURE.md) → [`decisions/`](decisions/README.md) |
 | 改界面的人 | [`reference/ui-layers.md`](reference/ui-layers.md) | [`playbooks/ui-change.md`](playbooks/ui-change.md) → [`reference/injection-registry.md`](reference/injection-registry.md) |
 | 维护上游的人 | [`playbooks/upstream-bump.md`](playbooks/upstream-bump.md) | [`reference/api-routes.md`](reference/api-routes.md) |
-| 验收的人 | [`STATUS.md`](STATUS.md) | [`TEST-CHECKLIST.md`](TEST-CHECKLIST.md) |
+| 验收的人 | [`STATUS.md`](STATUS.md) | [`playbooks/manual-acceptance.md`](playbooks/manual-acceptance.md) |
 | 只想知道"现在能干嘛" | [`../README.md`](../README.md) | [`STATUS.md`](STATUS.md) |
 
 ## 3. 每篇文档的属性块
@@ -61,6 +61,7 @@ rot-if: 什么变了这篇就该重写
 | [`TEMPLATES.md`](TEMPLATES.md) | L3 影片/模板的构建与校验 |
 | [`MOTION.md`](MOTION.md) | 动效生产 + 风格库/镜头卡（后两节由 catalog 生成） |
 | [`reference/kit.md`](reference/kit.md) | 模板、单元、风格、镜头卡的数量与清单（生成；正文不写数） |
+| [`topics/ui-plan.md`](topics/ui-plan.md) | 界面改造方案（人话版，含批次与验收） |
 | [`TRANSCRIBE.md`](TRANSCRIBE.md) | 本地口播转写 |
 | [`BRAND.md`](BRAND.md) | 品牌替换与法务边界 |
 | [`DSH-SHELL-INTEGRATION.md`](DSH-SHELL-INTEGRATION.md) | DSH 三栏外壳改造案例（插槽细节见 `dsh-ui-extension` skill） |

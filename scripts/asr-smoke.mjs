@@ -7,7 +7,7 @@
  * This is the check the unit tests deliberately cannot be: they use a stub
  * recognizer, so only this script can tell whether the engine loads, how long the
  * first decode takes, and whether the text is actually right. Its output is what
- * belongs in docs/TEST-CHECKLIST.md.
+ * belongs in docs/playbooks/manual-acceptance.md.
  */
 import { stat } from 'node:fs/promises';
 import { createTranscribeService } from '../src/transcribe-service.mjs';

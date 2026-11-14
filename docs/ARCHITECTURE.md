@@ -145,4 +145,4 @@ rot-if: 进程模型、对话边界、面板宿主方式变化
 
 **进展不写在这篇文档里。** 当前版本、本批做完什么、哪些还等真机见 [`STATUS.md`](STATUS.md)；每次改动的结论见 [`../CHANGELOG.md`](../CHANGELOG.md)；"为什么对话交给 ACP 而不是自建回合"见 [`decisions/ADR-0003-acp-boundary.md`](decisions/ADR-0003-acp-boundary.md)。
 
-ACP 的里程碑口径（M1–M5）已随 0.13.0 完成，验收步骤保留在 [`TEST-CHECKLIST.md`](TEST-CHECKLIST.md) 第 11 步。
+ACP 的里程碑口径（M1–M5）已随 0.13.0 完成，验收步骤保留在 [`playbooks/manual-acceptance.md`](playbooks/manual-acceptance.md) 第 11 步。
