@@ -8,7 +8,7 @@ rot-if: 拆分完成或策略改变
 
 # ADR-0008：两个巨型闭包按职责拆开，分两步走
 
-- 状态：生效（两步均已落地；14 条路由已迁 13 条，余 1 条）
+- 状态：生效（两步完成，14/14 条路由已迁出）
 - 日期：2026-11-14
 
 ## 背景
@@ -51,16 +51,22 @@ rot-if: 拆分完成或策略改变
 | `src/studio-controller/routes/chat.mjs` | mcp（唯一跳过 cookie 准入的路由） | 完成（1 条） |
 | `src/studio-controller/routes/editing.mjs` | editing-sessions/prefs/archive/delete/delete-project | 完成（5 条） |
 
-控制器 1,558 → 1,056 行。剩下的 1 条路由目标形态：
+| `src/studio-controller/routes/bootstrap.mjs` | bootstrap（auth → Studio up → 代理写编辑器 origin） | 完成（1 条） |
+| `src/studio-controller/routes/diagnose.mjs` | diagnose（证据聚合 + 健康变更日志） | 完成（1 条） |
+| `src/studio-controller/routes/debug-url.mjs` | debug-url（调试窗口 cookie 由监听器持有） | 完成（1 条） |
+
+控制器 1,558 → **1,037** 行，路由注册表 14/14 迁完。剩下的 1,000 行不是路由：
 
 ```text
 src/studio-controller/
   index.mjs               createStudioController：构图 + 装配（目标 < 250 行）
   router.mjs              registerRoute/trackRoute/rollback（TDZ 保护留在这里）
   routes/editing.mjs      editing-sessions、editing-delete-project、archive
-  routes/debug.mjs        debug-url（依赖 runtime/proxyFor/debugBridge 生命周期，最重）
+- `officialRpc`（约 260 行）：ACP 子进程的 Host 侧 RPC 表；
+- 运行时装配：Studio 启动/关闭、代理工厂、模板与权限仓库、事件桥；
+- 这两块是下一步（若要继续），不属于"路由注册表"范畴。
 
-已迁：system×3、client-log、attachment、mcp、editing×5、bootstrap、diagnose。
+已迁：system×3、client-log、attachment、mcp、editing×5、bootstrap、diagnose、debug-url。
 ```
 
 每个 `registerX(deps)` 接收显式依赖（ctx、log、proxy、officialRpc、sessions…），不再捕获闭包。迁移顺序：先建 `router.mjs` 与依赖对象，再逐组搬路由，**每搬一组重跑 614 条测试**。

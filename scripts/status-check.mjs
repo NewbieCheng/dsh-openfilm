@@ -29,6 +29,20 @@ if (!existsSync(statusFile)) {
   }
 }
 
+// The lockfile's own version fields rot exactly like the README once did: it sat at
+// 0.13.4 while the package was 0.15.1. `npm ci` tolerates that, so nothing fails —
+// which is why it has to be checked rather than noticed.
+const lockFile = join(ROOT, 'package-lock.json')
+if (existsSync(lockFile)) {
+  try {
+    const lock = JSON.parse(readFileSync(lockFile, 'utf8'))
+    if (lock.version !== version) problems.push(`package-lock.json says ${lock.version}, package.json is ${version}`)
+    if (lock.packages?.['']?.version !== version) problems.push('package-lock.json root package version is stale')
+  } catch {
+    problems.push('package-lock.json is not valid JSON')
+  }
+}
+
 /** Any doc claiming to be "当前 <version>" must agree with package.json. */
 const CLAIM = /当前\s*`?v?(\d+\.\d+\.\d+)`?/g
 const targets = [

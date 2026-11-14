@@ -1,9 +1,10 @@
 name: ci
 
 # Everything this repository already knows how to check, run on every push to
-# main and every PR. The point is not "more tests" — it is that the four
-# hand-written check scripts and the 607-assertion suite stop depending on
-# somebody remembering to type them.
+# main and every PR. The point is not "more tests" — it is that the hand-written
+# check scripts and the test suite stop depending on somebody remembering to type
+# them. No counts are hard-coded here on purpose: they rot, and the suite already
+# prints its own total.
 
 on:
   push:

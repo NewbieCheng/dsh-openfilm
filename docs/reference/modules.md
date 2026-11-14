@@ -8,13 +8,13 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 # 模块清单（自动生成）
 
-> 生成命令：`npm run docs:gen`。110 个模块、15450 行。
-> **无同名测试**的模块：41 个 —— 这是待补清单，不是失败项。
+> 生成命令：`npm run docs:gen`。111 个模块、15489 行。
+> **无同名测试**的模块：42 个 —— 这是待补清单，不是失败项。
 > "同名测试"按 `tests/*<模块名>*.test.mjs` 匹配，只说明"有测试提到它"，不保证覆盖。
 
 | 模块 | 行数 | 导出 | 同名测试 |
 |---|---|---|---|
-| `src/studio-controller.mjs` | 1056 | createStudioController | **无** |
+| `src/studio-controller.mjs` | 1037 | createStudioController | **无** |
 | `src/sidebar-editing.mjs` | 936 | EDITING_LABEL, installWorkspaceSwitch | `sidebar-editing-rows.test.mjs` |
 | `src/studio-proxy.mjs` | 852 | startStudioProxy | `studio-proxy-files.test.mjs` |
 | `src/acp-agent-service.mjs` | 561 | catalogFromConfigOptions, createAcpAgentService | `acp-agent-service.test.mjs` |
@@ -95,6 +95,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/archive-bridge.mjs` | 59 | registerArchiveBridge | **无** |
 | `src/area-bus.mjs` | 59 | areaBus, createAreaBus | **无** |
 | `src/shell-extras.mjs` | 58 | shellUiInjection, shellUiVersion | `shell-extras.test.mjs` |
+| `src/studio-controller/routes/debug-url.mjs` | 58 | createDebugUrlRoute | **无** |
 | `src/studio-proxy/websocket.mjs` | 58 | MAX_FRAME, WS_GUID, frames, wsFrame | **无** |
 | `src/project-instructions.mjs` | 57 | INSTRUCTIONS, ensureProjectInstructions | `project-instructions.test.mjs` |
 | `src/workspace-create.mjs` | 57 | createWorkspaceFlow | **无** |
@@ -127,7 +128,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 ## 无同名测试
 
-- `src/studio-controller.mjs`（1056 行）
+- `src/studio-controller.mjs`（1037 行）
 - `src/login-page.mjs`（440 行）
 - `src/studio-panel.mjs`（370 行）
 - `src/transcribe-service.mjs`（255 行）
@@ -152,6 +153,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 - `src/acp-session-store.mjs`（62 行）
 - `src/archive-bridge.mjs`（59 行）
 - `src/area-bus.mjs`（59 行）
+- `src/studio-controller/routes/debug-url.mjs`（58 行）
 - `src/studio-proxy/websocket.mjs`（58 行）
 - `src/workspace-create.mjs`（57 行）
 - `src/openfilm-prompt.mjs`（51 行）

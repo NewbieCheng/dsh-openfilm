@@ -79,6 +79,7 @@ import { createRouter } from './studio-controller/router.mjs';
 import { createAssetRoutes } from './studio-controller/routes/assets.mjs';
 import { createChatRoutes } from './studio-controller/routes/chat.mjs';
 import { createBootstrapRoute } from './studio-controller/routes/bootstrap.mjs';
+import { createDebugUrlRoute } from './studio-controller/routes/debug-url.mjs';
 import { createDiagnoseRoute } from './studio-controller/routes/diagnose.mjs';
 import { createDiagnosticsRoutes } from './studio-controller/routes/diagnostics.mjs';
 import { createEditingRoutes } from './studio-controller/routes/editing.mjs';
@@ -800,7 +801,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   let unregisterClientLog;
   let unregisterStandalone;
   let unregisterTemplatesPage;
-  let unregisterDebugUrl;
   let unregisterMcp;
   try {
   unregisterTemplateBridge = trackRoute(registerTemplateBridge(ctx, {
@@ -950,40 +950,21 @@ export function createStudioController(ctx, createProxy, { officialShell = false
   }));
   const chat = createChatRoutes({ register: registerRoute, track: trackRoute, mcpEndpoint, isDisposed: () => disposed, log });
   const [unregisterMcp] = chat.disposers;
-  unregisterDebugUrl = trackRoute(registerRoute({
-    kind: 'exact', path: '/api/no996-openfilm/debug-url',
-    async handler(req, res) {
-      res.setHeader('cache-control', 'no-store');
-      if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }).end(); return; }
-      const admission = ctx.connection.admit({ headers: req.headers });
-      if ('rejection' in admission || admission.peer.id !== ctx.connection.browserPeer.id) { res.writeHead(403).end('DSH_BROWSER_REQUIRED'); return; }
-      try {
-        await runtime.ensureStarted();
-        if (disposed || !upstream) { res.writeHead(503).end(); return; }
-        const surface = req.headers['x-no996-surface'];
-        const desktop = surface === 'dsh-app://app' || surface === 'app://app';
-        const browser = desktop ? null : new URL(req.headers.origin || `http://${req.headers.host}`);
-        const proxy = await proxyFor(desktop ? surface : browser.origin, desktop);
-        const data = proxy.bootstrapData();
-        if (!data) { res.writeHead(503).end(); return; }
-        // A browser cannot hold Studio's Secure/Partitioned cookie, so the debug
-        // listener holds it instead and gates the window with its own token.
-        let url;
-        if (data.ticket) {
-          if (!debugBridge) {
-            debugBridge = redeemStudioSession(data.editorOrigin, data.ticket)
-              .then(cookie => startStudioDebug({ editorOrigin: data.editorOrigin, sessionCookie: cookie, officialShell }));
-            debugBridge.catch(() => { debugBridge = undefined; });
-          }
-          url = (await debugBridge).url;
-        } else url = `${data.webOrigin}/no996-openfilm/standalone`;
-        const body = JSON.stringify({ url });
-        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
-      } catch {
-        if (!res.headersSent) res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' }).end('Studio is unavailable');
-      }
-    },
-  }));
+  // Debug window URL (cookie lives in the debug listener, not the browser).
+  const debugUrl = createDebugUrlRoute({
+    ctx,
+    register: registerRoute,
+    track: trackRoute,
+    officialShell,
+    isDisposed: () => disposed,
+    getUpstream: () => upstream,
+    ensureStudioStarted: () => runtime.ensureStarted(),
+    proxyFor,
+    getBridge: () => debugBridge,
+    setBridge: (next) => { debugBridge = next; },
+  });
+  const [unregisterDebugUrl] = debugUrl.disposers;
+
   } catch (error) {
     rollbackRoutes();
     throw error;
