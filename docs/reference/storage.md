@@ -24,6 +24,16 @@ rot-if: 换存储介质、或 DSH 改 storageDomain 形状
 | 预设激活报告 | `%TEMP%\dsh-openfilm-preset.json` | 诊断 |
 | 插件日志 | `%TEMP%\dsh-openfilm\plugin.log`（JSON Lines，脱敏） | 诊断 |
 | 帧记录 | `%TEMP%\dsh-openfilm-frames.jsonl`（每轮覆盖） | 诊断 |
+| 影片项目 | `<仓库>/films/Projects/<名>-<id>/`（`film.html` + `assets/` + `manifest.json`） | 用户数据，**不入 git、不进 npm 包** |
+| 项目删除回收站 | `<仓库>/films/.no996-trash/`（同盘 `rename`，可勾选彻底删除） | 用户数据 |
+
+## 1.1 本机影片库为什么在仓库里
+
+`films/` 是本机的影片库（用户数据），放在仓库根只为"一个文件夹里做完所有事"：
+
+- `.gitignore` 有 `/films/`，`package.json` 的 `files` 白名单也没有它，所以既不会被提交，也不会被打进发布包；
+- `tests/repo-hygiene.test.mjs` 把这两条钉住，防止哪天被 `git add -f` 或打包配置误带；
+- **真正决定影片出现在面板里的，是 `%USERPROFILE%\.openfilm\studio.json` 的 `recent` 表**（绝对路径 + 稳定的项目 id）。移库要同步改这张表，否则面板说"找不到"，但影片本身没坏：项目文件夹内部不存绝对路径。
 
 ## 2. 永不删除
 

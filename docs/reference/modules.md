@@ -8,7 +8,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 # 模块清单（自动生成）
 
-> 生成命令：`npm run docs:gen`。111 个模块、15489 行。
+> 生成命令：`npm run docs:gen`。111 个模块、15492 行。
 > 没有测试直接 import 的模块：23 个（待补清单，不是失败项）；另有 1 个已登记排除。
 > "测试"列 = 直接 import 该模块的测试文件，来自 `tests/**` 的实际 import 语句，不做名字猜测。
 > 排除项写在 `scripts/test-exclusions.json`，每条必须带理由。
@@ -77,9 +77,9 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/asr-segments.mjs` | 95 | SEGMENT_LIMITS, normalizeSegments, planSegments | `asr-segments.test.mjs` |
 | `src/acp-profile-models.mjs` | 91 | activeProfileDir, applyAcpModelProviders, providerBlocks | `acp-profile-models.test.mjs` |
 | `src/asr-sensevoice.mjs` | 89 | createSenseVoiceRecognizer, loadSherpa | **无** |
+| `src/download-sources.mjs` | 89 | MODEL_BASES, MODEL_REPO, TOOL_SOURCES, augmentPath, knownBinaryDirs, modelBases… | `download-sources.test.mjs` |
 | `src/studio-controller/routes/diagnose.mjs` | 88 | createDiagnoseRoute | `diagnose-route.test.mjs` |
 | `src/get-tool.mjs` | 87 | createGetTool | `studio-tools.test.mjs`、`tool-schema.test.mjs` |
-| `src/download-sources.mjs` | 86 | MODEL_BASES, MODEL_REPO, TOOL_SOURCES, augmentPath, knownBinaryDirs, modelBases… | `download-sources.test.mjs` |
 | `src/theme.mjs` | 82 | THEME_SURFACES, createTheme, theme, themeSurfaceFor | `theme.test.mjs` |
 | `src/preset-report.mjs` | 80 | reportPresetStatus | `preset-report.test.mjs` |
 | `src/project-trash.mjs` | 79 | TRASH_DIR, createProjectTrash | `project-trash.test.mjs` |
