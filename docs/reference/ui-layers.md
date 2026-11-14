@@ -17,7 +17,7 @@ rot-if: 层数变化、DSH 为侧栏开出官方插槽、或上游提供源码
 |---|---|---|---|
 | L0 DSH 外壳 | 侧边栏、面板边框、加载/错误态 | 本仓 `src/studio-entry.js`、`studio-panel.mjs` | 能，完全自己的 |
 | L1 官方桌面壳 | 项目列表、对话、登录、首次引导 | 上游 `apps/desktop/*`，产物在 `vendor/official-shell/ui` | 能，但要源码补丁 + 重建 |
-| L2 Studio 编辑器 | 时间轴、画布、素材库 | 上游 npm 包，只有 `studio/ui/dist`，**没有源码** | 不能，只能样式注入 |
+| L2 Studio 编辑器 | 时间轴、画布、素材库 | 上游 monorepo 的 `packages/openfilm/studio/ui/src`，随桌面壳一起构建进 `vendor/official-shell/ui`；npm 包的 `studio/ui/dist` 只在我们没传 `editorDir` 时兜底 | 能，与 L1 同一条补丁链路（ADR-0009） |
 | L3 影片/模板页 | 用户项目里的 `film.html` | 本仓 `vendor/templates/*` | 能，改模板源并重建 |
 
 **判断顺序**：先看 URL 和所处容器，再决定手段。
