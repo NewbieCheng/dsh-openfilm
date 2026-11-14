@@ -11,7 +11,7 @@ rot-if: 新增/删除 docs/ 下的顶层文档
 > 这个仓库的文档按**寿命**分层，不按主题堆在一个文件里。
 > 一条经验：事实几周不变，决策几月不变，进度每天变——混写在一起，整篇就会跟着进度一起烂。
 
-## 1. 五条车道
+## 1. 六条车道
 
 | 车道 | 放什么 | 寿命 | 目录 |
 |---|---|---|---|
@@ -19,10 +19,10 @@ rot-if: 新增/删除 docs/ 下的顶层文档
 | **决策** | 为什么这么定、代价是什么 | 永久（只追加） | [`decisions/`](decisions/README.md) |
 | **参考** | 可以生成的事实：路由、环境变量、模块、层、登记表 | 随代码 | [`reference/`](reference/) |
 | **流程** | 改界面、发版、升上游、出事怎么办 | 稳定 | [`playbooks/`](playbooks/) |
+| **主题/功能** | 横切多层的专题、单一功能的设计 | 随功能 | [`topics/`](topics/)、[`features/`](features/) |
 | **进度** | 现在到哪了 | 每天 | [`STATUS.md`](STATUS.md)、[`ROADMAP.md`](ROADMAP.md)、[`../CHANGELOG.md`](../CHANGELOG.md) |
 
-> **没有 `topics/` 车道。** 跨领域材料按性质归位：是决策进 `decisions/`，是稳定事实进 `reference/`，是步骤进 `playbooks/`。单独开一个"主题"目录，最后只会变成杂物抽屉。
-> 按功能写的文档放 [`features/`](features/)，一功能一篇（例：[`features/editing-delete.md`](features/editing-delete.md)）。
+跨领域、横切多层（L0–L3）的材料放 [`topics/`](topics/)，一篇一个主题（例：[`topics/copy-and-branding.md`](topics/copy-and-branding.md)）；按功能写的放 [`features/`](features/)，一功能一篇（例：[`features/editing-delete.md`](features/editing-delete.md)）。主题不是杂物抽屉：能归到决策/参考/流程的，不放这里。
 
 **铁律**：进度只允许出现在最后一行那三个文件里。`ARCHITECTURE`、`reference/`、`playbooks/` 里出现"这个功能已经做到某版本"这类叙述即视为文档缺陷，`docs:check` 会失败。
 
