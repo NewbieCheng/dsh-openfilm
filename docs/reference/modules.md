@@ -8,14 +8,14 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 
 # 模块清单（自动生成）
 
-> 生成命令：`npm run docs:gen`。111 个模块、15487 行。
+> 生成命令：`npm run docs:gen`。111 个模块、15504 行。
 > 没有测试直接 import 的模块：23 个（待补清单，不是失败项）；另有 1 个已登记排除。
 > "测试"列 = 直接 import 该模块的测试文件，来自 `tests/**` 的实际 import 语句，不做名字猜测。
 > 排除项写在 `scripts/test-exclusions.json`，每条必须带理由。
 
 | 模块 | 行数 | 导出 | 同名测试 |
 |---|---|---|---|
-| `src/studio-controller.mjs` | 1038 | createStudioController | 读源码：`declaration-order.test.mjs`、`route-registration-order.test.mjs`、`sidebar-untouched.test.mjs`、`system-routes.test.mjs` |
+| `src/studio-controller.mjs` | 1049 | createStudioController | 读源码：`declaration-order.test.mjs`、`mcp-endpoint-path.test.mjs`、`route-registration-order.test.mjs`、`sidebar-untouched.test.mjs`、`system-routes.test.mjs` |
 | `src/sidebar-editing.mjs` | 936 | EDITING_LABEL, installWorkspaceSwitch | `sidebar-editing-rows.test.mjs` |
 | `src/studio-proxy.mjs` | 852 | startStudioProxy | `panel-sse-e2e.test.mjs`、`proxy-error-sanitize.test.mjs`、`studio-proxy-files.test.mjs`、`theme-injection.test.mjs` |
 | `src/acp-agent-service.mjs` | 561 | catalogFromConfigOptions, createAcpAgentService | `acp-agent-service.test.mjs`、`acp-catalog.test.mjs`、`acp-rpc-round-trip.test.mjs`、`panel-sse-e2e.test.mjs` |
@@ -107,6 +107,7 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/official-event-hub.mjs` | 43 | createOfficialEventHub | `official-event-stream.test.mjs`、`panel-sse-e2e.test.mjs` |
 | `src/project-markers.mjs` | 41 | OPENED_MARKER, markProjectOpened | `project-markers.test.mjs` |
 | `src/official-shell.mjs` | 40 | resolveOfficialShell | **无** |
+| `src/studio-controller/routes/chat.mjs` | 40 | createChatRoutes | 读源码：`declaration-order.test.mjs`、`mcp-endpoint-path.test.mjs` |
 | `src/draft-tool.mjs` | 38 | createDraftTool | `draft-tool.test.mjs`、`tool-schema.test.mjs` |
 | `src/studio-controller/routes/diagnostics.mjs` | 38 | createDiagnosticsRoutes | **无** |
 | `src/studio-controller/routes/assets.mjs` | 37 | createAssetRoutes | **无** |
@@ -116,7 +117,6 @@ rot-if: 新增/删除模块或测试（重新生成即可）
 | `src/asr-media.mjs` | 34 | createMediaEdge | `asr-media.test.mjs` |
 | `src/guide-tool.mjs` | 34 | createGuideTool | `tool-schema.test.mjs` |
 | `src/official-model-catalog.mjs` | 34 | officialModelOptions | **无** |
-| `src/studio-controller/routes/chat.mjs` | 34 | createChatRoutes | 读源码：`declaration-order.test.mjs` |
 | `src/auth-client.mjs` | 32 | authAction, authEndpoint | **无** |
 | `src/dsh-ai.mjs` | 29 | createDshAskAgent | **无** |
 | `src/editing-sessions.mjs` | 29 | buildEditingProjects | `editing-sessions.test.mjs` |

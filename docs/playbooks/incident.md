@@ -2,7 +2,7 @@
 id: playbooks-incident
 reader: 值班的人、排查 bug 的人
 fact-source: 真实故障记录（2026-11）、%TEMP%/dsh-openfilm/plugin.log、docs/architecture
-checked: 0.15.1
+checked: 0.15.2
 rot-if: 出现新的故障类别，或某个根因被结构性消除
 -->
 

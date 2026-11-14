@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.15.2 —— 修 ACP 全挂：MCP 端点占了 DSH 的保留路径
+
+- 症状：面板里 `OpenFilm capability unavailable: agent:prompt [503] ACP_REQUEST_FAILED`，模型菜单只剩「默认」，对话发不出去；日志每 2 秒一轮 `mcp-client(no996-openfilm): initial connection or tool synchronization failed`。
+- 根因：MCP 端点注册在 `/api/no996-openfilm/mcp`。DSH 保留所有 `/api/<plugin>/mcp` 给清单里声明的 MCP 服务，Host 在路由之前就用 400 回掉，我们的 handler 一次都没跑到；ACP 子进程连不上端点 → `session/new` 失败 → 模型、对话、思考强度全没了。
+- 修法：端点改到 `/api/no996-openfilm/mcp-host`，路由与交给子进程的 URL 同一处取值；`tests/mcp-endpoint-path.test.mjs` 钉住"不能用保留路径、两边必须一致"。
+- 可观测：每次给子进程发凭据前，Host 自己先 POST 一次 `initialize`，把实际状态码写进 `plugin.log`（`mcp-self-check`）。下次这类故障日志里直接有状态码。
+- 另修：`registerRoute` 在声明前被使用（TDZ），导致插件 activate 阶段报 `Cannot access 'registerRoute' before initialization`、状态「异常」；`tests/declaration-order.test.mjs` 补了顺序断言。
+- 新增 [`docs/playbooks/incidents.md`](docs/playbooks/incidents.md)：故障账（症状/根因/为什么没抓到/现在靠什么挡住）。
+
 ## 0.15.1 —— 剪辑区视觉收口：SVG 图标、无对勾选中、入场动效
 
 - 下拉、折叠、更多、置顶、菜单项全部换成 1.7px 线宽的内联 SVG（Lucide 几何，ISC），不再渲染 `▾`/`▸`/`⋯`/`✓`/`📌` 文本字形。

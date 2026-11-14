@@ -652,7 +652,18 @@ export function createStudioController(ctx, createProxy, { officialShell = false
       const agent = mcpAgentFor(projectId, projectPath);
       mcpAgents.set(agent.id, agent);
       const token = mcpTokens.mint({ projectId, path: projectPath, agent });
-      return [mcpServerEntry({ url: `${webOrigin}/api/no996-openfilm/mcp`, token })];
+      const mcpUrl = `${webOrigin}/api/no996-openfilm/mcp-host`;
+      // The child's failure is one line: "mcp-client(no996-openfilm): initial
+      // connection or tool synchronization failed". Probe the endpoint from here so
+      // the log says what it actually answered (the reserved `/mcp` path answered
+      // 400 and cost an afternoon).
+      void fetch(mcpUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 'self-check', method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'no996-host-self-check', version: '1' } } }),
+      }).then(reply => void log.info('mcp-self-check', { projectId, status: reply.status }))
+        .catch(error => void log.info('mcp-self-check', { projectId, status: 'error', detail: String(error?.message ?? error).slice(0, 80) }));
+      return [mcpServerEntry({ url: mcpUrl, token })];
     },
     // The ACP profile has no OpenFilm preset, but its agent reads AGENTS.md from
     // the workspace — which is the project folder. Written once, never overwritten.

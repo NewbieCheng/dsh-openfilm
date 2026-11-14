@@ -2,7 +2,7 @@
 id: motion
 reader: 做动效的人
 fact-source: vendor/motion/**、动效目录
-checked: 0.15.1
+checked: 0.15.2
 rot-if: 动效目录或生产协议变化
 -->
 

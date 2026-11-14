@@ -107,7 +107,7 @@ test('a missing or unknown token is refused before any protocol work', async () 
 });
 
 test('the ACP server entry names the endpoint and carries the bearer token', () => {
-  const entry = mcpServerEntry({ url: 'http://127.0.0.1:48096/api/no996-openfilm/mcp', token });
+  const entry = mcpServerEntry({ url: 'http://127.0.0.1:48096/api/no996-openfilm/mcp-host', token });
   assert.equal(entry.type, 'http');
   assert.equal(entry.name, 'no996-openfilm');
   assert.deepEqual(entry.headers, [{ name: 'Authorization', value: `Bearer ${token}` }]);

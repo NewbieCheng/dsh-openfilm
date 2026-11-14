@@ -2,7 +2,7 @@
 id: ui-plan
 reader: 决定方向的人（非工程背景也能读）
 fact-source: ADR-0009、apps/desktop/shell/main.tsx、scripts/build-official-shell.mjs、docs/reference/injection-registry.md
-checked: 0.15.1
+checked: 0.15.2
 rot-if: 注入转补丁的批次变化、桥接方式变化
 -->
 

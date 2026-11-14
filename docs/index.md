@@ -2,7 +2,7 @@
 id: index
 reader: 所有人（第一次进仓库）
 fact-source: 本目录下的文件清单
-checked: 0.15.1
+checked: 0.15.2
 rot-if: 新增/删除 docs/ 下的顶层文档
 -->
 
@@ -35,6 +35,7 @@ rot-if: 新增/删除 docs/ 下的顶层文档
 | 改界面的人 | [`reference/ui-layers.md`](reference/ui-layers.md) | [`playbooks/ui-change.md`](playbooks/ui-change.md) → [`reference/injection-registry.md`](reference/injection-registry.md) |
 | 维护上游的人 | [`playbooks/upstream-bump.md`](playbooks/upstream-bump.md) | [`reference/api-routes.md`](reference/api-routes.md) |
 | 验收的人 | [`STATUS.md`](STATUS.md) | [`playbooks/manual-acceptance.md`](playbooks/manual-acceptance.md) |
+| 排障的人 | [`playbooks/incidents.md`](playbooks/incidents.md) | [`../AGENTS.md`](../AGENTS.md) §7 证据入口 |
 | 只想知道"现在能干嘛" | [`../README.md`](../README.md) | [`STATUS.md`](STATUS.md) |
 
 ## 3. 每篇文档的属性块

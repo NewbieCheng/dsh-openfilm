@@ -2,7 +2,7 @@
 id: ADR-0008-controller-split
 reader: 维护者、要动 controller/proxy 的人
 fact-source: src/studio-controller.mjs、src/studio-proxy.mjs、tests/*.mjs
-checked: 0.15.1
+checked: 0.15.2
 rot-if: 拆分完成或策略改变
 -->
 

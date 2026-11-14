@@ -2,7 +2,7 @@
 id: playbooks-release
 reader: 发版的人
 fact-source: package.json、CHANGELOG.md、scripts/*、.github/workflows/ci.yml
-checked: 0.15.1
+checked: 0.15.2
 rot-if: 换发布渠道，或版本流程变化
 -->
 

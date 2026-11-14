@@ -33,7 +33,7 @@ test('the MCP endpoint exists before the chat route is mounted', () => {
   assert.ok(mount > 0, 'the chat routes are mounted in the controller');
   assert.ok(endpoint < mount, 'mounting before the endpoint exists would hand over undefined');
   // The path itself moved to the chat module; that is where it must stay unique.
-  assert.match(read('src/studio-controller/routes/chat.mjs'), /path: '\/api\/no996-openfilm\/mcp'/);
+  assert.match(read('src/studio-controller/routes/chat.mjs'), /path: '\/api\/no996-openfilm\/mcp-host'/);
 });
 
 test('the ACP service handle is declared before the RPC handlers read it', () => {

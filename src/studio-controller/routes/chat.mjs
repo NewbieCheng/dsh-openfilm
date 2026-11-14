@@ -3,9 +3,15 @@
 // It is the only route that skips cookie admission — the caller is the child
 // process and proves itself with a per-Session bearer token resolved inside the
 // endpoint. A Host that is shutting down answers 503 instead of half-serving.
+//
+// The path is NOT `/api/no996-openfilm/mcp`: DSH reserves every `/api/<plugin>/mcp`
+// for MCP servers declared in the plugin manifest. A plugin that registers its own
+// handler there never sees a request — the Host answers 400 first, which the ACP
+// child reports as "initial connection or tool synchronization failed" and every
+// chat request then fails with ACP_REQUEST_FAILED.
 export function createChatRoutes({ register, track, mcpEndpoint, isDisposed, log }) {
   const unregisterMcp = track(register({
-    kind: 'exact', path: '/api/no996-openfilm/mcp',
+    kind: 'exact', path: '/api/no996-openfilm/mcp-host',
     async handler(req, res) {
       res.setHeader('cache-control', 'no-store');
       if (disposed) { res.writeHead(503).end('{}'); return; }
