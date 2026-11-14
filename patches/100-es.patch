@@ -1,0 +1,22 @@
+diff --git a/apps/desktop/chat/src/i18n/locales/es.ts b/apps/desktop/chat/src/i18n/locales/es.ts
+index 12035f2..9c42b0e 100644
+--- a/apps/desktop/chat/src/i18n/locales/es.ts
++++ b/apps/desktop/chat/src/i18n/locales/es.ts
+@@ -130,6 +130,8 @@ export const es: Words = {
+     previewFailed: 'No se pudo leer este archivo',
+   },
+   composer: {
++    searchModel: 'Buscar modelos…',
++    searchNoMatch: 'Ningún modelo coincide',
+     contextFull: 'Esta conversación ya es larga. Una nueva funcionará mejor.',
+     contextFullNew: 'Nueva conversación',
+     agentLoading: 'Cargando…',
+@@ -243,6 +245,8 @@ export const es: Words = {
+     untitledSession: 'Nuevo chat',
+   },
+   projectMenu: {
++    delete: 'Eliminar',
++    deleteConfirm: 'Haz clic otra vez para eliminar',
+     archive: 'Archivar',
+     archived: 'Archivados',
+     asking: 'Esperando tu respuesta',

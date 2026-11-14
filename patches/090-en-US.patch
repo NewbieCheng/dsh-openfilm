@@ -1,0 +1,57 @@
+diff --git a/apps/desktop/chat/src/i18n/locales/en-US.ts b/apps/desktop/chat/src/i18n/locales/en-US.ts
+index b5a098a..5370d55 100644
+--- a/apps/desktop/chat/src/i18n/locales/en-US.ts
++++ b/apps/desktop/chat/src/i18n/locales/en-US.ts
+@@ -19,6 +19,25 @@ export const enUS = {
+     browserDownloading: 'Downloading the browser Studio draws pages in (about 100 MB, once)…',
+     browserFailed: 'The browser Studio draws pages in did not download: {error}',
+   },
++  onboarding: {
++    title: 'What kind of video are you cutting?',
++    subtitle: 'Pick a style to start. You can open this gate again anytime.',
++    start: 'Start with this',
++    creating: 'Creating…',
++    createFailed: 'Could not create the project. Try again.',
++    useDefault: 'Use last choice: {name}',
++    cancel: 'Not now',
++    reopen: 'Change film type',
++  },
++  editor: {
++    title: 'AI film editor',
++    empty: 'I am your film editor. Say the topic and length, or drop video, audio, or images here — I will put them in the project library and help you cut.',
++    dropHint: 'Drop footage here. I will add it to the project library.',
++    dropActive: 'Release to attach',
++    nextTitle: 'Next steps',
++    skills: 'Skills',
++    dismissNext: 'Got it',
++  },
+   act: {
+     waitingForYou: 'Waiting for you',
+     /* the app's own agent, after two minutes with nothing from the model (some think for minutes first) */
+@@ -130,6 +149,8 @@ export const enUS = {
+     previewFailed: 'This file could not be read',
+   },
+   composer: {
++    searchModel: 'Search models…',
++    searchNoMatch: 'No matching model',
+     contextFull: 'This conversation is getting long. A new one will work better.',
+     contextFullNew: 'New conversation',
+     agentLoading: 'Loading…',
+@@ -228,7 +249,7 @@ export const enUS = {
+     addAttachment: 'Add files',
+     close: 'Close',
+     composerPlaceholder: 'Say what to change. Type @ for a file, a skill, a moment or what you selected',
+-    composerPlaceholderBlank: 'Describe your film. Type @ to add a file or a skill',
++    composerPlaceholderBlank: 'Topic and length, or drop footage here. Type @ for a file or skill',
+     dismiss: 'Dismiss',
+     jumpToLatest: 'Jump to latest',
+     loadingMessages: 'Loading conversation…',
+@@ -244,6 +265,8 @@ export const enUS = {
+     untitledSession: 'New chat',
+   },
+   projectMenu: {
++    delete: 'Delete',
++    deleteConfirm: 'Click again to delete',
+     archive: 'Archive',
+     archived: 'Archived',
+     asking: 'Waiting for you',

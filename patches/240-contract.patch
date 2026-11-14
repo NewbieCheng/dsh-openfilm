@@ -1,0 +1,37 @@
+diff --git a/packages/shared/src/contract.ts b/packages/shared/src/contract.ts
+index 340ad66..f60cc69 100644
+--- a/packages/shared/src/contract.ts
++++ b/packages/shared/src/contract.ts
+@@ -190,14 +190,30 @@ export const publicGenerationEventSchema = z.discriminatedUnion('type', [
+     done: z.boolean().optional(),
+     text: z.string().max(TRANSCRIPT_TEXT_MAX),
+   }),
+-  /** The model is thinking (no text); `done: true` ends it. Not kept in the history. */
++  /**
++   * The model is thinking; `done: true` ends it.
++   *
++   * `text` carries the reasoning itself when the agent sends it (an agent on the user's machine, or a
++   * bridging agent that reports its reasoning), so the panel can show a "thought for 6s" block that
++   * opens to it. Without text it only drives the status line underneath.
++   */
+   z.object({
+     type: z.literal('agent-thinking'),
++    turnNo: z.number().int().nonnegative().optional(),
++    partId: z.string().optional(),
+     done: z.boolean().optional(),
++    text: z.string().max(TRANSCRIPT_TEXT_MAX).optional(),
+   }),
+-  /** One thing the agent did: a closed-set action and a short visible text (search words, a description). */
++  /**
++   * One thing the agent did: a closed-set action and a short visible text (search words, a description).
++   *
++   * 	ool is the real tool name (openfilm_frame, web_search, ead). The closed act says what it
++   * meant for the film; the name says what actually ran — a bridging agent knows both, and a person
++   * reading a transcript wants both.
++   */
+   z.object({
+     type: z.literal('agent-act'),
++    tool: z.string().max(80).optional(),
+     callId: z.string(),
+     turnNo: z.number().int().nonnegative(),
+     act: z.enum(AGENT_ACTS),

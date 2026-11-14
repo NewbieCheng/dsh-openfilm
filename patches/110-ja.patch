@@ -1,0 +1,22 @@
+diff --git a/apps/desktop/chat/src/i18n/locales/ja.ts b/apps/desktop/chat/src/i18n/locales/ja.ts
+index 771e3eb..fee5c03 100644
+--- a/apps/desktop/chat/src/i18n/locales/ja.ts
++++ b/apps/desktop/chat/src/i18n/locales/ja.ts
+@@ -130,6 +130,8 @@ export const ja: Words = {
+     previewFailed: 'このファイルを読み込めませんでした',
+   },
+   composer: {
++    searchModel: 'モデルを検索…',
++    searchNoMatch: '一致するモデルがありません',
+     contextFull: 'この会話は長くなっています。新しい会話のほうがうまくいきます。',
+     contextFullNew: '新しい会話',
+     agentLoading: '読み込み中…',
+@@ -243,6 +245,8 @@ export const ja: Words = {
+     untitledSession: '新しいチャット',
+   },
+   projectMenu: {
++    delete: '削除',
++    deleteConfirm: 'もう一度クリックで削除',
+     archive: 'アーカイブ',
+     archived: 'アーカイブ済み',
+     asking: '回答待ち',

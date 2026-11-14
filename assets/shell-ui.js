@@ -353,6 +353,9 @@
   };
   function place(){
     try{
+      // 迁移期：React 版 TemplatePicker（data-no996-template-react）已经在同一位置，
+      // 注入这条先让路但不删；真机验收通过后再整段移除。
+      if(document.querySelector('[data-no996-template-react]')){ if(wrap)wrap.style.display='none'; return; }
       var card=findReplicaCard();
       if(!card||!card.parentElement){if(wrap)wrap.style.display='none';return;}
       // Rebuild the clone when the host re-renders its own card away.

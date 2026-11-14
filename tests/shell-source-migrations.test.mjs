@@ -32,6 +32,15 @@ test('the environment notice is source, not injection', () => {
   assert.match(bundle, /尚未配置或安装/);
 });
 
+test('the template picker is in the shell source, and the injection yields to it', () => {
+  // Mid-migration on purpose: the React picker is live, the old injection still
+  // exists but must not render its cloned card while the React one is on the page.
+  assert.match(bundle, /你想剪哪种视频？/);
+  assert.match(bundle, /用这个开工/);
+  assert.match(bundle, /data-no996-template-react/);
+  assert.match(injection, /data-no996-template-react/);
+});
+
 test('both components are mounted by the shell entry', () => {
   // The entry is upstream source; the patch series is what carries it. Find the
   // patch through series.json rather than guessing its number.
@@ -41,4 +50,7 @@ test('both components are mounted by the shell entry', () => {
   const patch = readFileSync(join(root, 'patches', entry.file), 'utf8');
   assert.match(patch, /RecoveryGate/);
   assert.match(patch, /EnvironmentNotice/);
+  const starters = series.patches.find(entry => entry.source.endsWith('apps/desktop/chat/src/components/ProjectStarters.tsx'));
+  assert.ok(starters, 'series records the starters component');
+  assert.match(readFileSync(join(root, 'patches', starters.file), 'utf8'), /TemplatePicker/);
 });

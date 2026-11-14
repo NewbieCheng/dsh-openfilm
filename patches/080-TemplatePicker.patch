@@ -1,0 +1,170 @@
+diff --git a/apps/desktop/chat/src/components/TemplatePicker.tsx b/apps/desktop/chat/src/components/TemplatePicker.tsx
+new file mode 100644
+index 0000000..f487575
+--- /dev/null
++++ b/apps/desktop/chat/src/components/TemplatePicker.tsx
+@@ -0,0 +1,164 @@
++'use client';
++
++/**
++ * "Which kind of film?" — the template picker, in React.
++ *
++ * It used to be a runtime injection that cloned one of the upstream suggestion
++ * cards and rebuilt the dialog by hand (assets/shell-ui.js). Cloning held the card's
++ * exact size, but every re-render of this column could wipe it and the placement
++ * code had to follow the host's layout twice. Here it is a tile plus a portal:
++ * same channels, same copy, no DOM surgery.
++ */
++import React from 'react';
++import { createPortal } from 'react-dom';
++
++type Template = { id: string; productTitle?: string; title?: string; productBlurb?: string; description?: string };
++
++let cache: Template[] | null = null;
++
++async function rpc(channel: string, payload: unknown) {
++  const reply = await fetch('/__dsh/official-rpc', {
++    method: 'POST',
++    credentials: 'same-origin',
++    headers: { 'content-type': 'application/json' },
++    body: JSON.stringify({ channel, payload }),
++  });
++  if (!reply.ok) throw new Error('HTTP ' + reply.status);
++  return reply.json();
++}
++
++const label = (item: Template) => item.productTitle || item.title || item.id;
++const blurb = (item: Template) => item.productBlurb || item.description || '';
++
++const BUTTON: React.CSSProperties = {
++  padding: '8px 16px',
++  borderRadius: 6,
++  border: '1px solid var(--border)',
++  background: 'transparent',
++  color: 'var(--text-muted)',
++  cursor: 'pointer',
++  font: 'inherit',
++};
++
++export function TemplatePicker() {
++  const [open, setOpen] = React.useState(false);
++  const [templates, setTemplates] = React.useState<Template[]>(cache ?? []);
++  const [selected, setSelected] = React.useState('');
++  const [busy, setBusy] = React.useState(false);
++  const [error, setError] = React.useState('');
++
++  React.useEffect(() => {
++    if (!open) return;
++    let live = true;
++    void rpc('template:list', {})
++      .then((value: { templates?: Template[] }) => {
++        const list = Array.isArray(value?.templates) ? value.templates : [];
++        cache = list;
++        if (!live) return;
++        setTemplates(list);
++        setSelected(was => (list.some(item => item.id === was) ? was : (list[0]?.id ?? '')));
++      })
++      .catch(() => { if (live) setTemplates([]); });
++    return () => { live = false; };
++  }, [open]);
++
++  React.useEffect(() => {
++    if (!open) return;
++    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
++    window.addEventListener('keydown', onKey);
++    return () => window.removeEventListener('keydown', onKey);
++  }, [open]);
++
++  const create = async () => {
++    if (busy || !selected) return;
++    setBusy(true);
++    setError('');
++    try {
++      const value: { projectId?: string; prompt?: string; onboarding?: unknown } = selected === 'custom'
++        ? await rpc('project:create-blank', {})
++        : await rpc('template:create', { templateId: selected });
++      const projectId = value?.projectId;
++      if (typeof projectId !== 'string' || !/^[A-Za-z0-9_-]{6,40}$/.test(projectId)) throw new Error('bad project');
++      try {
++        if (value.prompt) localStorage.setItem('no996.openfilm.templatePrompt', String(value.prompt).slice(0, 600));
++        if (value.onboarding) localStorage.setItem('no996.openfilm.onboarding', JSON.stringify(value.onboarding).slice(0, 1200));
++      } catch { /* ignore */ }
++      window.location.href = '/projects/' + projectId;
++    } catch {
++      setError('创建失败，重试');
++      setBusy(false);
++    }
++  };
++
++  return (
++    <>
++      <button
++        type="button"
++        data-no996-template-react
++        onClick={() => setOpen(true)}
++        aria-haspopup="dialog"
++        aria-expanded={open}
++        className="mt-4 flex w-full items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-2.5 text-left text-[13px] text-[var(--text)] transition-colors duration-120 hover:border-[var(--border-strong)] hover:bg-[var(--bg-hover)]"
++      >
++        <span className="font-medium">选择模板</span>
++        <span className="text-[11.5px] text-[var(--text-muted)]">按片型开工</span>
++      </button>
++
++      {open && createPortal(
++        <div
++          role="dialog"
++          aria-modal="true"
++          aria-label="你想剪哪种视频？"
++          onClick={event => { if (event.target === event.currentTarget) setOpen(false); }}
++          style={{ position: 'fixed', inset: 0, zIndex: 2147483000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(8,8,10,.72)' }}
++        >
++          <div style={{ width: 'min(760px, calc(100vw - 32px))', maxHeight: 'min(78vh, 720px)', overflow: 'auto', padding: 22, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-raised)', color: 'var(--text)' }}>
++            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
++              <div>
++                <div style={{ fontSize: 17, fontWeight: 700 }}>你想剪哪种视频？</div>
++                <div style={{ marginTop: 4, fontSize: 12.5, color: 'var(--text-muted)' }}>选好后按这个风格开工；可随时再开。</div>
++              </div>
++              <button type="button" aria-label="关闭" onClick={() => setOpen(false)} style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
++            </div>
++
++            <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
++              {templates.map(item => {
++                const active = item.id === selected;
++                return (
++                  <button
++                    key={item.id}
++                    type="button"
++                    role="radio"
++                    aria-checked={active}
++                    onClick={() => setSelected(item.id)}
++                    style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 116, padding: 13, textAlign: 'left', borderRadius: 6, cursor: 'pointer', font: 'inherit', color: 'var(--text)', border: '1px solid ' + (active ? 'var(--border-strong)' : 'var(--border)'), background: active ? 'var(--bg-hover)' : 'transparent', boxShadow: active ? 'inset 0 1px 0 rgba(255,180,100,.22)' : 'none' }}
++                  >
++                    <span style={{ fontSize: 14.5, fontWeight: 700 }}>{label(item)}</span>
++                    <span style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--text-muted)', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{blurb(item)}</span>
++                  </button>
++                );
++              })}
++              {!templates.length && (
++                <div style={{ gridColumn: '1 / -1', padding: '26px 4px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12.5 }}>没有可用片型，请稍后重试</div>
++              )}
++            </div>
++
++            <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
++              {error ? <span style={{ marginRight: 'auto', fontSize: 12.5, color: '#c8553d' }}>{error}</span> : null}
++              <button type="button" onClick={() => setOpen(false)} style={BUTTON}>取消</button>
++              <button
++                type="button"
++                onClick={() => void create()}
++                disabled={busy || !selected}
++                style={{ padding: '8px 20px', borderRadius: 6, border: 0, background: 'var(--accent, #ff6400)', color: '#fff', fontWeight: 700, cursor: busy || !selected ? 'default' : 'pointer', opacity: busy || !selected ? 0.6 : 1 }}
++              >
++                {busy ? '创建中…' : error ? '重试' : '用这个开工'}
++              </button>
++            </div>
++          </div>
++        </div>,
++        document.body,
++      )}
++    </>
++  );
++}
