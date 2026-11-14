@@ -1,3 +1,11 @@
+<!-- doc
+id: shot-cards
+reader: 做分镜的人
+fact-source: vendor/motion/shotcards/**
+checked: 0.15.1
+rot-if: 镜头卡增删
+-->
+
 # 镜头卡（124 张）
 
 > 由 `scripts/build-motion-index.mjs` 从 `vendor/motion/shotcards/catalog.json` 生成，不要手改。

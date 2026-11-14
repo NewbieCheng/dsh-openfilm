@@ -1,3 +1,11 @@
+<!-- doc
+id: architecture
+reader: 开发者、智能体
+fact-source: index.js、src/studio-*.mjs、cordis.patch.yml、DSH 的 Cordis 契约
+checked: 0.15.1
+rot-if: 进程模型、对话边界、面板宿主方式变化
+-->
+
 # 架构：OpenFilm × DSH 的正确接法（ACP 为边界）
 
 > 状态：方案待批（2026-11-13）。批准后按 §7 的里程碑实施，并把未完成项并入 `docs/ROADMAP.md`。
@@ -129,49 +137,12 @@
 
 ## 8. 非目标
 
-- 不再往侧栏注入任何东西（0.13.0 决定不变）。
+- 除 ADR-0006 允许的那一处窄注入（工作区下拉开关）外，不再往侧栏注入任何东西。
 - 不把 Studio 代理当安全边界。
 - 不让 `openfilm_draft` 承担保存/导出。
 
-## 9. 进展（0.13.0，边车已落地）
+## 9. 进展与验收
 
-| 项 | 状态 | 证据 |
-|---|---|---|
-| ACP 线级客户端 | 完成 | `src/acp-client.mjs`；`tests/acp-client.test.mjs` 9 项；真机 `initialize/session/new/session/list` 探测通过 |
-| 会话身份 | 完成 | `session/new` 的 id 存 `$DSH_HOME/no996-openfilm/acp-sessions.json`；`session/resume` 续聊（跨进程，同一子进程内 resume 会被 DSH 以"already active"拒绝，这是协议行为） |
-| 模型 / 思考 | 完成 | ACP `configOptions`（model、reasoning_effort）直接映射到面板菜单；会话打开后按 Host 当前选择 `set_config_option` |
-| 权限 | 完成 | 子进程按项目预设启动（`DSH_PERMISSION_MODE`）；改预设 = 丢弃子进程，下轮重建 |
-| 附件 | 已完成 | 不支持图片的路由 → 临时文件 + 绝对路径；支持则内联 image block；拖入的文件本就以路径文本进入提示 |
-| 编辑指令 | 完成 | 会话打开时写 `<项目>/AGENTS.md`（`src/project-instructions.mjs`，8 KB 上限，已有文件绝不覆盖）；acp profile 自带 `agent-instructions`，按 cwd 读取 |
-| 工具 | 完成（待真机） | Host 的 `/api/no996-openfilm/mcp` 实现 MCP streamable-http（initialize / tools/list / tools/call / ping），`session/new` 时以 `mcpServers` 把 `openfilm_guide`、9 个影片工具与转写工具交给子进程；令牌按会话签发、随子进程退出吊销。真机探测：子进程连上端点并完成 `initialize` → `notifications/initialized` |
-| 集成自检（无模型调用） | 通过 | 真服务 + 真 `dsh --profile acp` + 本地 MCP 端点 + 临时项目：`session/new`（带 `mcpServers`，`failOnStartupError:true`）成功；模型默认切到 `deepseek-official/deepseek-flash`（V4.1 Flash）；`AGENTS.md` 写入项目；会话 id 落 `acp-sessions.json`；日志 `acp-session` / `acp-default-model` |
-| 一轮真实回合（手动，非测试） | 通过 | 真子进程 + 真模型 + 本地 MCP：`session/prompt` → 模型调用 `mcp__no996-openfilm__openfilm_guide`（参数 `{topic:"edit"}`）→ 工具结果回到模型 → 回复含工具返回值 → `stopReason: end_turn`；`agent_message_chunk` 流式可见 |
-| 图片（内联） | 通过 | 子进程按当前 DSH 模型加 `--patch` overlay → `initialize` 报到 `image:true`；32×32 纯红 PNG 以 image block 送入，模型答 "Red"，`end_turn` |
-| 图片（回落路径） | 通过 | 默认模型 `image:false` → 服务把它们写成临时文件并在正文附 `[reference image] <绝对路径>`；模型自己读文件后答 "Red"，`end_turn` |
-| 项目 `AGENTS.md` 生效 | 通过 | 临时项目写入唯一允许答案 `MARKER-42` → 提问后模型只回 `MARKER-42`（子进程 cwd 即项目目录） |
-| 重启后续聊（离线） | 通过 | 杀了真 Host 再起：面板发问走 `session/resume`，回答带重启前只对模型说过的数字；侧栏列出同一条会话 |
-| 真实 Host 的整条面板线路（离线） | 通过 | 隔离 home 起真 Host、用它的启动 token 换 cookie，`bootstrap` 200；`agent:models`/`agent:thinking`/`agent:permission` 均返回行；`agent:prompt` 经真子进程得到真实回复 `PANEL-OK.` 与 `done{ok:true,end_turn}`；子进程的会话落在共享会话目录里 |
-| 注入页面（离线） | 通过 | 在 VM 里执行代理注入的那段原样代码：`probe` 生成模型/思考/权限三行；`start` 返回 key；`setOption` 分别打到三条通道；`prompt` 收到 update 与匹配的 `done` 后返回 `end_turn` |
-| 面板线路（离线） | 通过 | 真代理 + 真 SSE + 真 ACP 服务：`ready` → 逐条 `update`（带面板 key）→ 一条 `done`；伪造来源被 403 |
-| 面板真机验收 | 待做 | 刷新页面后：面板发一句 → 侧栏同一会话；模型/思考菜单可切；权限行仍在；SenseVoice 不受影响 |
+**进展不写在这篇文档里。** 当前版本、本批做完什么、哪些还等真机见 [`STATUS.md`](STATUS.md)；每次改动的结论见 [`../CHANGELOG.md`](../CHANGELOG.md)；"为什么对话交给 ACP 而不是自建回合"见 [`decisions/ADR-0003-acp-boundary.md`](decisions/ADR-0003-acp-boundary.md)。
 
-里程碑口径修正：M1/M2 已在代码层完成，M4（工作区命名）在 ACP 下不需要——会话的 cwd 就是项目目录，侧栏按目录自然分组，没有注入。工具已通过 MCP 端点补齐，剩下的就是 M5 真机验收：**刷新页面后由人发一句**，然后看 `plugin.log` 里的 `acp-session` / `acp-prompt-failed`。
-
-## 10. M5 收尾（已执行）
-
-旧的手写 RPC 回合路径已整段删除，只留 ACP（2026-11-13，删除前在独立 worktree 上跑通全量测试）：
-
-| 删除 | 位置 | 判断依据 |
-|---|---|---|
-| 进程内回合服务 | `src/official-agent-service.mjs` + `tests/official-agent-service.test.mjs` | 只有它自己与 `studio-controller` 引用 |
-| 事件翻译层 | `src/official-agent-events.mjs` + `tests/official-agent-events.test.mjs` | 只被旧服务引用 |
-| 旧兜底分支 | `studio-controller` 里 `createOfficialAgentService` 的 import、`acpEnabled()`、`agentService = acp… ?? create…`、`openProjectSessions` | ACP 成为唯一路径 |
-| 旧会话绑定 | `project-conversation.mjs` + 3 个测试；`projectConversations`/`conversations`/`boundSession`/`rebind` | ACP 下会话在子进程，Host 侧不再建绑定 |
-| 旧系统提示注入 | `ctx.systemPrompt.context({ name: 'no996-openfilm-project' })` | 只对 Host 侧绑定会话生效，ACP 子进程读不到 |
-| 旧审批桥 | `attachApprovalBridge` | ACP 权限走 `session/request_permission` |
-| 提示词分支里的旧动作 | `agent:prompt` 里的 `boundSession`/`store.resume` | ACP 权限由 `DSH_PERMISSION_MODE` 决定 |
-| 诊断里的旧分组 | `grouping: conversations.grouping(...)` | 改成常量 `acp` |
-
-**保留**：`official-chat-rpc`、`official-chat-store`、`official-event-*`、`official-approvals`、`official-permission`（权限行与 `decide`）、`official-attachment`（上传仍在，作为大图兜底）、项目文件路由、模板、转写（SenseVoice）与所有影片工具。
-
-删除后已重跑：`node --test tests/*.test.mjs`（563 项）、`npm run build`、`npm run docs:check`、`npm run patches:check`。真机仍需一次发一句话、切一次模型、拖一张图、看一次侧栏同一会话；任何一步不通过，`git revert` 这一个提交即可恢复（删掉的模块都在历史里）。
+ACP 的里程碑口径（M1–M5）已随 0.13.0 完成，验收步骤保留在 [`TEST-CHECKLIST.md`](TEST-CHECKLIST.md) 第 11 步。

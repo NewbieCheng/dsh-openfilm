@@ -1,6 +1,6 @@
 # AGENTS.md — dsh-openfilm / No996 Studio
 
-给在本仓工作的智能体的操作手册。人读 [`README.md`](README.md)；架构与重载 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)；改界面 [`docs/UI-PLAYBOOK.md`](docs/UI-PLAYBOOK.md)；上游 [`docs/UPSTREAM.md`](docs/UPSTREAM.md)；品牌 [`docs/BRAND.md`](docs/BRAND.md)；架构 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；路线 [`docs/ROADMAP.md`](docs/ROADMAP.md)；决策与故障 [`docs/NOTES.md`](docs/NOTES.md)。
+给在本仓工作的智能体的操作手册。人读 [`README.md`](README.md)；架构与重载 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)；改界面 [`docs/playbooks/ui-change.md`](docs/playbooks/ui-change.md)；上游 [`docs/playbooks/upstream-bump.md`](docs/playbooks/upstream-bump.md)；品牌 [`docs/BRAND.md`](docs/BRAND.md)；架构 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；路线 [`docs/ROADMAP.md`](docs/ROADMAP.md)；决策与故障 [`docs/decisions/README.md`](docs/decisions/README.md)。
 
 > 被 `openfilm-video-editing` 预设的 `@deepseek-ai/dsh-agent-instructions` 读入（`maxBytes: 65536`）。细节写进 `docs/`，这里只留"不知道就会犯错"的部分。
 
@@ -23,7 +23,7 @@
 
 ---
 
-## 2. 三层界面，两种手段
+## 2. 四层界面，两种手段
 
 | 层 | 页面 | 改法 |
 |---|---|---|
@@ -39,7 +39,7 @@
 | **B1** | 样式注入（`assets/theme/*.css`） | L2 编辑器；L1 快速试色 |
 | **B2** | DOM/行为注入（`assets/shell-ui.js`） | A1 做不到、又必须动 DOM，且已登记 |
 
-**默认顺序：token → A2/B1 → A1 → B2。** 判断流程、注入登记表、反模式见 [`docs/UI-PLAYBOOK.md`](docs/UI-PLAYBOOK.md)。收到 `dsh-element-source` 的「[元素定位]」时：先读源码、展示代码、一句话说明渲染内容，然后**停下等修改需求**。
+**默认顺序：token → A2/B1 → A1 → B2。** 判断流程、注入登记表、反模式见 [`docs/playbooks/ui-change.md`](docs/playbooks/ui-change.md)。收到 `dsh-element-source` 的「[元素定位]」时：先读源码、展示代码、一句话说明渲染内容，然后**停下等修改需求**。
 
 ---
 
@@ -66,12 +66,10 @@
 npm run build                      # 只在改了客户端源码时需要
 npm run templates:build            # 改了 _kit 或 shots/*.json 后
 npm run motion:index               # 改 catalog 后重生成 STYLES/SHOT-CARDS
-npm run frame:studio -- motion-styles 2   # 抽模板帧（临时 home）
-npm run onboard:preview            # 打桩 RPC 看首次启动向导
-npm run dev:styles                 # watch 主题文件
 npm run docs:check && npm run brand:check
 npm run upstream:status && npm run patches:check
-node --test tests/*.test.mjs       # 全库（数量以输出为准，不抄）
+npm test                           # 全库，数量看输出
+npm run check                      # 提交前：lint + test + docs/brand/templates/patches
 ```
 
 顺序：**判断层 → 改源 → build（如需）→ 测试 → 生效 → 真机确认。** 跳过测试直接进 GUI 是最常见的返工来源。
@@ -90,7 +88,7 @@ node --test tests/*.test.mjs       # 全库（数量以输出为准，不抄）
 | `vendor/official-shell/ui/**` | 是（上游） | 部署产物后重启 Studio | 清单不匹配 → `OFFICIAL_SHELL_UNAVAILABLE` |
 | `cordis.patch.yml` | 否 | 重新 `install_bundle` 或重启 Host | 已有会话不迁移 |
 
-**重载前先 `touch index.js src/*.mjs`**：加载器只重新求值 mtime 变了的模块，未 touch 的引入方会继续用旧 import——症状是"改了没生效"。`npm run dev` 会替你 touch。
+**重载前先 `touch index.js src/*.mjs`**：加载器只重新求值 mtime 变了的模块，没 touch 的引入方继续用旧 import（症状：改了没生效）。`npm run dev` 会替你 touch。
 
 **本插件不是热加载的。** 管理器返回 `restart-required` 时如实报告并按 `nextStep` 重启；新 `host-start` 只证明 Host 重建。
 
@@ -122,13 +120,13 @@ node --test tests/*.test.mjs       # 全库（数量以输出为准，不抄）
 
 `POST /api/no996-openfilm/diagnose {projectId}`（面板静默 20 秒后自动贴出）；`%TEMP%\dsh-openfilm\plugin.log`（JSON Lines，自动脱敏）；`%TEMP%\dsh-openfilm-frames.jsonl`（每轮覆盖）；`%TEMP%\dsh-openfilm-preset.json`；`%TEMP%\dsh-openfilm-host.json`（重载后 `startedAt` 必须更新）。
 
-**不要靠猜形状**：ACP 的字段以 `fake-acp-agent.mjs` 或真机日志为准；旧路径已不是主线。
+**不要靠猜形状**：ACP 字段以 `fake-acp-agent.mjs` 或真机日志为准。
 
 ---
 
 ## 8. 测试与提交
 
-- `node --test tests/*.test.mjs`；只用 mock 与 `mkdtemp`，`OPENFILM_HOME` 指临时目录。
+- `npm test`（等价 `node --test tests/*.test.mjs`）；只用 mock 与 `mkdtemp`，`OPENFILM_HOME` 指临时目录。
 - 新增行为必须带测试；本仓历史 bug 大多是"逻辑没问题但顺序/形状假设错"。
 - 改上游界面时，`tests/kernel-shell-match.test.mjs` 的断言与补丁一起更新。
 - ESM，无 TypeScript；Host 模块保持 `createX(deps)`，不在顶层做 IO；注释写"为什么"。
@@ -138,7 +136,9 @@ node --test tests/*.test.mjs       # 全库（数量以输出为准，不抄）
 
 ## 9. 当前未完成（别写进"已完成"）
 
-账号余额与引流卡收口；官方壳 O1/O2、素材入库、O3；ACP 面板真机验收（`docs/TEST-CHECKLIST.md` 第 11 步）与之后删旧路径（`docs/ARCHITECTURE.md §10`）；官方输入框部分场景只读；字体子集化；技能卡；口播转写 Mac 验收。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
+**不在这里维护。** 待验看 [`docs/STATUS.md`](docs/STATUS.md) §4，未来看 [`docs/ROADMAP.md`](docs/ROADMAP.md)，理由与代价看 [`docs/decisions/`](docs/decisions/README.md)。
+
+把"待做"写成"已完成"是本仓最贵的错误之一：源码完成 ≠ 真机可用。
 
 ---
 

@@ -1,3 +1,11 @@
+<!-- doc
+id: test-checklist
+reader: 验收者
+fact-source: STATUS 的待验项、真实 UI 行为
+checked: 0.15.1
+rot-if: 每次发版、任何界面大改
+-->
+
 # 统一验收清单（最后跑一次，由你执行）
 
 > 面向 **0.13.0** 的真机验收：8 步，全部已写满，按顺序走一遍。

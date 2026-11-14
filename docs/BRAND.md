@@ -1,3 +1,11 @@
+<!-- doc
+id: brand
+reader: 产品 / 设计 / 维护者
+fact-source: brand/brand.json、assets/theme/*.css
+checked: 0.15.1
+rot-if: 品牌字段、法务要求或替换流程变化
+-->
+
 # 品牌层（不加班剪辑 / No996 Studio）
 
 > 目标：换名字、换颜色、换图标时，只改一个文件，不漏掉任何一个界面；同时**不删除上游的版权与商标声明**。

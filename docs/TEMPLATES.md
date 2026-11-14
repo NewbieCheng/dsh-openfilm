@@ -1,3 +1,11 @@
+<!-- doc
+id: templates
+reader: 做模板的人
+fact-source: vendor/templates/**、scripts/templates-build.mjs
+checked: 0.15.1
+rot-if: 模板结构、_kit 或构建流程变化
+-->
+
 # 模板与素材库
 
 四个随插件发布的模板：`paper-texture`（纸纹讲堂）、`replica-film`（复刻影片）、

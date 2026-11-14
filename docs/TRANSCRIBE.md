@@ -1,3 +1,11 @@
+<!-- doc
+id: transcribe
+reader: 用转写的人、维护者
+fact-source: src/transcribe-service.mjs、scripts/asr-*.mjs
+checked: 0.15.1
+rot-if: 模型、路由或权重来源变化
+-->
+
 # 本地口播转写（openfilm_transcribe）
 
 > 用户丢一个口播视频过来，先出带时间码的文稿，再按文稿剪。**全部在本机 CPU 上跑**，音频不出这台电脑。

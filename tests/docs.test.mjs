@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { checkDocs, linksIn, markdownFiles, stripFences } from '../scripts/docs-check.mjs';
@@ -71,4 +71,75 @@ test('walkStrings reaches arrays and nested objects', () => {
   const seen = [];
   walkStrings({ a: ['x', { b: 'y' }] }, (value, key) => seen.push([key, value]));
   assert.deepEqual(seen, [['a[0]', 'x'], ['a[1].b', 'y']]);
+});
+
+// --- freshness rules (strictMeta) -------------------------------------------
+
+function metaRoot({ version = '0.15.1', docs = {}, root = {} } = {}) {
+  const dir = temp();
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ version, scripts: { build: 'node x', 'docs:check': 'node y' } }));
+  mkdirSync(join(dir, 'docs'), { recursive: true });
+  for (const [name, body] of Object.entries(docs)) writeFileSync(join(dir, 'docs', name), body);
+  for (const [name, body] of Object.entries(root)) writeFileSync(join(dir, name), body);
+  return dir;
+}
+
+const GOOD_HEADER = '<!-- doc\nid: x\nreader: 谁\nfact-source: src/x.mjs\nchecked: 0.15.1\nrot-if: 变了\n-->\n\n';
+
+test('strictMeta requires the doc header under docs/', () => {
+  const dir = metaRoot({ docs: { 'a.md': '# no header\n' } });
+  const { problems } = checkDocs({ root: dir, agentsLimit: 1024, strictMeta: true });
+  assert.ok(problems.some((line) => line.includes('missing <!-- doc ... --> header')));
+});
+
+test('strictMeta accepts a complete header and rejects a missing field', () => {
+  const ok = metaRoot({ docs: { 'a.md': GOOD_HEADER + '# ok\n' } });
+  assert.deepEqual(checkDocs({ root: ok, agentsLimit: 1024, strictMeta: true }).problems, []);
+  const broken = metaRoot({ docs: { 'a.md': GOOD_HEADER.replace('reader: 谁\n', '') + '# ok\n' } });
+  assert.ok(checkDocs({ root: broken, agentsLimit: 1024, strictMeta: true }).problems.some((l) => l.includes('"reader" is missing')));
+});
+
+test('progress wording is confined to STATUS and ROADMAP', () => {
+  const dir = metaRoot({
+    docs: {
+      'ARCHITECTURE.md': GOOD_HEADER + '这个功能源码完成，待真机验证。\n',
+      'STATUS.md': GOOD_HEADER + '源码完成，待真机验证。\n',
+    },
+  });
+  const { problems } = checkDocs({ root: dir, agentsLimit: 1024, strictMeta: true });
+  assert.equal(problems.filter((line) => line.includes('ARCHITECTURE.md') && line.includes('progress wording')).length, 2);
+  assert.equal(problems.filter((line) => line.startsWith('/docs/STATUS.md')).length, 0);
+});
+
+test('a stale claim is reported where the doc lives', () => {
+  const dir = metaRoot({ docs: { 'x.md': GOOD_HEADER + '插槽全表（77 个）\n' } });
+  const { problems } = checkDocs({ root: dir, agentsLimit: 1024, strictMeta: true });
+  assert.ok(problems.some((line) => line.includes('stale claim')));
+});
+
+test('a mentioned npm script must exist', () => {
+  const dir = metaRoot({ docs: { 'x.md': GOOD_HEADER + '跑 `npm run nope` 和 `npm run build`。\n' } });
+  const { problems } = checkDocs({ root: dir, agentsLimit: 1024, strictMeta: true });
+  assert.deepEqual(problems.filter((line) => line.includes('missing script')), [
+    '/docs/x.md: mentions missing script "npm run nope"',
+  ]);
+});
+
+test('checked older than package.json warns, and three minors behind fails', () => {
+  const near = metaRoot({ version: '0.15.1', docs: { 'x.md': GOOD_HEADER.replace('checked: 0.15.1', 'checked: 0.14.0') + '# ok\n' } });
+  const nearResult = checkDocs({ root: near, agentsLimit: 1024, strictMeta: true });
+  assert.deepEqual(nearResult.problems, []);
+  assert.ok(nearResult.warnings.some((line) => line.includes('checked 0.14.0')));
+
+  const far = metaRoot({ version: '0.15.1', docs: { 'x.md': GOOD_HEADER.replace('checked: 0.15.1', 'checked: 0.11.0') + '# ok\n' } });
+  assert.ok(checkDocs({ root: far, agentsLimit: 1024, strictMeta: true }).problems.some((line) => line.includes('minors behind')));
+});
+
+test('generated reference pages match the tree', async () => {
+  const { renderRoutes, renderEnv, renderModules } = await import('../scripts/gen-docs.mjs');
+  const read = (name) => readFileSync(new URL(`../docs/reference/${name}`, import.meta.url), 'utf8');
+  assert.equal(read('api-routes.md'), renderRoutes());
+  assert.equal(read('env-vars.md'), renderEnv());
+  assert.equal(read('modules.md'), renderModules());
+  assert.match(read('api-routes.md'), /\/api\/no996-openfilm\/diagnose/);
 });

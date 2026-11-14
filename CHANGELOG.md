@@ -82,7 +82,7 @@
 - 锚点不写死类名：按“文本是工作区/会话 + 父节点含搜索框和两个以上按钮”找到标题，React 重渲染后由 MutationObserver 重新挂上。
 - 新增只读接口 `GET /api/no996-openfilm/editing-sessions`：返回有 ACP 会话的项目（项目名 / 路径 / 会话 id），数据来自 Studio 项目列表 + `acp-sessions.json`，不建会话、不调模型。
 - 点一条剪辑会话：打开视频创作面板并导航到该项目，面板恢复 Host 已绑定的 ACP 会话（`areaBus.navigate` 会排队，面板没挂载也不会丢请求）。
-- 文档：新增 [`docs/UI-MAP.md`](docs/UI-MAP.md)（侧栏/面板/模型/权限/会话存储的精确位置 + 从 source map 取 DSH 客户端源码的方法）；`docs/UI-PLAYBOOK.md` 注入登记表加这一处，并写明退出条件。
+- 文档：新增 [`docs/reference/ui-layers.md`](docs/reference/ui-layers.md)（侧栏/面板/模型/权限/会话存储的精确位置 + 从 source map 取 DSH 客户端源码的方法）；`docs/playbooks/ui-change.md` 注入登记表加这一处，并写明退出条件。
 - 权限说明：面板里的编辑权限是项目级预设（默认完全访问），与模型无关；DSH 主聊天里“权限”行随第三方模型消失是 DSH 核心行为，插件不改 DSH 本体。
 - 测试：`tests/sidebar-untouched.test.mjs` 改为“只许这一处窄注入”，并断言它不碰 `sidebar.workspaces` / 行级菜单。
 
@@ -159,7 +159,7 @@
 
 ## 0.11.0 —— 自有品牌与样式产线
 
-- 文档收敛：`AGENTS.md` 28.9 KB → 9.1 KB；删除 `HANDOVER.md`×2、`PROGRESS.md`、`HOT-RELOAD.md` 与 4 份已实现/被取代的 `计划-*`；新增 `docs/UI-PLAYBOOK.md`（改哪一层）、`docs/UPSTREAM.md`（补丁与升级）、`docs/BRAND.md`（品牌边界）。
+- 文档收敛：`AGENTS.md` 28.9 KB → 9.1 KB；删除 `HANDOVER.md`×2、`PROGRESS.md`、`HOT-RELOAD.md` 与 4 份已实现/被取代的 `计划-*`；新增 `docs/playbooks/ui-change.md`（改哪一层）、`docs/playbooks/upstream-bump.md`（补丁与升级）、`docs/BRAND.md`（品牌边界）。
 - 样式产线：`assets/theme/{tokens,shell,studio}.css` + `src/theme.mjs`（surface 注册表、mtime 缓存、`NO996_OPENFILM_THEME=0` 关断）；代理与 47821 调试窗口按页面注入；发版前 `npm run shell:bake` 把同一份 CSS 烘焙进 `vendor/official-shell/ui` 并重算 manifest。
 - 样式工作台：`assets/style-lab.js`（Shadow DOM，点选元素、显示选择器/计算样式、复制改动说明），仅 `NO996_OPENFILM_STYLE_LAB=1` 时注入。
 - 上游补丁系列化：`patches/` 一个源文件一个补丁 + `series.json`；`scripts/upstream.mjs` 提供 `status / fetch / verify / shell:dev`；`npm run patches:check` 校验系列与 `patch.diff` 一致。
@@ -196,7 +196,7 @@
 - 上游 O1：`OnboardingGate` 全壳遮罩。
 - 上游 O2：栏头 `AI 剪辑员工`；空态职责文案 + 虚线拖放提示；拖入时 Ember 描边；占位符改「说主题/拖素材」。
 - 补丁文件 **17 → 19**（新增 `OnboardingGate.tsx`，改 `ProjectStarters.tsx`）。
-- 真机验收仍待。界面口径见 `docs/UI-PLAYBOOK.md`，批次状态见 `docs/ROADMAP.md`。
+- 真机验收仍待。界面口径见 `docs/playbooks/ui-change.md`，批次状态见 `docs/ROADMAP.md`。
 
 ### 新：`openfilm_transcribe`，把口播视频变成带时间码的文稿
 
@@ -309,7 +309,7 @@ Host 侧新增一个工具：给一个本机视频/音频路径，返回逐段�
 
 - 新增 `docs/HANDOVER.md`（接手第一站，0.11 起并入 `docs/DEVELOPMENT.md`）、`docs/ROADMAP.md`（一份路线图，不再按版本碎片化；0.9.1 定为账号与登录）；
 - 重写 `docs/DEVELOPMENT.md`（25KB → 14KB，事实更新到 0.9.0）；
-- 删除 10 份已实现的过期计划文档（`PLAN-0.4.0`、`PLAN-0.5.0`、`PLAN-0.7.0-AGENT`、`DESIGN-0.7.0`、`AGENT-CHAT-PLAN`、`PLAN-0.8.0 ×2`、`PLAN-0.9.0 ×2`、`DISCUSS-0.10.0`），决策历史仍在 `docs/NOTES.md`。
+- 删除 10 份已实现的过期计划文档（`PLAN-0.4.0`、`PLAN-0.5.0`、`PLAN-0.7.0-AGENT`、`DESIGN-0.7.0`、`AGENT-CHAT-PLAN`、`PLAN-0.8.0 ×2`、`PLAN-0.9.0 ×2`、`DISCUSS-0.10.0`），决策历史仍在 `docs/decisions/README.md`。
 
 ### 升级提示
 

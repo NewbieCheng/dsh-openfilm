@@ -1,3 +1,11 @@
+<!-- doc
+id: styles
+reader: 做视觉的人
+fact-source: vendor/motion/styles/**
+checked: 0.15.1
+rot-if: 风格库增删
+-->
+
 # 风格库（14 种）
 
 > 由 `scripts/build-motion-index.mjs` 从 `vendor/motion/styles/catalog.json` 生成，不要手改。

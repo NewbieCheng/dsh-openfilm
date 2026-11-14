@@ -1,10 +1,18 @@
+<!-- doc
+id: dsh-shell-case
+reader: 要改造 DSH 外壳的人
+fact-source: DSH 客户端包（source map）、dsh-ui-extension skill 的生成表
+checked: 0.15.1
+rot-if: DSH 版本变化（槽表以 skill 生成表为准）
+-->
+
 # DSH 三栏外壳 · 改造案例（详细版）
 
 > **这是三栏形态的详细案例，不是通用 skill。** 通用能力在独立仓库 [dsh-harness-remix](https://github.com/NewbieCheng/dsh-harness-remix)：
 > [dsh-ui-remix](https://github.com/NewbieCheng/dsh-harness-remix/tree/main/skills/dsh-ui-remix)（UI 改造）、[dsh-backend-bridge](https://github.com/NewbieCheng/dsh-harness-remix/tree/main/skills/dsh-backend-bridge)（后端衔接）。
 > 本文保留完整的插槽表、A/B/C 配方与逐条验收，供“会话放右边”这类具体形态参考。
 > 基准：DSH Web 客户端（`@deepseek-ai/dsh-client-*`）+ 本仓 `dsh-openfilm` 0.13.4。
-> 事实来源：DSH 客户端 source map（77 个插槽）+ 真机界面。更新：2026-11-13。
+> 事实来源：DSH 客户端 source map + 真机界面。插槽数量与清单**不在本文维护**，见 §3。
 
 ---
 
@@ -91,69 +99,13 @@ flowchart LR
 
 ---
 
-## 3. 插槽全表（77 个，按区域分组）
+## 3. 插槽从哪查（不要在这里维护表）
 
-> 图例：★ 官方公开稳定 ｜ ○ 插件内部但常见 ｜ △ 框架内部，勿依赖。
-> 用法：`ctx.slots.inject('槽名', () => ctx.slots.register({ name:'槽名', id, order, label }, 组件))`。
+**槽表不写在这篇文档里。** 手抄的表在 0.15.1 已经过期（当时写着 77 个，真机是 116 个，而且 0.2.2 起多了 `hoc` 基数）。
 
-### 3.1 框架/布局
-
-| 槽 | 用途 | 稳定 |
-|---|---|---|
-| `root` | Web 壳唯一根槽；layout 在此注册三栏框架 | ★ |
-| `main` | 主区；entry 带 `key`，同一时刻只显示一个 | ★ |
-| `main.conversation` | “会话” entry 的挂点/别名 | ○ |
-| `sidebar` | 左栏整体（layout 注入 `{collapsed,width,drawer}`） | ★ |
-| `rightbar` | 右栏整体（注入 `{width,viewportWidth,canShow}`） | ★ |
-| `shell.leading` | 桌面标题栏左侧（红绿灯旁） | ○ |
-| `shell.bottom` | 底部横条 | ★ |
-| `shell.overlay` | 外壳之上的覆盖层（常驻面板放这） | ★ |
-
-### 3.2 侧栏
-
-| 槽 | 用途 | 稳定 |
-|---|---|---|
-| `sidebar.panellist` | 侧栏“面板”入口列表（插件导航首选） | ★ |
-| `sidebar.panellist.actions` | 入口右侧动作 | ○ |
-| `sidebar.footer.action` | 侧栏底部动作（全屏入口常用） | ★ |
-| `sidebar.workspaces` | 整块工作区（标题+搜索+筛选+新建+列表），**单人槽** | ★ |
-| `sidebar.workspaces.directoryFlow` | 工作区选择流程 | ○ |
-| `sidebar.workspaces.session.row.action` | 工作区会话行悬停动作 | ○ |
-| `sidebar.workspaces.session.menu.item` | 工作区会话行右键菜单项 | ○ |
-| `sidebar.session.row.leading` / `.trailing` / `.hover` | 会话行首/尾/悬停 | ★ |
-| `sidebar.settings` | 设置入口 | ★ |
-| `sidebar.brand.mark` / `.name` | 品牌图标/名字 | ★ |
-| `sidebar.toggle.badge` | 折叠按钮角标 | ○ |
-
-### 3.3 会话（往“里面”插，不是搬走）
-
-| 槽 | 用途 |
-|---|---|
-| `conversation.view` / `.content` | 会话视图/内容区 |
-| `conversation.header` / `.header.leading` | 会话头 |
-| `conversation.session` / `.session.header` | 会话条 |
-| `conversation.session.header.actions` / `.corner` / `.utilities` / `.lineage` / `.views.actions` | 头部按钮/工具/谱系 |
-| `conversation.composer` / `.composer.bar` / `.composer.dock` | 输入区整体/输入条/停靠 |
-| `conversation.input.left/right/dock/model/model.label/permission/plan/attachments/activity/overlay` | 输入区各段（模型、权限、计划、附件…） |
-| `conversation.hero.agentPreset/brand.mark/options/workspace/workspace.directoryFlow` | 空会话首屏 |
-| `conversation.user.text` / `.user.text.node` | 用户消息 |
-| `conversation.chat.node/flow/commandview/text-interaction/turnTail/user.content/user.images/message.images/reasoning.body/reasoning.content/assistant-actions` | 消息流内部 |
-| `conversation.approval.card` / `.detail` | 审批卡片/详情 |
-| `conversation-queue-dock` / `conversation-todo-dock` | 队列/待办停靠 |
-
-### 3.4 其他
-
-| 槽 | 用途 |
-|---|---|
-| `tool.call.toolview` / `.images` | 工具调用卡片 |
-| `workspace.toast` | 工作区提示条 |
-| `contextMenu.content` / `.icon` | 右键菜单 |
-| `settings.section` / `settings.general.item` | 设置页的一节/通用设置条目 |
-| `plugins.add.actions` | 插件添加动作 |
-
-**不存在的槽**（别找了）：独立聊天组件、`chat`、`content`、`main.right`、官方“会话放右栏”槽。
-
----
+- 完整清单与基数/作用域/替换风险：装 `dsh-ui-extension` skill，读它的 `reference/slots.generated.md`（由 live inspect 生成）；
+- 实时查询：`cordis_inspect_query { platform:"client", provider:"Slots", method:"listSubTree" }`；
+- 本仓"用了哪个槽"见 [`reference/ui-layers.md`](reference/ui-layers.md) 与 [`reference/injection-registry.md`](reference/injection-registry.md)。
 
 ## 4. 选型：四种改造方案
 

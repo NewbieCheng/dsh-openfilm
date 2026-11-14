@@ -1,6 +1,14 @@
+<!-- doc
+id: development
+reader: 新开发者、智能体
+fact-source: package.json、cordis.patch.yml、src/*.mjs、scripts/*
+checked: 0.15.1
+rot-if: 启动时序、请求路径、模块职责或构建方式变化
+-->
+
 # 开发文档 — dsh-openfilm / No996 Studio
 
-> 最短操作约束看 [`../AGENTS.md`](../AGENTS.md)；改界面看 [`UI-PLAYBOOK.md`](UI-PLAYBOOK.md)；升级上游看 [`UPSTREAM.md`](UPSTREAM.md)；品牌看 [`BRAND.md`](BRAND.md)；接下来做什么看 [`ROADMAP.md`](ROADMAP.md)。
+> 最短操作约束看 [`../AGENTS.md`](../AGENTS.md)；改界面看 [`playbooks/ui-change.md`](playbooks/ui-change.md)；升级上游看 [`playbooks/upstream-bump.md`](playbooks/upstream-bump.md)；接下来做什么看 [`ROADMAP.md`](ROADMAP.md)，现在到哪了看 [`STATUS.md`](STATUS.md)。
 >
 > 版本与测试数量以 `package.json` 和 `node --test` 的实际输出为准，本文不抄数字（抄了就会过期）。
 
@@ -33,7 +41,7 @@
 三条必须记住的：
 
 - Studio 上游只 bind 临时端口，key 不出 Host；浏览器只看得见代理端口 47822。
-- 界面改动分四层，**先判断层再选手段**（`UI-PLAYBOOK.md` §1–§3）。
+- 界面改动分四层，**先判断层再选手段**（`playbooks/ui-change.md` §1–§3）。
 - 面板挂 `shell.overlay` 而不是 `main`，是为了切页不重载 iframe。
 
 ---
@@ -113,50 +121,32 @@
 
 ### 上游补丁
 
-`patches/series.json` + 每文件一个 `.patch`；`patch.diff` 是合并视图（生成物）。补丁放在 `vendor/official-shell` 之外，重新生成快照不会删掉它们。`scripts/build-official-shell.mjs` 打包快照，`scripts/upstream.mjs` 负责对账/重放。流程见 `UPSTREAM.md`。
+`patches/series.json` + 每文件一个 `.patch`；`patch.diff` 是合并视图（生成物）。补丁放在 `vendor/official-shell` 之外，重新生成快照不会删掉它们。`scripts/build-official-shell.mjs` 打包快照，`scripts/upstream.mjs` 负责对账/重放。流程见 `playbooks/upstream-bump.md`。
 
 ---
 
 ## 5. 数据与存储
 
-| 东西 | 在哪 |
-|---|---|
-| 项目 ↔ Session 绑定 | DSH `storageDomain`（`no996_openfilm_project_conversations`），只是提示；Session 才是真相 |
-| 会话历史 | DSH `storageDomain`（`official-chat-store`），不碰上游 `.film/chat` |
-| 附件（抽帧的图） | `<DSH_HOME>/attachments/v1/objects/<前2位>/<sha256>` |
-| 预设激活报告 | `%TEMP%\dsh-openfilm-preset.json` |
-| 插件日志 | `%TEMP%\dsh-openfilm\plugin.log` |
-| 帧记录 | `%TEMP%\dsh-openfilm-frames.jsonl` |
-| 片型引导偏好 | `$DSH_HOME/no996-openfilm/preferences.json`（本机安装级） |
-| 账号会话 | `$DSH_HOME/no996-openfilm/workbench-auth.json`（token 只在 Host） |
+存什么、存在哪、哪些是真相哪些只是提示，见 [`reference/storage.md`](reference/storage.md)。
 
-**永不删除**：用户 Session、上游 `.film/`、项目文件。`rebind` 只新建空会话。
+**永不删除**：用户 Session（只归档）、上游 `.film/`、项目文件（删除走回收站并由用户确认）。
 
----
+## 6. 安全模型
 
-## 6. 安全模型（读一次，别踩线）
+三个信任假设、必须成立的校验、新增路由的模板，见 [`reference/safety.md`](reference/safety.md)。
 
-- 编辑器 Origin 被视为"本机这位用户的官方窗口"；项目 ID 每次都要经 Studio 实时列表校验。
-- 官方 film 页面可含任意可执行 HTML/JS，**没有渲染沙箱**；不要在 DSH Origin 里执行它们。
-- 代理是回环集成，不是 OS 沙箱。
-- 必须成立的校验：浏览器 peer（`ctx.connection.admit`）、代理 cookie/Host/Origin、WS 逐帧、模板桥白名单 + 1 KiB、错误只回固定词表。
-- 新增路由模板：只收本机 DSH 浏览器、只读写明确字段、体积有上限、错误只回码。
-- 注入层（`assets/*.js`、`assets/theme/*`）不承载权限、凭据、业务写操作。
-
----
+一句话：这是本机回环集成，不是 OS 沙箱；注入层不承载权限、凭据、业务写操作。
 
 ## 7. 构建、安装、发版
 
 ```sh
-npm install
-npm run build                      # src/studio-entry.js → client.js
-node --test tests/*.test.mjs       # 全库
-npm run docs:check                 # 文档死链 + AGENTS 体积
-npm run brand:check                # 品牌字段 + 主题文件
-npm run shell:bake                 # 发版前把主题烘焙进 vendor/official-shell/ui
+npm ci
+npm run check       # lint(strict) + test + docs/brand/templates/patches
+npm run build       # src/studio-entry.js → client.js
+npm run shell:bake  # 发版前把主题烘焙进 vendor/official-shell/ui
 ```
 
-发版：改 `package.json` 版本 → 更新 `CHANGELOG.md` → `npm pack` → `gh release create` → 校验资产。版本号与 `CHANGELOG` 必须同时动。
+发版步骤（版本、CHANGELOG、STATUS、打包、回滚）见 [`playbooks/release.md`](playbooks/release.md)。
 
 ---
 
@@ -199,7 +189,7 @@ npm run shell:bake                 # 发版前把主题烘焙进 vendor/official
 
 ## 10. 测试
 
-- `node --test tests/*.test.mjs`；只用 mock 与 `mkdtemp`，`OPENFILM_HOME` 指临时目录，不调真实模型。
+- `npm test`（等价 `node --test tests/*.test.mjs`）；只用 mock 与 `mkdtemp`，`OPENFILM_HOME` 指临时目录，不调真实模型。
 - 覆盖重点：事件翻译与顺序、思考与工具行、错误分类、模板复制/限额/链接拒绝、草稿原子性与冲突、会话归属、`.film/opened`、CLI 动词收窄、诊断判词。
 - 上游界面断言在 `tests/kernel-shell-match.test.mjs`：检查补丁里必须出现的标记（`data-thought`、`data-tool-name`、`kind:'image'`、`InlinePicture`），改界面时补丁要一起更新。
 - 新增行为必须带测试；本仓历史 bug 大多是"逻辑没问题但顺序/形状假设错"。
@@ -208,7 +198,7 @@ npm run shell:bake                 # 发版前把主题烘焙进 vendor/official
 
 ## 11. 升级上游
 
-见 [`UPSTREAM.md`](UPSTREAM.md)。一句话：`package.json` tarball、`manifest.version/commit`、`official-shell.mjs` 的 `OFFICIAL_COMMIT` 三处一起动；补丁按文件重放，冲突按文件报告；运行时不要装 `latest`。
+见 [`playbooks/upstream-bump.md`](playbooks/upstream-bump.md)。一句话：`package.json` tarball、`manifest.version/commit`、`official-shell.mjs` 的 `OFFICIAL_COMMIT` 三处一起动；补丁按文件重放，冲突按文件报告；运行时不要装 `latest`。
 
 ---
 
