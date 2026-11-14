@@ -1,0 +1,17 @@
+# 统一编辑器基线。不是为了争论风格，是为了让 diff 只包含真实改动。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = true
+
+[*.md]
+# Markdown 里行尾空格有时是换行语义的一部分，交给作者
+trim_trailing_whitespace = false
+
+[*.{yml,yaml}]
+indent_size = 2

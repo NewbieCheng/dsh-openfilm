@@ -1,0 +1,69 @@
+name: ci
+
+# Everything this repository already knows how to check, run on every push to
+# main and every PR. The point is not "more tests" — it is that the four
+# hand-written check scripts and the 607-assertion suite stop depending on
+# somebody remembering to type them.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint -- --strict
+
+      - name: Tests
+        run: npm test
+
+      - name: Docs
+        run: npm run docs:check
+
+      - name: Brand
+        run: npm run brand:check
+
+      - name: Templates
+        run: npm run templates:check
+
+      - name: Patches
+        run: npm run patches:check
+
+      - name: No build artifacts in git
+        run: |
+          set -eu
+          if git ls-files | grep -Eq '(^dist/)|\.(tgz|zip)$'; then
+            echo "tracked build artifact found:" >&2
+            git ls-files | grep -E '(^dist/)|\.(tgz|zip)$' >&2
+            exit 1
+          fi
+
+      - name: Working tree stayed clean
+        run: |
+          set -eu
+          # Checks that rewrite files (templates:check, patches:check) must be
+          # pure; a dirty tree after them means a generator is out of sync.
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "checks modified the working tree:" >&2
+            git status --porcelain >&2
+            exit 1
+          fi
