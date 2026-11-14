@@ -745,6 +745,14 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     resolveToken: token => mcpTokens.resolve(token),
     log: (event, fields) => void log.info(event, fields),
   });
+  // Registration, duplicate-path tolerance and rollback order live in
+  // studio-controller/router.mjs; a module has no temporal dead zone to work
+  // around, so these are plain bindings instead of a hoisted function.
+  const router = createRouter({ webServer: ctx.webServer, log });
+  const registerRoute = router.register;
+  const trackRoute = router.track;
+  const rollbackRoutes = router.rollback;
+
   // System capability (installed tools, downloads, ASR weights): one snapshot
   // shared by the Host RPC and the panel routes, defined in its own module.
   const system = createSystemRoutes({ ctx, register: registerRoute, transcribeService, toolInstaller, detectHostComponents });
@@ -787,13 +795,6 @@ export function createStudioController(ctx, createProxy, { officialShell = false
     pending.catch(() => { if (proxies.get(browserOrigin) === pending) proxies.delete(browserOrigin); });
     return pending;
   }
-  // Registration, duplicate-path tolerance and rollback order live in
-  // studio-controller/router.mjs; a module has no temporal dead zone to work
-  // around, so these are plain bindings instead of a hoisted function.
-  const router = createRouter({ webServer: ctx.webServer, log });
-  const registerRoute = router.register;
-  const trackRoute = router.track;
-  const rollbackRoutes = router.rollback;
   let unregisterTemplateBridge;
   let unregisterAuthBridge;
   let unregisterArchiveBridge;

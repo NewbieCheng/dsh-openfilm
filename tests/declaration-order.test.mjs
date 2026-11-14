@@ -44,3 +44,22 @@ test('the ACP service handle is declared before the RPC handlers read it', () =>
   // Assigned once, later in the same scope; a `const` here would be a TDZ trap.
   assert.equal(source.includes('const acpAgentService ='), false);
 });
+
+test('route registration bindings are initialized before the route modules', () => {
+  // Incidents: `registerRoute` was passed to createSystemRoutes 45 lines above its
+  // own `const` — the plugin failed to activate with "Cannot access 'registerRoute'
+  // before initialization" and the entry showed as 启用失败 in the console.
+  const start = at('const router = createRouter(');
+  assert.ok(start > 0, 'the router is created in the controller');
+  for (const name of ['registerRoute', 'trackRoute', 'rollbackRoutes']) {
+    const declared = at(`const ${name} = router.`);
+    assert.ok(declared > start, `${name} is bound right after the router`);
+    assert.ok(declared < start + 400, `${name} must be bound beside the router, not later in the function`);
+  }
+  // Every module that receives a binding must come after the binding.
+  for (const call of ['createSystemRoutes({', 'createAssetRoutes({', 'createDiagnosticsRoutes({', 'createChatRoutes({']) {
+    const use = at(call);
+    assert.ok(use > 0, `${call} is mounted`);
+    assert.ok(at('const registerRoute = router.register;') < use, `${call} is mounted after registerRoute is initialized`);
+  }
+});
