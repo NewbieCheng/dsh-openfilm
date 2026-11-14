@@ -57,6 +57,8 @@ function main() {
     'apps/desktop/chat/src/i18n/locales/ja.ts',
     'apps/desktop/chat/src/i18n/locales/ko.ts',
     'apps/desktop/chat/src/i18n/locales/zh-CN.ts',
+    'apps/desktop/shell/main.tsx',
+    'apps/desktop/shell/RecoveryGate.tsx',
   ];
   // Include staged + unstaged edits, and brand-new files on the PATCHED
   // allowlist (plain --untracked-files=no would omit OnboardingGate-style adds).

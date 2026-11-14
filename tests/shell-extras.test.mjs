@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { shellUiInjection, shellUiVersion } from '../src/shell-extras.mjs';
 
 const html = shellUiInjection();
@@ -87,7 +89,6 @@ test('the overlays only talk over the fixed bridge channels', () => {
     'auth:remember-get',
     'auth:remember-set',
     'auth:status',
-    'client:log',
     'environment:check',
     'prefs:get',
     'project:create-blank',
@@ -106,16 +107,20 @@ test('the overlays only talk over the fixed bridge channels', () => {
   assert.doesNotMatch(body, /sessionId|projectPath|\/api\/no996-openfilm/);
 });
 
-test('a dead Studio is answered inside the page, not with an app-restart hint', () => {
-  // The upstream overlay says to restart an application the person cannot see.
-  // Our own control must be present, must poll, and must lead to the console.
-  assert.match(body, /no996-stopped/);
-  assert.match(body, /重新启动工作台/);
-  assert.doesNotMatch(body, /http:\/\/127\.0\.0\.1:47821\/editor/);
-  assert.match(body, /no996-openfilm:restart/);
-  assert.match(body, /window\.parent\.postMessage/);
-  assert.match(body, /\/api\/version/);
-  assert.match(body, /misses>=2/);
+test('a dead Studio is answered by the shell source, not by an injected overlay', () => {
+  // The overlay moved out of the injection and into the shell app itself
+  // (apps/desktop/shell/RecoveryGate.tsx, shipped in the vendored build). The
+  // injection must no longer carry it; the shipped bundle must.
+  assert.doesNotMatch(body, /no996-stopped/);
+  assert.doesNotMatch(body, /重新启动工作台/);
+  const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'vendor', 'official-shell', 'ui', 'assets');
+  const bundle = readdirSync(dir)
+    .filter(name => name.endsWith('.js'))
+    .map(name => readFileSync(join(dir, name), 'utf8'))
+    .join('\n');
+  assert.match(bundle, /重新启动工作台/);
+  assert.match(bundle, /no996-openfilm:restart/);
+  assert.match(bundle, /\/api\/version/);
 });
 
 test('a foreign plugin probing this page cannot throw in the console', () => {

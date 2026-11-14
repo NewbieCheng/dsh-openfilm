@@ -18,11 +18,17 @@ rot-if: 新增/撤掉任何一处没走源码的改动
 |---|---|---|---|
 | 模板选择弹窗 | `assets/shell-ui.js` | 历史上先做的注入；上游有模板入口 | 模板主路径迁进 A1 后删除 |
 | 视频工具环境检查卡 | `assets/shell-ui.js` | 需要 Host 能力，上游没有这个界面 | 上游有环境检查或迁进 A1 |
-| 账号条 / 登录态 | `assets/shell-ui.js` | 上游没有我们的账号体系 | 账号体系进 A1 的壳 |
-| 全屏登录首页 | `assets/shell-login.js` | 上游登录页不适用 | 同上 |
-| 故障卡片 / 恢复卡 | `assets/shell-ui.js` | 上游没有错误 UI | 上游有错误边界后删除 |
-| 主题 token + 覆盖 | `assets/theme/*.css` | L2 无源码；L1 走 A2 同一份文件 | L2 拿到源码后转 A1/A2 |
+| 全屏登录首页 | `assets/shell-login.js` | 上游登录页不适用 | 迁成壳的首屏分支 |
 | 工作区下拉开关 | `src/sidebar-editing.mjs` | 侧栏标题行没有官方插槽；`sidebar.workspaces` 是 single 槽 | DSH 开出标题行插槽后删除 |
+
+## 1.1 已经不在注入里的（别再加回来）
+
+| 东西 | 现在在哪 |
+|---|---|
+| 账号条 / 登录态 | `packages/openfilm/studio/ui/src/components/WorkbenchAccount.tsx`（React 源码，补丁） |
+| 故障恢复卡（工作台已停止运行） | `apps/desktop/shell/RecoveryGate.tsx`（React 源码，补丁；2026-11 从 `assets/shell-ui.js` 迁出） |
+| 主题 token + 覆盖 | 发布产物在构建期由 `npm run shell:bake` 烘进 `vendor/official-shell/ui/assets/no996-theme.css`；运行时那份只是开发热更 |
+| 视频工具环境检查卡 | 仍是注入，见上表 |
 
 ## 2. 侧栏那一处为什么是"窄注入"
 

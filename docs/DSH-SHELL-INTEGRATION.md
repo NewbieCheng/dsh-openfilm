@@ -203,68 +203,18 @@ sequenceDiagram
   P->>D: 恢复 grid / display / 焦点
 ```
 
-### 6.2 六步
+### 6.2 为什么最后没走这条路
 
-**第 1 步：量位置**
+当时的做法是：用一个固定定位的遮罩盖住左+中列，再用 `!important` 把 `div.frame` 的 grid
+改成 `0 / 1fr / 520px`，把会话列挪到右边，然后用 `ResizeObserver` + `MutationObserver`
+跟住 DSH 自己重写内联样式。
 
-```js
-const frame = document.querySelector('[data-shell-overlay]')?.parentElement; // div.frame
-const center = frame?.querySelector('[data-global-panel], .centerCol')?.closest('div');
-const rect = center?.getBoundingClientRect(); // 记录 left/top/width/height
-```
+撤回的原因不在实现难度，而在**边界**：DSH 每次重写 `frame` 的内联 grid 都要重贴一次，
+侧栏折叠、主题切换、语言切换、窄屏抽屉、弹窗层级全都各要一条特判；只支持 ≥1100px，
+而"被盖区域不能 Tab 进去"这件事没有稳定做法。任何一条漏掉，表现就是"面板错位/焦点跑掉"，
+用户以为坏了。
 
-**第 2 步：只盖左+中**
-
-```css
-.my-cover {
-  position: fixed; inset: 0 520px 0 0;   /* 右侧 520px 留给会话 */
-  z-index: 30;                            /* 低于 DSH 弹窗（1200+） */
-  background: var(--dsw-alias-bg-base, #151517);
-  display: flex; overflow: hidden;
-}
-```
-
-**第 3 步：把 `main` 挪到右侧**
-
-```css
-.my-cover-active div.frame {
-  grid-template-columns: 0 minmax(0, 1fr) 520px !important; /* 内联样式需 !important */
-}
-.my-cover-active div.frame > div:first-child { display: none !important; } /* sidebarCol */
-/* 若 center 不在最右，再补：.centerCol { grid-column: 2 / 4 } */
-```
-
-**第 4 步：跟随与重贴**
-
-```js
-const ro = new ResizeObserver(() => place());
-ro.observe(frame);
-window.addEventListener('resize', place);
-// DSH 会重写 frame 的内联 grid：MutationObserver 监听 style/class 变化后重贴
-```
-
-**第 5 步：交互细节**
-
-- 关闭后焦点还给触发按钮；
-- 右栏拖宽 → 同步改 `inset` 的右侧值；
-- 窄屏抽屉（`drawer`）打开时禁用 B；
-- 被盖区域设 `inert` 或 `pointer-events:none`，Tab 不应进入；
-- 动画用 `transform`，`requestAnimationFrame` 节流。
-
-**第 6 步：开关与回滚**
-
-- 默认关；开关写在 `localStorage`，并在设置页/入口菜单里可见；
-- DSH 升级后先关，回归通过再开；
-- 记录 DSH 版本（`~/.dsh` 里的版本或应用版本）。
-
-### 6.3 B 的边界（必须写进验收）
-
-- 只支持桌面宽度（≥ 1100px）；窄屏回退 A；
-- DSH 侧栏折叠/主题切换/语言切换后重算；
-- 不覆盖 DSH 弹窗、通知、命令面板；
-- 不拦截会话快捷键。
-
----
+结论：这条只适合一次性演示，不适合长期维护。现行做法见 §5（官方槽 + `shell.overlay`）。
 
 ## 7. 方案 C / D
 
@@ -426,18 +376,6 @@ dsh web --port 47824 --no-open          # 输出带 token 的 URL
 | 面板 panel | 占 `main` 或 `rightbar` 的整块 UI；会话也是 `main` 面板 |
 | overlay | 盖在外壳之上的层（`shell.overlay` 或 portal） |
 | B2 | 不改源码的 DOM/行为注入 |
-
-### 13.3 AI 输出模板
-
-```md
-## 改造方案：<A/B>
-### 目标
-### 用到的槽/锚点
-### 代码（文件/片段）
-### 开关与回滚
-### 验收记录（真机截图/命令输出）
-### 风险与 DSH 版本
-```
 
 ### 13.4 作为 skill 使用
 

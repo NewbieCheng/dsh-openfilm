@@ -820,48 +820,6 @@
   function startReady(){ readyTimer=setInterval(reportReady,1000); setTimeout(reportReady,0); }
   if(document.readyState==='complete') startReady();
   else window.addEventListener('load',startReady,{once:true});
-  var stop=document.createElement('div');
-  stop.id='no996-stopped';
-  stop.style.cssText='position:fixed;inset:0;z-index:2147483001;display:none;align-items:center;justify-content:center;background:rgba(10,10,12,.88);font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;color:#e9e9ee';
-  stop.innerHTML='<div style="max-width:400px;padding:24px;border-radius:12px;background:#232326;border:1px solid rgba(255,255,255,.14);text-align:center;box-shadow:0 16px 48px rgba(0,0,0,.6)">'
-    +'<div style="font-weight:600;font-size:15px;margin-bottom:8px">工作台已停止运行</div>'
-    +'<div style="opacity:.75;font-size:12px;line-height:1.7;margin-bottom:18px">视频编辑服务已断开。重新启动会重新加载界面，未保存的内容可能丢失。</div>'
-    +'<button id="no996-restart" type="button" style="display:inline-block;padding:9px 20px;border:0;border-radius:8px;background:#3b82f6;color:#fff;font-size:13px;cursor:pointer">重新启动工作台</button>'
-    +'</div>';
-  try{ document.documentElement.appendChild(stop); }catch(e){}
-  var reported=false;
-  function report(event){
-    try{ rpc('client:log',{event:event}).catch(function(){}); }catch(e){}
-  }
-  var restartLink=stop.querySelector('#no996-restart');
-  if(restartLink) restartLink.addEventListener('click',function(){
-    report('restart-click');
-    if(window.parent!==window) window.parent.postMessage({type:'no996-openfilm:restart',version:1},'*');
-    else restartLink.textContent='请返回视频面板重试';
-  });
-  var misses=0;
-  function probe(){
-    var done=false;
-    var finish=function(ok){
-      if(done)return;
-      done=true;
-      if(ok){ misses=0; stop.style.display='none'; return; }
-      misses+=1;
-      if(misses>=2){
-        stop.style.display='flex';
-        if(!reported){ reported=true; report('recovery-shown'); }
-      }
-    };
-    try{
-      var controller=window.AbortController?new AbortController():null;
-      var timer=setTimeout(function(){ try{controller&&controller.abort();}catch(e){} finish(false); },4000);
-      fetch('/api/version',{cache:'no-store',credentials:'same-origin',signal:controller?controller.signal:undefined})
-        .then(function(r){ clearTimeout(timer); finish(r.ok); })
-        .catch(function(){ clearTimeout(timer); finish(false); });
-    }catch(e){ finish(false); }
-  }
-  setTimeout(probe,3000);
-  setInterval(probe,5000);
 
   // ---- 首次启动向导 ---------------------------------------------------------
   // 只在 prefs.onboardingCompleted !== true 时出现：

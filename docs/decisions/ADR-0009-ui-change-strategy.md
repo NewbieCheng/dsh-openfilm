@@ -33,7 +33,7 @@ rot-if: 上游不再发布 studio/ui 源码、构建白名单变化、任何注�
 | 构建脚本允许改 `apps/desktop/chat/src/**` 与 `packages/openfilm/studio/ui/src/**`，其它改动一律拒绝 | `scripts/build-official-shell.mjs` 的 `PATCHED` 白名单 |
 | 我们自己构建的 `vendor/official-shell/ui` 会作为 `editorDir` 交给 Studio，**顶替** npm 包里的 `studio/ui/dist` | `startStudio({ editorDir })` + `src/studio-controller.mjs` 的 `resolveEditorDir` |
 
-**所以 `docs/reference/ui-layers.md` 里"L2 只有 dist、没有源码"是错的**：npm 包只有 dist，上游 monorepo 有源码，而且已经参与我们的构建。L2 的界面结构同样能改源码。
+L2 的界面结构因此和 L1 一样能改源码：npm 包只发布 dist，上游 monorepo 有源码。
 
 真正改不了源码的只有一处：**DSH 外壳**——它不是本仓库的代码，我们只能用它的插槽，或用窄注入。
 

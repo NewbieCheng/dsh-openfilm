@@ -11,6 +11,24 @@ rot-if: 手段分级变化，或出现新的界面层
 > 决策先于动手。**这块界面属于哪一层、该走哪一级手段**，先答完再看文件。
 > 层的定义与 DOM 锚点见 [`../reference/ui-layers.md`](../reference/ui-layers.md)。
 
+## 0. 先查这块界面在谁手里
+
+改界面前先花半分钟确认源码在哪，**不要凭 npm 包里有什么去推断**：
+
+| 要改的地方 | 源码路径（在 `.upstream/openfilm` 里） |
+|---|---|
+| 聊天列：项目列表、对话、登录、引导 | `apps/desktop/chat/src/` |
+| 桌面壳：窗口布局、主题脚本、挂载 | `apps/desktop/shell/` |
+| Studio 编辑器：画布、时间轴、素材库 | `packages/openfilm/studio/ui/src/` |
+| 影片/模板页 | 本仓 `vendor/templates/` |
+
+- **找得到** → 改源码：在 checkout 里改 → `pnpm --filter @openfilm/desktop build:shell` → `node scripts/build-official-shell.mjs .upstream/openfilm` → 新文件进 `patches/` 与构建白名单 → `npm run patches:check`。
+- **找不到**（目前只有 DSH 外壳）→ 才考虑注入，并在 [`reference/injection-registry.md`](../reference/injection-registry.md) 登记理由与退出条件。
+
+**经验（只写一次）**：这个仓库曾把"Studio 编辑器只能注入"当成事实写进文档，实际上游 `packages/openfilm/studio/ui/src` 一直是可改的源码，而且本来就参与我们的构建。教训是：**先看 checkout 目录，再决定手段**；判断错误会让一段本该进补丁的界面长期停在注入里。
+
+> 移动 `.upstream/openfilm`（换路径、换盘）之后，`node_modules/.bin` 里的 pnpm 脚本硬编码了旧绝对路径，构建会报 `MODULE_NOT_FOUND`。在 checkout 里跑一次 `pnpm install --offline --force --config.confirm-modules-purge=false` 即可重建。
+
 ## 1. 决策表
 
 | 你想改的 | 走哪级 | 落在哪 |
