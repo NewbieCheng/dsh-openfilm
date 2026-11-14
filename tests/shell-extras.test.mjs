@@ -17,7 +17,6 @@ test('the injected shell UI is balanced scripts that parse as JavaScript', () =>
   // Only the UI overlay is still injected; the login gate ships in the bundle.
   assert.equal((html.match(/<\/script>/g) || []).length, 1);
   assert.equal(scripts.length, 1);
-  assert.match(body, /no996-template-picker/);
   assert.match(body, /\/__dsh\/official-rpc/);
   assert.match(body, /__dsh\/shell-version/);
   assert.match(body, /function watchVersion\(\)/);
@@ -38,65 +37,23 @@ test('the login city module is generated and mountable', () => {
   assert.doesNotMatch(city, /fetch\(/);
 });
 
-test('picker lists templates beside the disabled original suggestion', () => {
-  assert.match(body, /cloneNode\(true\)/);
-  assert.match(body, /wrap=buildEntry\(card\)/);
-  assert.match(body, /el\.textContent='选择模板'/);
-  assert.match(body, /wrap\.nextElementSibling!==host/);
-  assert.match(body, /holder\.cloneNode\(true\)/);
-  // Account chip + reload moved into OpenFilm React (WorkbenchAccountControls).
-  assert.match(body, /WorkbenchAccountControls/);
-  assert.match(body, /data-workbench-account/);
+test('the template picker left the injection; the upstream card is still stopped', () => {
+  // The picker is React now (TemplatePicker.tsx, shipped in the vendored build):
+  // the clone-and-place code is gone from here for good.
+  for (const gone of [/cloneNode\(true\)/, /wrap=buildEntry\(card\)/, /el\.textContent='选择模板'/, /no996-template-modal/, /no996-bay-in/, /no996-template-picker/, /items\.forEach/, /aria-checked/]) {
+    assert.doesNotMatch(body, gone);
+  }
+  // What stays: upstream's own 视频复刻 card is visible but inert, the About panel
+  // says what this build is, and the unknown skill entries are stopped the same way.
+  assert.match(body, /视频复刻暂不可用/);
+  assert.match(body, /data-no996-disabled/);
+  assert.match(body, /stopImmediatePropagation/);
+  assert.match(body, /'更多技能','从示例开始'/);
   assert.match(body, /基于 OpenFilm 开发/);
-  assert.match(body, /function tuneAbout\(\)/);
   assert.match(body, /'GitHub'/);
   assert.match(body, /'官网'/);
-  assert.match(body, /aria-expanded/);
-  assert.match(body, /button,\[role="button"\],a,div,span,p/);
-  assert.match(body, /aria-disabled/);
-  assert.match(body, /stopImmediatePropagation/);
-  assert.doesNotMatch(body, /card\.style\.display='none'/);
-  assert.match(body, /items\.forEach/);
-  assert.match(body, /aria-checked/);
-  assert.match(body, /cancel\.textContent='取消'/);
-  assert.match(body, /create\.textContent='用这个开工'/);
-  assert.match(body, /你想剪哪种视频？/);
-  assert.match(body, /#FF6400/);
-  assert.match(body, /no996-bay-in/);
-  assert.match(body, /no996-template-modal/);
-  assert.match(body, /role','dialog'|aria-modal/);
-  assert.match(body, /no996-template-picker/);
-  assert.match(body, /whiteSpace='nowrap'/);
+  assert.match(body, /function tuneAbout\(\)/);
   assert.match(body, /function disableExtras\(\)/);
-  assert.match(body, /'更多技能','从示例开始'/);
-  assert.match(body, /no996-bay-rail/);
-  assert.match(body, /min\(1080px,96vw\)/);
-  assert.match(body, /openFlag/);
-  assert.doesNotMatch(body, /create\.style\.cssText=[\s\S]{0,200}#3b82f6/);
-  assert.doesNotMatch(body, /rpc\('editor:link'/);
-  assert.match(body, /wrap\.style\.display='none';[\s\S]{0,120}location\.href/);
-  assert.doesNotMatch(body, /wrap\.style\.cssText='position:fixed/);
-});
-
-test('the overlays only talk over the fixed bridge channels', () => {
-  const channels = [...body.matchAll(/rpc\('([^']+)'/g)].map(match => match[1]);
-  assert.deepEqual([...new Set(channels)].sort(), [
-    'asr:install',
-    'auth:status',
-    'environment:check',
-    'prefs:get',
-    'project:create-blank',
-    'system:check',
-    'system:install',
-    'template:create',
-    'template:list',
-  ]);
-  // Account chip lives in OpenFilm React; the login gate now ships in the bundle.
-  assert.doesNotMatch(body, /id='no996-account'/);
-  assert.match(body, /auth:status/);
-  assert.doesNotMatch(body, /no996-shell-login/);
-  assert.doesNotMatch(body, /__NOF_MOUNT_CITY__/);
-  assert.doesNotMatch(body, /sessionId|projectPath|\/api\/no996-openfilm/);
 });
 
 test('a dead Studio is answered by the shell source, not by an injected overlay', () => {

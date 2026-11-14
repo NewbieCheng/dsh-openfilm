@@ -11,363 +11,10 @@
     return fetch('/__dsh/official-rpc',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({channel:channel,payload:payload})})
       .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();});
   }
-  // Entry card. Cloned from the upstream suggestion card so it inherits that card's
-  // exact size, radius and positioning. A hand-built box drifted and overlapped it.
-  var wrap=null,wrapTarget=null;
-  function buildEntry(card){
-    // The suggestion is a grid cell wrapping the button. Cloning the button put both
-    // tiles inside one cell, which is what squeezed the labels; cloning the cell lets
-    // the host's own two-column grid lay them out at full column width.
-    var cell=card.parentElement;
-    var holder=(cell&&cell.tagName==='LI')?cell:card;
-    var clone;
-    try{ clone=holder.cloneNode(true); }catch(e){ return null; }
-    var ids=clone.querySelectorAll('[id]');
-    for(var k=0;k<ids.length;k++)ids[k].removeAttribute('id');
-    clone.id='no996-template-picker';
-    clone.removeAttribute('aria-disabled');
-    clone.removeAttribute('data-no996-disabled');
-    clone.removeAttribute('title');
-    clone.style.opacity='';
-    var inner=clone.querySelector('button');
-    if(inner){
-      inner.removeAttribute('data-no996-disabled');
-      inner.removeAttribute('aria-disabled');
-      inner.removeAttribute('title');
-      inner.style.opacity='';
-      inner.style.cursor='pointer';
-    }
-    var nodes=clone.querySelectorAll('*');
-    var replaced=false;
-    for(var i=0;i<nodes.length;i++){
-      var el=nodes[i];
-      if(el.childElementCount===0&&(el.textContent||'').trim()==='视频复刻'){el.textContent='选择模板';replaced=true;break;}
-    }
-    if(!replaced)(inner||clone).textContent='选择模板';
-    var target=inner||clone;
-    wrapTarget=target;
-    // The clone inherits the upstream card's disabled tooltip; replace it.
-    target.title='选择模板';
-    target.setAttribute('role','button');
-    target.setAttribute('tabindex','0');
-    target.setAttribute('aria-haspopup','dialog');
-    target.setAttribute('aria-expanded','false');
-    target.addEventListener('click',function(event){
-      event.preventDefault();event.stopPropagation();
-      if(openFlag)closeModal(); else openModal();
-    });
-    target.addEventListener('keydown',function(event){
-      if(event.key==='Enter'||event.key===' '){
-        event.preventDefault();event.stopPropagation();
-        if(openFlag)closeModal(); else openModal();
-      }
-    });
-    return clone;
-  }
-  // Wide Film Bay rail — desk grey + Ember selection; CTA is clean navy (no kick bar).
-  // One equal row; micro horizontal scroll only when the stage cannot fit every card.
-  var BAY={ember:'#FF6400',ink:'#051D43',night:'#0a1224',panel:'#12161f',line:'#2a3344',text:'#f3eee4',mute:'#8d90a6',raised:'#171c28'};
-  var ORDER=['paper-texture','replica-film','sketchnote','motion-styles','custom'];
-  if(!document.getElementById('no996-bay-template-css')){
-    var bayCss=document.createElement('style');
-    bayCss.id='no996-bay-template-css';
-    bayCss.textContent=[
-      '@keyframes no996-bay-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}',
-      '.no996-bay-rail{display:flex;flex-wrap:nowrap;gap:12px;padding:20px 28px 6px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#3a4558 transparent}',
-      '.no996-bay-rail::-webkit-scrollbar{height:6px}',
-      '.no996-bay-rail::-webkit-scrollbar-thumb{background:#3a4558;border-radius:999px}',
-      '.no996-bay-tile{flex:1 1 0;min-width:148px;max-width:220px;scroll-snap-align:start}',
-      '@media (prefers-reduced-motion:reduce){.no996-bay-dialog{animation:none!important}.no996-bay-tile,.no996-bay-go{transition:none!important}}'
-    ].join('');
-    try{document.head.appendChild(bayCss);}catch(e){}
-  }
-  var modal=document.createElement('div');
-  modal.id='no996-template-modal';
-  modal.setAttribute('role','dialog');
-  modal.setAttribute('aria-modal','true');
-  modal.setAttribute('aria-label','你想剪哪种视频？');
-  modal.style.cssText='position:fixed;inset:0;z-index:2147483002;display:none;align-items:center;justify-content:center;padding:clamp(16px,3vw,36px);background:radial-gradient(90% 70% at 50% 35%,rgba(18,28,48,.7) 0%,transparent 58%),linear-gradient(180deg,rgba(5,15,38,.82),rgba(5,8,16,.92));font:13px/1.5 "Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:'+BAY.text;
-  var dialog=document.createElement('div');
-  dialog.className='no996-bay-dialog';
-  dialog.style.cssText='display:flex;flex-direction:column;align-items:stretch;width:min(1080px,96vw);max-height:min(86vh,760px);background:linear-gradient(180deg,rgba(255,255,255,.04),transparent 28%),'+BAY.panel+';border:1px solid rgba(255,100,0,.22);border-radius:6px;box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 28px 64px rgba(0,0,0,.55);overflow:hidden;animation:no996-bay-in 220ms ease-out both';
-  var head=document.createElement('div');
-  head.style.cssText='position:relative;padding:26px 32px 0;text-align:center';
-  var titleEl=document.createElement('div');
-  titleEl.id='no996-template-title';
-  titleEl.textContent='你想剪哪种视频？';
-  titleEl.style.cssText='font-size:22px;font-weight:700;letter-spacing:.02em;color:'+BAY.text+';line-height:1.25';
-  var hintEl=document.createElement('div');
-  hintEl.textContent='选好后按这个风格开工；可随时再开。';
-  hintEl.style.cssText='margin:8px auto 0;max-width:32rem;font-size:13.5px;line-height:1.55;color:'+BAY.mute;
-  var rule=document.createElement('div');
-  rule.style.cssText='margin:16px auto 0;width:min(220px,48%);border-bottom:2px dashed rgba(185,173,152,.35)';
-  var closeBtn=document.createElement('button');
-  closeBtn.type='button';
-  closeBtn.setAttribute('aria-label','关闭');
-  closeBtn.textContent='×';
-  closeBtn.style.cssText='position:absolute;top:14px;right:14px;width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:'+BAY.mute+';font-size:20px;line-height:1;cursor:pointer';
-  head.appendChild(titleEl);head.appendChild(hintEl);head.appendChild(rule);head.appendChild(closeBtn);
-  var body=document.createElement('div');
-  body.className='no996-bay-rail';
-  body.setAttribute('role','radiogroup');
-  body.setAttribute('aria-label','片型列表');
-  var foot=document.createElement('div');
-  foot.style.cssText='display:flex;flex-direction:row;justify-content:space-between;align-items:center;gap:16px;padding:18px 32px 26px;width:100%;box-sizing:border-box';
-  var cancel=document.createElement('button');
-  cancel.type='button';
-  cancel.textContent='取消';
-  cancel.style.cssText='border:0;background:transparent;color:'+BAY.mute+';font:13.5px/1.4 inherit;cursor:pointer;padding:8px 4px;text-decoration:underline;text-underline-offset:3px';
-  var create=document.createElement('button');
-  create.type='button';
-  create.className='no996-bay-go';
-  create.textContent='用这个开工';
-  create.style.cssText='display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:180px;padding:0 26px;border:0;border-radius:3px;background:'+BAY.ink+';color:#fff;font:700 15px/1 "Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;letter-spacing:.06em;cursor:pointer;transition:transform .15s ease,filter .15s ease,opacity .15s ease';
-  create.addEventListener('mouseenter',function(){if(create.disabled)return;create.style.transform='translateY(-1px)';create.style.filter='brightness(1.08)';});
-  create.addEventListener('mouseleave',function(){create.style.transform='';create.style.filter='';});
-  foot.appendChild(cancel);foot.appendChild(create);
-  dialog.appendChild(head);dialog.appendChild(body);dialog.appendChild(foot);
-  modal.appendChild(dialog);
-  modal.addEventListener('click',function(event){if(event.target===modal)closeModal();});
-  closeBtn.addEventListener('click',closeModal);
-  cancel.addEventListener('click',closeModal);
-  function fitGrid(){ /* one-row rail; width is flex */ }
 
   // Account chip + page reload live in OpenFilm React (WorkbenchAccountControls),
   // not DOM injection — see packages/openfilm/studio/ui/.../WorkbenchAccount.tsx.
 
-  var list=null,selected='',busy=false,openFlag=false;
-
-  function sortItems(items){
-    return items.slice().sort(function(a,b){
-      var ia=ORDER.indexOf(a.id),ib=ORDER.indexOf(b.id);
-      if(ia===-1)ia=100; if(ib===-1)ib=100;
-      return ia-ib || String(a.id).localeCompare(String(b.id));
-    });
-  }
-  function fill(items){
-    body.textContent='';
-    items=sortItems(items);
-    fitGrid();
-    if(!items.some(function(item){return item.id===selected;}))selected=items.length?items[0].id:'';
-    items.forEach(function(item){
-      var active=item.id===selected;
-      var card=document.createElement('button');
-      card.type='button';
-      card.className='no996-bay-tile';
-      card.setAttribute('role','radio');
-      card.setAttribute('aria-checked',String(active));
-      card.style.cssText=[
-        'display:flex;flex-direction:column;gap:8px;min-height:128px;text-align:left;padding:14px 14px 12px;',
-        'border:1px solid '+(active?'rgba(255,100,0,.85)':BAY.line)+';border-radius:4px;cursor:pointer;font:inherit;color:'+BAY.text+';',
-        'background:linear-gradient(rgba(255,255,255,'+(active?'.1':'.05')+'),rgba(255,255,255,0)),radial-gradient(rgba(243,238,228,.08) 1px,transparent 1.3px) 0 0/14px 14px,'+(active?'linear-gradient(180deg,#2a1c16,#171c28)':BAY.raised)+';',
-        'box-shadow:'+(active?'0 0 0 1px rgba(255,100,0,.35),inset 0 1px 0 rgba(255,180,100,.25)':'inset 0 1px 0 rgba(255,255,255,.05)')+';',
-        'border-top:2px solid '+(active?BAY.ember:'transparent')+';',
-        'transition:border-color 120ms ease,background 120ms ease,box-shadow 120ms ease,transform 120ms ease'
-      ].join('');
-      var name=document.createElement('span');
-      name.textContent=item.productTitle||item.title||item.id;
-      name.style.cssText='font-size:15px;font-weight:700;line-height:1.3;color:'+(active?'#ffc28a':BAY.text);
-      var desc=document.createElement('span');
-      desc.textContent=item.productBlurb||item.description||'';
-      desc.style.cssText='display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;color:'+BAY.mute+';font-size:12.5px;line-height:1.5';
-      card.appendChild(name);card.appendChild(desc);
-      card.addEventListener('click',function(){selected=item.id;fill(items);});
-      card.addEventListener('mouseenter',function(){if(!active)card.style.transform='translateY(-1px)';});
-      card.addEventListener('mouseleave',function(){card.style.transform='';});
-      body.appendChild(card);
-    });
-    create.disabled=!selected||busy;
-    if(!items.length){
-      var empty=document.createElement('div');
-      empty.textContent='没有可用片型，请稍后重试';
-      empty.style.cssText='flex:1;color:'+BAY.mute+';padding:28px 4px;text-align:center';
-      body.appendChild(empty);
-    }
-  }
-  function load(){
-    if(list)return Promise.resolve(list);
-    return rpc('template:list',{}).then(function(value){
-      list=(value&&Array.isArray(value.templates))?value.templates:[];
-      fill(list);return list;
-    }).catch(function(){list=[];fill(list);return list;});
-  }
-  function openModal(){
-    if(openFlag)return;
-    openFlag=true;
-    if(!modal.isConnected){
-      try{document.documentElement.appendChild(modal);}catch(e){openFlag=false;return;}
-    }
-    // Retrigger the single stage entrance each open.
-    dialog.style.animation='none';
-    void dialog.offsetWidth;
-    dialog.style.animation='no996-bay-in 220ms ease-out both';
-    modal.style.display='flex';
-    if(wrapTarget)wrapTarget.setAttribute('aria-expanded','true');
-    load();
-    create.focus();
-  }
-  function closeModal(){
-    if(!openFlag)return;
-    openFlag=false;
-    modal.style.display='none';
-    if(wrapTarget)wrapTarget.setAttribute('aria-expanded','false');
-    try{wrapTarget&&wrapTarget.focus();}catch(e){}
-  }
-  document.addEventListener('keydown',function(event){ if(event.key==='Escape'&&openFlag){event.preventDefault();closeModal();} });
-  create.addEventListener('click',function(){
-    if(busy||!selected)return;
-    busy=true;create.disabled=true;create.textContent='创建中…';
-    var request=selected==='custom'
-      ? rpc('project:create-blank',{})
-      : rpc('template:create',{templateId:selected});
-    request.then(function(value){
-      var projectId=value&&value.projectId;
-      if(typeof projectId!=='string'||!/^[A-Za-z0-9_-]{6,40}$/.test(projectId))throw new Error('bad project');
-      try{
-        if(value.prompt)localStorage.setItem('no996.openfilm.templatePrompt',String(value.prompt).slice(0,600));
-        if(value.onboarding)localStorage.setItem('no996.openfilm.onboarding',JSON.stringify(value.onboarding).slice(0,1200));
-      }catch(e){}
-      wrap.style.display='none';
-      closeModal();
-      location.href='/projects/'+projectId;
-    }).catch(function(){
-      create.textContent='创建失败，重试';
-      create.disabled=false;
-      busy=false;
-      setTimeout(function(){create.textContent='用这个开工';create.disabled=!selected;},2500);
-    });
-  });
-  function textNode(exact){
-    var nodes=document.querySelectorAll('div,span,p,h1,h2,h3,button,a');
-    for(var i=0;i<nodes.length;i++){
-      var el=nodes[i];
-      if(el.closest&&el.closest('#no996-template-picker'))continue;
-      if(el.childElementCount===0&&(el.textContent||'').trim()===exact){
-        var rect=el.getBoundingClientRect();
-        if(rect.width>0&&rect.height>0)return el;
-      }
-    }
-    return null;
-  }
-  function composer(){
-    var nodes=document.querySelectorAll('textarea,[contenteditable="true"]');
-    var best=null,bestArea=0;
-    for(var i=0;i<nodes.length;i++){
-      var el=nodes[i];
-      if(el.closest&&el.closest('#no996-template-picker'))continue;
-      var rect=el.getBoundingClientRect();
-      if(rect.width<120||rect.height<16)continue;
-      var hint=(el.getAttribute('placeholder')||'')+' '+(el.getAttribute('aria-label')||'');
-      if(/描述你的影片|Describe your film|输入 @/.test(hint))return el;
-      var area=rect.width*rect.height;
-      if(rect.top>innerHeight*0.45&&area>bestArea){best=el;bestArea=area;}
-    }
-    return best;
-  }
-  // The chat column is the widest stable reference we have; the composer lives
-  // at its bottom edge, so its left/width describe the column itself.
-  function columnRect(){
-    var el=composer();
-    if(!el)return null;
-    var rect=el.getBoundingClientRect();
-    return rect.width>140?rect:null;
-  }
-  function columnBox(){
-    var el=composer();
-    if(!el)return null;
-    var width=el.getBoundingClientRect().width;
-    var node=el, box=el.getBoundingClientRect();
-    for(var i=0;i<8&&node.parentElement;i++){
-      var parent=node.parentElement;
-      var rect=parent.getBoundingClientRect();
-      if(rect.width>width+32||rect.height>innerHeight*0.98)break;
-      node=parent;box=rect;
-    }
-    return box;
-  }
-  function anchorMode(){
-    try{
-      var forced=localStorage.getItem('no996.picker.anchor');
-      if(forced==='heading'||forced==='header'||forced==='topright')return forced;
-    }catch(e){}
-    return 'heading';
-  }
-  // Empty-chat anchor: right under "你想做什么?", where the upstream suggestion
-  // card sits. This is the place the person was pointing at.
-  function placeUnderHeading(){
-    var heading=textNode('你想做什么?')||textNode('你想做什么？')||textNode('你想做什么')||textNode('What do you want to make?');
-    var head=heading?heading.getBoundingClientRect():null;
-    var column=columnRect();
-    if(!head||!column)return false;
-    var width=Math.min(360,column.width-24);
-    wrap.style.display='block';
-    wrap.style.right='auto';
-    wrap.style.width=Math.round(width)+'px';
-    wrap.style.left=Math.round(column.left+12)+'px';
-    wrap.style.top=Math.round(head.bottom+26)+'px';
-    return true;
-  }
-  // Busy-chat anchor: on the header row, to the right of "新对话".
-  function placeHeader(){
-    // Conversation open: sit on the chat column's header row, flush right, so
-    // nothing covers the composer or the message list.
-    var box=columnBox();
-    if(!box)return false;
-    var width=Math.min(330,box.width-24);
-    var left=box.right-width-10;
-    wrap.style.display='block';
-    wrap.style.width=Math.round(width)+'px';
-    wrap.style.left=Math.round(left)+'px';
-    wrap.style.top=Math.round(box.top+6)+'px';
-    wrap.style.right='auto';
-    return true;
-  }
-  function placeTopRight(){
-    wrap.style.display='block';
-    wrap.style.left='auto';
-    wrap.style.right='16px';
-    wrap.style.top='10px';
-    wrap.style.width='340px';
-  }
-  function rectInfo(el){
-    if(!el)return null;
-    var rect=el.getBoundingClientRect();
-    return {x:Math.round(rect.left),y:Math.round(rect.top),w:Math.round(rect.width),h:Math.round(rect.height)};
-  }
-  // Console helpers for the person, not the machine: open this page in a tab,
-  // run __no996Probe() and paste the JSON. Nothing is written anywhere.
-  globalThis.__no996Probe=function(){
-    try{
-      var column=columnRect();
-      return {
-        viewport:{w:innerWidth,h:innerHeight},
-        mode:anchorMode(),
-        heading:rectInfo(textNode('你想做什么?')||textNode('你想做什么？')||textNode('你想做什么')),
-        header:rectInfo(textNode('新对话')||textNode('New chat')),
-        composer:rectInfo(composer()),
-        column:column?{x:Math.round(column.left),w:Math.round(column.width)}:null,
-        picker:rectInfo(wrap),
-        hiddenCards:document.querySelectorAll('[data-no996-hidden]').length
-      };
-    }catch(e){return {error:String(e&&e.message||e)};}
-  };
-  function place(){
-    try{
-      // 迁移期：React 版 TemplatePicker（data-no996-template-react）已经在同一位置，
-      // 注入这条先让路但不删；真机验收通过后再整段移除。
-      if(document.querySelector('[data-no996-template-react]')){ if(wrap)wrap.style.display='none'; return; }
-      var card=findReplicaCard();
-      if(!card||!card.parentElement){if(wrap)wrap.style.display='none';return;}
-      // Rebuild the clone when the host re-renders its own card away.
-      if(!wrap||!wrap.isConnected)wrap=buildEntry(card);
-      if(!wrap)return;
-      var host=(card.parentElement&&card.parentElement.tagName==='LI')?card.parentElement:card;
-      if(wrap.parentElement!==host.parentElement||wrap.nextElementSibling!==host)host.parentElement.insertBefore(wrap,host);
-      disableExtras();
-      wrap.setAttribute('data-no996-anchor','card');
-      globalThis.__no996PickerState={mode:'card',bar:rectInfo(wrap)};
-    }catch(e){}
-  }
   // Keep the upstream suggestion visible, but disable its interaction without changing its implementation.
   var replicaCard=null;
   function findReplicaCard(){
@@ -377,7 +24,6 @@
       var nodes=document.querySelectorAll('button,[role="button"],a,div,span,p');
       for(var i=0;i<nodes.length;i++){
         var el=nodes[i];
-        if(el.closest&&el.closest('#no996-template-picker'))continue;
         if(el.childElementCount===0&&(el.textContent||'').trim()==='视频复刻'){
           el.style.whiteSpace='nowrap';el.style.overflow='hidden';el.style.textOverflow='ellipsis';el.style.maxWidth='100%';
           var card=el;
@@ -418,7 +64,7 @@
       while((node=walker.nextNode())){
         if(labels.indexOf((node.nodeValue||'').trim())<0)continue;
         var el=node.parentElement;
-        if(!el||(el.closest&&el.closest('#no996-template-picker')))continue;
+        if(!el)continue;
         var target=el.closest('button,[role="button"],a')||el;
         if(target.hasAttribute('data-no996-off'))continue;
         target.setAttribute('data-no996-off','1');
@@ -468,21 +114,6 @@
     }catch(e){}
   }
 
-  function hideReplica(){ findReplicaCard(); place(); tuneAbout(); }
-  var hideTimer=null;
-  function scheduleHide(){
-    if(hideTimer)return;
-    hideTimer=setTimeout(function(){hideTimer=null;hideReplica();},400);
-  }
-  try{
-    new MutationObserver(scheduleHide).observe(document.documentElement,{childList:true,subtree:true});
-  }catch(e){}
-  load().then(place);
-  place();
-  // The overlay is read from disk per render, but an open page keeps the script it
-  // already loaded. Poll the Host so a saved file reaches this window without
-  // reopening the panel; auto-reload only while the window is not in front.
-  var loadedVersion='';
   function watchVersion(){
     if(location.protocol==='dsh-app:')return;
     fetch('/__dsh/shell-version',{cache:'no-store',credentials:'same-origin'})
@@ -500,9 +131,8 @@
   }
   setTimeout(watchVersion,1200);
   setInterval(watchVersion,4000);
-  setInterval(function(){place();tuneAbout();},700);
-  addEventListener('resize',place);
-  hideReplica();
+  setInterval(function(){disableExtras();tuneAbout();},700);
+  addEventListener('resize',function(){ disableExtras(); tuneAbout(); });
 
   // Transcript files. The chat is a page on the editor origin, so it cannot do two
   // things a film conversation needs: draw a picture that lives in the project (the

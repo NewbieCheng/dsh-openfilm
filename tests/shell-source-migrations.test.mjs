@@ -32,13 +32,14 @@ test('the environment notice is source, not injection', () => {
   assert.match(bundle, /尚未配置或安装/);
 });
 
-test('the template picker is in the shell source, and the injection yields to it', () => {
-  // Mid-migration on purpose: the React picker is live, the old injection still
-  // exists but must not render its cloned card while the React one is on the page.
+test('the template picker is fully in the shell source now', () => {
+  // The React picker is live and the old injection is gone (clone, modal, guard),
+  // so there is no fallback left to keep in step.
   assert.match(bundle, /你想剪哪种视频？/);
   assert.match(bundle, /用这个开工/);
   assert.match(bundle, /data-no996-template-react/);
-  assert.match(injection, /data-no996-template-react/);
+  assert.doesNotMatch(injection, /data-no996-template-react/);
+  assert.doesNotMatch(injection, /no996-template-modal/);
 });
 
 test('the login gate ships in the bundle, not as a page script', () => {
